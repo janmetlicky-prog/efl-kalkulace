@@ -144,10 +144,11 @@
     font-size: 10px; padding: 2px 7px; border-radius: 12px; font-weight: 600;
     text-transform: uppercase; letter-spacing: .5px;
   }
-  .badge-active  { background: rgba(61,122,88,.35); color: #6fcf97; }
-  .badge-ongoing { background: rgba(26,86,219,.35); color: #93b4fd; }
-  .badge-done    { background: rgba(100,100,100,.3); color: rgba(255,255,255,.55); }
-  .badge-storno  { background: rgba(176,58,46,.35); color: #ff8f7e; }
+  .badge-active    { background: rgba(61,122,88,.35); color: #6fcf97; }
+  .badge-ongoing   { background: rgba(26,86,219,.35); color: #93b4fd; }
+  .badge-done      { background: rgba(100,100,100,.3); color: rgba(255,255,255,.55); }
+  .badge-storno    { background: rgba(176,58,46,.35); color: #ff8f7e; }
+  .badge-kalkulace { background: rgba(180,130,0,.35); color: #ffd97a; }
 
   .sidebar-footer { padding: 12px; border-top: 1px solid rgba(255,255,255,.08); }
   .btn-new-trip {
@@ -201,6 +202,7 @@
   .status-ongoing   { background: #e8f0fe; color: #1a56db; }
   .status-done      { background: var(--storno-bg); color: var(--storno); }
   .status-storno    { background: var(--danger-bg); color: var(--danger); }
+  .status-kalkulace { background: #fef9e7; color: #b8860b; }
 
   /* CARDS */
   .card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 18px; box-shadow: 0 2px 12px rgba(45,74,62,.05); }
@@ -756,8 +758,9 @@ function parseTripDate(trip) {
 }
 
 function getAutoStatus(trip) {
-  // Storno is always manual
+  // Storno and Kalkulace are always manual
   if (trip.status === 'storno') return 'storno';
+  if (trip.status === 'kalkulace') return 'kalkulace';
 
   const dates = parseTripDate(trip);
   if (!dates) {
@@ -809,7 +812,18 @@ function renderSidebar() {
   ).join('');
 
   const trips = db.trips.filter(t => t.year === currentYear)
-    .sort((a, b) => a.month - b.month);
+    .sort((a, b) => {
+    const statusOrder = { ongoing: 0, active: 1, done: 2, storno: 3, kalkulace: 4 };
+    const sa = statusOrder[a.status] ?? 1;
+    const sb = statusOrder[b.status] ?? 1;
+    if (sa !== sb) return sa - sb;
+    // Same status — sort by month, then by day from date string
+    if ((a.month || 0) !== (b.month || 0)) return (a.month || 0) - (b.month || 0);
+    // Try to extract day from date string e.g. "12.-19.2.2026"
+    const dayA = parseInt((a.date || '').match(/^(\d+)/)?.[1] || '0');
+    const dayB = parseInt((b.date || '').match(/^(\d+)/)?.[1] || '0');
+    return dayA - dayB;
+  });
 
   if (!trips.length) {
     document.getElementById('tripList').innerHTML = `<div style="padding:16px 8px;color:rgba(255,255,255,.3);font-size:12px;text-align:center;">Žádné zájezdy pro rok ${currentYear}</div>`;
@@ -818,10 +832,11 @@ function renderSidebar() {
 
   document.getElementById('tripList').innerHTML = trips.map(t => {
     const badge = {
-      active:  `<span class="trip-item-badge badge-active">aktivní</span>`,
-      ongoing: `<span class="trip-item-badge badge-ongoing">probíhá</span>`,
-      done:    `<span class="trip-item-badge badge-done">dokončeno</span>`,
-      storno:  `<span class="trip-item-badge badge-storno">storno</span>`
+      active:    `<span class="trip-item-badge badge-active">aktivní</span>`,
+      ongoing:   `<span class="trip-item-badge badge-ongoing">probíhá</span>`,
+      done:      `<span class="trip-item-badge badge-done">dokončeno</span>`,
+      storno:    `<span class="trip-item-badge badge-storno">storno</span>`,
+      kalkulace: `<span class="trip-item-badge badge-kalkulace">kalkulace</span>`
     }[t.status] || '';
     return `<div class="trip-item ${t.id === currentTripId ? 'active' : ''}" onclick="openTrip('${t.id}')">
       ${badge}
@@ -859,7 +874,18 @@ function showView(view, tripId) {
 // ─── OVERVIEW ───
 function renderOverview() {
   const trips = db.trips.filter(t => t.year === currentYear)
-    .sort((a, b) => a.month - b.month);
+    .sort((a, b) => {
+    const statusOrder = { ongoing: 0, active: 1, done: 2, storno: 3, kalkulace: 4 };
+    const sa = statusOrder[a.status] ?? 1;
+    const sb = statusOrder[b.status] ?? 1;
+    if (sa !== sb) return sa - sb;
+    // Same status — sort by month, then by day from date string
+    if ((a.month || 0) !== (b.month || 0)) return (a.month || 0) - (b.month || 0);
+    // Try to extract day from date string e.g. "12.-19.2.2026"
+    const dayA = parseInt((a.date || '').match(/^(\d+)/)?.[1] || '0');
+    const dayB = parseInt((b.date || '').match(/^(\d+)/)?.[1] || '0');
+    return dayA - dayB;
+  });
 
   let totalRevenue = 0, totalCosts = 0, totalProfit = 0, activeTrips = 0;
   const rows = trips.map(t => {
@@ -878,7 +904,7 @@ function renderOverview() {
       <td style="text-align:right">${fmt(c.totalCosts)}</td>
       <td style="text-align:right">${fmt(c.revenue)}</td>
       <td style="text-align:right" class="${profitCls}">${fmt(c.profit)}</td>
-      <td><span class="status-pill status-${t.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno'}[t.status]}</span></td>
+      <td><span class="status-pill status-${t.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[t.status]}</span></td>
     </tr>`;
   }).join('');
 
@@ -1144,7 +1170,7 @@ function renderTripDetail() {
       <div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">${trip.name}</h2>
-          <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno'}[trip.status]}</span>
+          <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[trip.status]}</span>
         </div>
         <div class="info-chips">
           ${trip.destination ? `<div class="info-chip">📍 ${trip.destination}</div>` : ''}
@@ -1155,6 +1181,11 @@ function renderTripDetail() {
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
+        <label style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${trip.status==='kalkulace'?'#fef9e7':'var(--sand)'};border:1.5px solid ${trip.status==='kalkulace'?'#b8860b':'var(--border)'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:${trip.status==='kalkulace'?'#b8860b':'var(--text-muted)'};transition:all .2s;margin-right:4px;">
+          <input type="checkbox" ${trip.status==='kalkulace'?'checked':''} onchange="toggleKalkulace('${trip.id}',this.checked)"
+            style="width:16px;height:16px;accent-color:#b8860b;cursor:pointer;">
+          Kalkulace
+        </label>
         <label style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${trip.status==='storno'?'var(--danger-bg)':'var(--sand)'};border:1.5px solid ${trip.status==='storno'?'var(--danger)':'var(--border)'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:${trip.status==='storno'?'var(--danger)':'var(--text-muted)'};transition:all .2s;">
           <input type="checkbox" ${trip.status==='storno'?'checked':''} onchange="toggleStorno('${trip.id}',this.checked)"
             style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer;">
@@ -1389,14 +1420,32 @@ function removeParticipant(tripId, idx) {
 // ═══════════════════════════════════════════════
 // ACTIONS — TRIP CRUD
 // ═══════════════════════════════════════════════
+function toggleKalkulace(tripId, checked) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  if (checked) {
+    trip._prevStatus = trip.status !== 'kalkulace' ? trip.status : (trip._prevStatus || 'active');
+    trip.status = 'kalkulace';
+  } else {
+    trip.status = trip._prevStatus || 'active';
+    // Re-apply auto status
+    if (trip.status !== 'storno') trip.status = getAutoStatus(trip);
+    delete trip._prevStatus;
+  }
+  save(db);
+  renderSidebar();
+  renderTripDetail();
+}
+
 function toggleStorno(tripId, checked) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
   if (checked) {
-    trip._prevStatus = trip.status !== 'storno' ? trip.status : (trip._prevStatus || 'active');
+    trip._prevStatus = (trip.status !== 'storno' && trip.status !== 'kalkulace') ? trip.status : (trip._prevStatus || 'active');
     trip.status = 'storno';
   } else {
     trip.status = trip._prevStatus || 'active';
+    if (trip.status !== 'kalkulace') trip.status = getAutoStatus(trip);
     delete trip._prevStatus;
   }
   save(db);
