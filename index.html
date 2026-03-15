@@ -1166,8 +1166,7 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'firstPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.insuranceSent?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insuranceSent',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.isSingle?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isSingle',this.checked)"></td>
+
       <td><button class="btn-icon" onclick="removeParticipant('${trip.id}',${idx})">✕</button></td>
     </tr>`).join('');
 
