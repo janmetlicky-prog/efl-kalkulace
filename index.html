@@ -899,7 +899,7 @@ function renderOverview() {
   let totalRevenue = 0, totalCosts = 0, totalProfit = 0, activeTrips = 0;
   const rows = trips.map(t => {
     const c = calcTrip(t);
-    if (t.status !== 'storno') {
+    if (t.status !== 'storno' && t.status !== 'kalkulace') {
       totalRevenue += c.revenue; totalCosts += c.totalCosts; totalProfit += c.profit; activeTrips++;
     }
     const cls = t.status === 'storno' ? ' class="storno"' : (t.status === 'ongoing' ? ' class="ongoing-row"' : '');
