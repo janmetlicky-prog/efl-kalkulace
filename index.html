@@ -899,7 +899,7 @@ function renderOverview() {
   let totalRevenue = 0, totalCosts = 0, totalProfit = 0, activeTrips = 0;
   const rows = trips.map(t => {
     const c = calcTrip(t);
-    if (t.status !== 'storno' && t.status !== 'kalkulace') {
+    if (t.status === 'active' || t.status === 'ongoing' || t.status === 'done') {
       totalRevenue += c.revenue; totalCosts += c.totalCosts; totalProfit += c.profit; activeTrips++;
     }
     const cls = t.status === 'storno' ? ' class="storno"' : (t.status === 'ongoing' ? ' class="ongoing-row"' : '');
@@ -967,7 +967,7 @@ function renderOverview() {
           </tr></thead>
           <tbody id="overviewBody">${rows}</tbody>
           <tfoot><tr>
-            <td colspan="5">CELKEM (bez storno)</td>
+            <td colspan="5">CELKEM (aktivní + probíhá + dokončeno)</td>
             <td style="text-align:right">${fmt(totalCosts)}</td>
             <td style="text-align:right">${fmt(totalRevenue)}</td>
             <td style="text-align:right" class="${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>
