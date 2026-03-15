@@ -1455,25 +1455,6 @@ function renderTripDetail() {
     \`).join('')}
     \` : ''}
 
-       <!-- PRODEJNÍ CENA + UBYTOVÁNÍ pro kolegyni -->
-    \${isColleague() ? `
-    <div class="package-price-hero" style="margin-bottom:16px">
-      <div>
-        <div class="pph-badge">&#127991; Prodejní cena na web</div>
-        <div class="pph-label">Cena balíčku bez letenky / osoba</div>
-        <div class="pph-value">\${fmt(calc.packagePP)}</div>
-        <div class="pph-sublabel">= prodejní cena vč. letenky \${fmt(calc.sellingPP)} − letenka \${fmt(calc.flightCostPP)}</div>
-      </div>
-      <div class="pph-right">
-        <div style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prod. cena vč. letenky</div>
-        <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">\${fmt(calc.sellingPP)}</div>
-      </div>
-    </div>
-    \${(trip.costItems||[]).filter(i=>i.url).map(i=>`
-      <a href="\${i.url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#f0f7f7;border:1px solid #c8e4e5;border-radius:8px;text-decoration:none;color:#026d72;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:16px">
-        &#128279; \${i.name || 'Odkaz na ubytování'}
-      </a>`).join('')}
-    ` : ''}
 
     <!-- PRODEJNÍ CENA pro kolegyni -->
     ${isColleague() ? `<div class="package-price-hero" style="margin-bottom:16px">
