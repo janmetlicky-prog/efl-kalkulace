@@ -1459,6 +1459,7 @@ function promptItemUrl(tripId, idx) {
   save(db);
   renderTripDetail();
 }
+function addItem(tripId) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
   if (!trip.costItems) trip.costItems = [];
