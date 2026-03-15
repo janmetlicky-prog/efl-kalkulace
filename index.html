@@ -1270,12 +1270,7 @@ function renderTripDetail() {
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">${trip.name}</h2>
           <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[trip.status]}</span>
-          <span style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);background:var(--bg-subtle,#f0f7f7);border:1px solid var(--border);border-radius:6px;padding:3px 8px" title="Číslo projektu">${(()=>{
-            const y = trip.year || new Date().getFullYear();
-            const m = String(trip.month || 1).padStart(2,'0');
-            const d = (trip.date||'').match(/(\d{1,2})[.\-]/)?.[1] || '01';
-            return y + m + String(d).padStart(2,'0');
-          })()}</span>
+          <span style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);background:var(--bg-subtle,#f0f7f7);border:1px solid var(--border);border-radius:6px;padding:3px 8px" title="Číslo projektu">${getTripProjectNum(trip)}</span>
         </div>
         <div class="info-chips">
           ${trip.destination ? `<div class="info-chip">📍 ${trip.destination}</div>` : ''}
@@ -1448,6 +1443,13 @@ function renderTripDetail() {
 // ═══════════════════════════════════════════════
 // ACTIONS — ITEMS
 // ═══════════════════════════════════════════════
+function getTripProjectNum(trip) {
+  const y = trip.year || new Date().getFullYear();
+  const m = String(trip.month || 1).padStart(2,'0');
+  const d = String((trip.date||'').match(/(\d{1,2})[.\-]/)?.[1] || '01').padStart(2,'0');
+  return y + m + d;
+}
+
 function promptItemUrl(tripId, idx) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.costItems[idx]) return;
