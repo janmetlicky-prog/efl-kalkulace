@@ -1777,7 +1777,7 @@ async function syncPull() {
   const url = getSyncUrl();
   if (!url) { alert('Nejdříve nastavte Apps Script URL.'); return; }
   setSyncing(true);
-  showSyncLog('Stahuji data ze Sheets...');
+  showSyncLog('Stahuji nové klienty z formuláře...');
 
   // Použijeme script tag injection (obchází CORS pro GET requesty)
   const callbackName = 'efl_callback_' + Date.now();
@@ -1795,24 +1795,39 @@ async function syncPull() {
     script.remove();
     delete window[callbackName];
 
-    if (!data || !data.trips || data.trips.length === 0) {
-      showSyncLog('⚠ Sheets jsou prázdné — lokální data zachována. Nejdříve spusť importInitialData v Apps Script.');
+    // BEZPEČNÉ: přidáme POUZE nové klienty z formuláře — cesty se NIKDY nemění
+    if (!data || !data.formClients) {
+      showSyncLog('⚠ Žádné klienty k přidání nebo chyba připojení.');
       setSyncing(false);
       return;
     }
 
-    const merged = mergeData(db, data);
-    db = migrateData(merged);
-    save(db);
-    applyAutoStatuses();
-    renderSidebar();
-    showView('overview');
-    showSyncLog('✓ Sloučeno — ' + data.trips.length + ' cest, ' + (data.manualClients||[]).length + ' klientů — ' + new Date().toLocaleTimeString('cs-CZ'));
+    if (!db.manualClients) db.manualClients = [];
+    let added = 0;
+
+    data.formClients.forEach(fc => {
+      if (!fc.name || fc.name.length < 3) return;
+      const exists = db.manualClients.some(c =>
+        c.name.toLowerCase() === fc.name.toLowerCase() ||
+        (fc.email && c.email && c.email.toLowerCase() === fc.email.toLowerCase())
+      );
+      if (!exists) {
+        db.manualClients.push({
+          id: 'form_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          name: fc.name, email: fc.email||'', phone: fc.phone||'',
+          birthDate: fc.birthDate||'', city: fc.city||'', note: fc.note||''
+        });
+        added++;
+      }
+    });
+
+    if (added > 0) save(db);
+    showSyncLog('✓ Přidáno ' + added + ' nových klientů z formuláře — ' + new Date().toLocaleTimeString('cs-CZ'));
     setSyncing(false);
-    closeSyncModal();
+    if (currentView === 'clients') renderClients();
   };
 
-  script.src = url + '?action=pull&callback=' + callbackName;
+  script.src = url + '?action=pullClients&callback=' + callbackName;
   script.onerror = () => {
     clearTimeout(timeout);
     showSyncLog('✕ Chyba načítání — zkontroluj URL a nastavení Apps Script (Přístup: Kdokoli).');
@@ -1967,12 +1982,7 @@ applyAutoStatuses();
 renderSidebar();
 showView('overview');
 
-// Auto-sync při otevření — stáhne pouze nové klienty z formuláře
-setTimeout(function() {
-  const url = getSyncUrl();
-  if (!url) return;
-  autoSyncClients(url);
-}, 1500);
+
 </script>
 </body>
 </html>
