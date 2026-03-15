@@ -1779,21 +1779,30 @@ async function syncPull() {
   setSyncing(true);
   showSyncLog('Stahuji nové klienty z formuláře...');
 
-  // Použijeme script tag injection (obchází CORS pro GET requesty)
-  const callbackName = 'efl_callback_' + Date.now();
-  const script = document.createElement('script');
+  try {
+    // Přímý fetch — funguje z GitHub Pages (HTTPS → HTTPS)
+    const res = await fetch(url + '?action=pullClients', {
+      method: 'GET',
+      redirect: 'follow',
+    });
+    const text = await res.text();
 
-  const timeout = setTimeout(() => {
-    showSyncLog('✕ Timeout — zkontroluj URL nebo připojení.');
-    setSyncing(false);
-    script.remove();
-    delete window[callbackName];
-  }, 10000);
+    // Apps Script někdy vrátí JSONP wrapper nebo čistý JSON
+    let formClients = null;
+    try {
+      // Zkus čistý JSON
+      const json = JSON.parse(text);
+      formClients = json.formClients || json;
+    } catch(e) {
+      // Zkus odstranit JSONP wrapper efl_process_clients([...])
+      const match = text.match(/efl_process_clients\s*\(([\s\S]*)\)/);
+      if (match) {
+        try { formClients = JSON.parse(match[1]); } catch(e2) {}
+      }
+    }
 
-  // Globální callback funkce
-  window['efl_process_clients'] = function(formClients) {
     if (!formClients || !Array.isArray(formClients)) {
-      showSyncLog('⚠ Žádné klienty k přidání.');
+      showSyncLog('⚠ Nepodařilo se načíst klienty. Zkontroluj Apps Script.');
       setSyncing(false);
       return;
     }
@@ -1819,22 +1828,12 @@ async function syncPull() {
 
     if (added > 0) save(db);
     showSyncLog('✓ Přidáno ' + added + ' nových klientů z formuláře — ' + new Date().toLocaleTimeString('cs-CZ'));
-    setSyncing(false);
     if (currentView === 'clients') renderClients();
-    clearTimeout(timeout);
-    script.remove();
-    delete window['efl_process_clients'];
-  };
 
-  script.src = url + '?action=pullClients&callback=efl_process_clients';
-  script.onerror = () => {
-    clearTimeout(timeout);
-    showSyncLog('✕ Chyba načítání — zkontroluj URL a nastavení Apps Script (Přístup: Kdokoli).');
-    setSyncing(false);
-    script.remove();
-    delete window['efl_process_clients'];
-  };
-  document.head.appendChild(script);
+  } catch(e) {
+    showSyncLog('✕ Chyba: ' + e.message);
+  }
+  setSyncing(false);
 }
 
 function mergeData(local, remote) {
