@@ -1167,7 +1167,10 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
 
-      <td><button class="btn-icon" onclick="removeParticipant('${trip.id}',${idx})">✕</button></td>
+      <td style="display:flex;gap:4px;align-items:center">
+        <button class="btn-icon" title="Přesunout na jinou cestu" onclick="moveParticipant('${trip.id}',${idx})" style="font-size:12px;padding:2px 5px">↪</button>
+        <button class="btn-icon" onclick="removeParticipant('${trip.id}',${idx})">✕</button>
+      </td>
     </tr>`).join('');
 
   const profitCls = calc.profit >= 0 ? 'highlight-profit' : 'highlight-negative';
@@ -1422,7 +1425,72 @@ function removeParticipant(tripId, idx) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
   trip.participants.splice(idx, 1);
+  trip.totalPersons = trip.participants.length;
   save(db); renderTripDetail();
+}
+
+function moveParticipant(tripId, idx) {
+  const srcTrip = db.trips.find(t => t.id === tripId);
+  if (!srcTrip) return;
+  const participant = srcTrip.participants[idx];
+  if (!participant) return;
+
+  // Sestav seznam cest jako výběr
+  const options = db.trips
+    .filter(t => t.id !== tripId)
+    .sort((a, b) => (a.name||'').localeCompare(b.name||''))
+    .map(t => `<option value="${t.id}">${t.name} (${t.year||''})</option>`)
+    .join('');
+
+  // Zobraz modal s výběrem
+  const modal = document.createElement('div');
+  modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center';
+  modal.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:28px;min-width:360px;max-width:500px;box-shadow:0 8px 32px rgba(0,0,0,0.2)">
+      <h3 style="margin:0 0 8px;font-family:'Cormorant Garamath',serif;font-size:20px;color:#026d72">↪ Přesunout účastníka</h3>
+      <p style="margin:0 0 16px;color:#555;font-size:14px"><strong>${participant.name}</strong></p>
+      <label style="font-size:12px;font-weight:600;color:#888;display:block;margin-bottom:6px">VYBERTE CÍLOVOU CESTU</label>
+      <select id="moveTargetTrip" style="width:100%;padding:10px;border:1px solid #c8e4e5;border-radius:8px;font-size:14px;margin-bottom:20px">
+        ${options}
+      </select>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="this.closest('div').parentElement.remove()" style="padding:8px 18px;border:1px solid #ccc;border-radius:8px;background:#fff;cursor:pointer">Zrušit</button>
+        <button onclick="confirmMoveParticipant('${tripId}',${idx},document.getElementById('moveTargetTrip').value,this)" 
+          style="padding:8px 18px;border:none;border-radius:8px;background:#03989E;color:#fff;cursor:pointer;font-weight:600">Přesunout</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function confirmMoveParticipant(srcTripId, idx, destTripId, btn) {
+  if (!destTripId) return;
+  const srcTrip = db.trips.find(t => t.id === srcTripId);
+  const destTrip = db.trips.find(t => t.id === destTripId);
+  if (!srcTrip || !destTrip) return;
+
+  const participant = srcTrip.participants[idx];
+  if (!participant) return;
+
+  // Zkontroluj duplicitu v cílové cestě
+  const exists = (destTrip.participants||[]).some(p =>
+    p.name.toLowerCase() === participant.name.toLowerCase()
+  );
+  if (exists) {
+    alert('Účastník ' + participant.name + ' je již na cestě ' + destTrip.name);
+    return;
+  }
+
+  // Přesuň
+  srcTrip.participants.splice(idx, 1);
+  srcTrip.totalPersons = srcTrip.participants.length;
+  if (!destTrip.participants) destTrip.participants = [];
+  destTrip.participants.push(participant);
+  destTrip.totalPersons = destTrip.participants.length;
+
+  save(db);
+  btn.closest('div').parentElement.remove();
+  renderTripDetail();
+  renderSidebar();
 }
 
 // ═══════════════════════════════════════════════
