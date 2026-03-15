@@ -1112,9 +1112,10 @@ function renderClients(filter) {
         </div>
       </div>
       <div class="client-search">
-        <input type="text" placeholder="🔍  Hledat podle jména, emailu nebo telefonu..."
-          oninput="renderClients(this.value)" value="${esc(filter)}">
+        <input type="text" id="clientSearchInput" placeholder="🔍  Hledat podle jména, emailu nebo telefonu..."
+          oninput="filterClientsOnly(this.value)" value="${esc(filter)}">
       </div>
+      <div id="clientListContainer">
       ${clients.length === 0 ? `
         <div class="empty-state">
           <div class="es-icon">👥</div>
@@ -1129,7 +1130,70 @@ function renderClients(filter) {
         </div>
         ${rows}
       `}
+      </div>
     </div>`;
+}
+
+function filterClientsOnly(filterVal) {
+  // Překreslí pouze seznam klientů bez inputu — zachová focus
+  const container = document.getElementById('clientListContainer');
+  if (!container) { renderClients(filterVal); return; }
+
+  const filter = (filterVal || '').toLowerCase().trim();
+  const clientMap = {};
+  db.trips.forEach(trip => {
+    (trip.participants || []).forEach(p => {
+      if (!p.name || !p.name.trim()) return;
+      const key = p.name.trim().toLowerCase();
+      if (!clientMap[key]) {
+        clientMap[key] = { name: p.name.trim(), phone: p.phone||'', email: p.email||'', birthDate: p.birthDate||'', trips: [], totalTrips: 0 };
+      }
+      if (!clientMap[key].phone && p.phone) clientMap[key].phone = p.phone;
+      if (!clientMap[key].email && p.email) clientMap[key].email = p.email;
+      if (!clientMap[key].birthDate && p.birthDate) clientMap[key].birthDate = p.birthDate;
+      if (!clientMap[key].trips.includes(trip.name)) clientMap[key].trips.push(trip.name);
+      clientMap[key].totalTrips++;
+    });
+  });
+  (db.manualClients || []).forEach(c => {
+    if (!c.name || !c.name.trim()) return;
+    const key = c.name.trim().toLowerCase();
+    if (!clientMap[key]) {
+      clientMap[key] = { name: c.name.trim(), phone: c.phone||'', email: c.email||'', birthDate: c.birthDate||'', trips: [], totalTrips: 0 };
+    }
+    if (!clientMap[key].phone && c.phone) clientMap[key].phone = c.phone;
+    if (!clientMap[key].email && c.email) clientMap[key].email = c.email;
+  });
+
+  let clients = Object.values(clientMap).sort((a,b) => a.name.localeCompare(b.name,'cs'));
+  if (filter) {
+    clients = clients.filter(c =>
+      c.name.toLowerCase().includes(filter) ||
+      (c.email||'').toLowerCase().includes(filter) ||
+      (c.phone||'').includes(filter)
+    );
+  }
+
+  if (clients.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="es-icon">👥</div><h3>Žádní klienti</h3><p>Nic neodpovídá hledání.</p></div>`;
+    return;
+  }
+
+  const rows = clients.map(c => `
+    <div class="client-row">
+      <div class="client-info">
+        <div class="client-name">${esc(c.name)}</div>
+        <div class="client-contact">${[c.phone, c.email].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="client-trips">${c.trips.slice(0,2).map(t => `<span class="client-trip-tag">${esc(t)}</span>`).join('')}${c.trips.length>2?`<span class="client-trip-tag">+${c.trips.length-2}</span>`:''}</div>
+      <div></div>
+      <div style="text-align:right;font-weight:600;color:var(--teal)">${c.totalTrips}×</div>
+    </div>`).join('');
+
+  container.innerHTML = `
+    <div class="clients-header">
+      <div>Klient</div><div>Zájezdy</div><div></div><div style="text-align:right">Počet</div>
+    </div>${rows}`;
 }
 
 function esc(s) {
