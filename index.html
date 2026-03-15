@@ -385,6 +385,8 @@
 
   .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600; }
   .tag-singl { background: #e8f0fe; color: #1a56db; }
+  /* Colleague mode - hide financial data */
+  body.colleague-mode .admin-only { display: none !important; }
   .tag-ins { background: #e8f5ee; color: var(--success); }
 
   /* CLIENT VIEW */
@@ -422,6 +424,13 @@
     font-size: 10px; font-weight: 700; letter-spacing: 1px;
     text-transform: uppercase; color: var(--text-muted);
   }
+  /* Colleague mode - hide financial data */
+  body.colleague-mode .col-financial { display: none !important; }
+  body.colleague-mode #overviewStatCards { display: none !important; }
+  body.colleague-mode .trip-kalkulace-section { display: none !important; }
+  body.colleague-mode #tripAdminBtns { display: none !important; }
+  body.colleague-mode .btn-new-trip { display: none !important; }
+  body.colleague-mode #btnSync, body.colleague-mode #btnBackup, body.colleague-mode #btnImport { display: none !important; }
 </style>
 </head>
 <body>
@@ -943,7 +952,7 @@ function renderOverview() {
         <div class="stat-value" style="color:${totalProfit>=0?'var(--success)':'var(--danger)'}">${fmtN(totalProfit/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalProfit)}</div>
       </div>
-    </div>` : ''}
+    </div>
 
     <div class="card">
       <div class="card-header">
@@ -964,15 +973,17 @@ function renderOverview() {
           <thead><tr>
             <th>Název</th><th>Měsíc</th><th>Termín</th><th>Lektor/Delegát</th>
             <th style="text-align:center">Osob (skut/min)</th>
-            ${!isColleague() ? '<th style=\"text-align:right\">Náklady</th><th style=\"text-align:right\">Obrat</th><th style=\"text-align:right\">Zisk</th>' : ''}
+            <th style="text-align:right" class="col-financial">Náklady</th>
+            <th style="text-align:right" class="col-financial">Obrat</th>
+            <th style="text-align:right" class="col-financial">Zisk</th>
             <th>Status</th>
           </tr></thead>
           <tbody id="overviewBody">${rows}</tbody>
           <tfoot><tr>
-            <td colspan="5">${!isColleague() ? 'CELKEM (aktivní + probíhá + dokončeno)' : ''}</td>
-            ${!isColleague() ? `<td style="text-align:right">${fmt(totalCosts)}</td>
-            <td style="text-align:right">${fmt(totalRevenue)}</td>
-            <td style="text-align:right" class="${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>` : ''}
+            <td colspan="5">CELKEM (aktivní + probíhá + dokončeno)</td>
+            <td style="text-align:right" class="col-financial">${fmt(totalCosts)}</td>
+            <td style="text-align:right" class="col-financial">${fmt(totalRevenue)}</td>
+            <td style="text-align:right" class="col-financial ${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>
             <td></td>
           </tr></tfoot>
         </table>`}
@@ -1083,7 +1094,7 @@ function renderClients(filter) {
   }).join('');
 
   document.getElementById('content').innerHTML = `
-    ${!isColleague() ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px" id="overviewStatCards">
       <div class="stat-card s-blue" style="position:relative;overflow:hidden">
         <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal)"></div>
         <div class="stat-label">Klientů celkem</div>
@@ -1271,7 +1282,7 @@ function renderTripDetail() {
 
   const profitCls = calc.profit >= 0 ? 'highlight-profit' : 'highlight-negative';
 
-  const colleagueMode = typeof isColleague === 'function' && isColleague();
+  const colleagueMode = isColleague();
   document.getElementById('content').innerHTML = `
     <!-- Trip Header -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap">
@@ -1305,8 +1316,8 @@ function renderTripDetail() {
       </div>
     </div>
 
-    ${!colleagueMode ? `    <!-- KALKULACE -->
-    <div class="card">
+    <!-- KALKULACE -->
+    <div class="card admin-only">
       <div class="card-header">
         <div class="card-title">💰 Kalkulace nákladů</div>
         <div style="display:flex;gap:8px;align-items:center">
@@ -1331,7 +1342,7 @@ function renderTripDetail() {
               <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:14px">${fmt(calc.costPP)}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400">bez letenky: ${fmt(calc.costWithoutFlightPP)}</span></td>
               <td></td>
               <td style="padding:6px 8px;text-align:right">
-                <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+                <div class="admin-only" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
                   <div style="display:flex;align-items:center;gap:6px">
                     <label style="font-size:10px;font-weight:600;letter-spacing:.6px;text-transform:uppercase;color:var(--success);white-space:nowrap">Naše provize %</label>
                     <div style="position:relative;display:flex;align-items:center">
@@ -1385,7 +1396,7 @@ function renderTripDetail() {
         <button class="btn btn-secondary btn-sm" style="margin-left:6px" onclick="addDefaultItems('${trip.id}')">📋 Přidat základní položky</button>
       </div>
 
-      <div class="cost-totals" style="margin-top:16px">
+      <div class="cost-totals admin-only" style="margin-top:16px">
         <div class="cost-total-box ct-costs">
           <div class="ct-label">Náklady celkem</div>
           <div class="ct-value">${fmt(calc.totalCosts)}</div>
@@ -1411,7 +1422,7 @@ function renderTripDetail() {
           <div style="font-size:10px;color:var(--text-muted);margin-top:2px">provize MP/os: ${fmt(calc.mpPerPerson)}</div>
         </div>
       </div>
-    </div>` : ''}
+    </div>
 
         <!-- ÚČASTNÍCI -->
     <div class="card">
@@ -2349,51 +2360,6 @@ function loadSampleData() {
 // ═══════════════════════════════════════════════
 const PINS = { '2168': 'admin', '1234': 'colleague' };
 const ROLE_KEY = 'efl_role';
-
-function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
-function isAdmin() { return getRole() === 'admin'; }
-function isColleague() { return getRole() === 'colleague'; }
-
-function showPinScreen() {
-  document.getElementById('app').style.display = 'none';
-  const overlay = document.createElement('div');
-  overlay.id = 'pinOverlay';
-  overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#026d72,#03989E);display:flex;align-items:center;justify-content:center;z-index:99999';
-  overlay.innerHTML = `
-    <div style="background:#fff;border-radius:16px;padding:40px;min-width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
-      <img src="https://essenceforlife.cz/wp-content/uploads/2024/03/EFL-logo.png" style="height:60px;margin-bottom:24px">
-      <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#026d72;margin:0 0 8px">Správa zájezdů</h2>
-      <p style="color:#888;font-size:13px;margin:0 0 24px">Zadejte PIN pro přístup</p>
-      <input type="password" id="pinInput" maxlength="6" placeholder="••••"
-        style="width:100%;padding:12px;font-size:24px;text-align:center;border:2px solid #c8e4e5;border-radius:10px;letter-spacing:8px;outline:none;box-sizing:border-box"
-        onkeydown="if(event.key==='Enter') checkPin()">
-      <div id="pinError" style="color:#e53e3e;font-size:12px;margin-top:8px;min-height:16px"></div>
-      <button onclick="checkPin()" style="margin-top:16px;width:100%;padding:12px;background:#03989E;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer">Vstoupit</button>
-    </div>`;
-  document.body.appendChild(overlay);
-  setTimeout(() => document.getElementById('pinInput').focus(), 100);
-}
-
-function checkPin() {
-  const pin = document.getElementById('pinInput').value.trim();
-  const role = PINS[pin];
-  if (role) {
-    sessionStorage.setItem(ROLE_KEY, role);
-    document.getElementById('pinOverlay').remove();
-    document.getElementById('app').style.display = '';
-    initApp();
-  } else {
-    document.getElementById('pinError').textContent = 'Nesprávný PIN — zkuste znovu';
-    document.getElementById('pinInput').value = '';
-    document.getElementById('pinInput').focus();
-  }
-}
-
-// ═══════════════════════════════════════════════
-// ROLE & PIN SYSTEM
-// ═══════════════════════════════════════════════
-const PINS = { '2168': 'admin', '1234': 'colleague' };
-const ROLE_KEY = 'efl_role';
 function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
 function isAdmin() { return getRole() === 'admin'; }
 function isColleague() { return getRole() === 'colleague'; }
@@ -2453,11 +2419,9 @@ function initApp() {
 }
 
 function applyColleagueMode() {
-  // Skryj tlačítka v topbaru
-  const hide = ['btnSync'];
-  hide.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+  document.body.classList.add('colleague-mode');
 
-  // Skryj Záloha a Import tlačítka
+  // Skryj Záloha, Import, Sync tlačítka
   document.querySelectorAll('.topbar-actions .btn').forEach(btn => {
     const txt = btn.textContent.trim();
     if (txt.includes('Záloha') || txt.includes('Import') || txt.includes('Sync')) {
