@@ -474,7 +474,7 @@
   <div class="topbar">
     <div class="topbar-title" id="topbarTitle">Přehled roku</div>
     <div class="topbar-actions">
-      <button class="btn btn-secondary" onclick="showView('overview')" id="btnOverview">📊 Přehled roku</button>
+      <button class="btn btn-secondary admin-only" onclick="showView('overview')" id="btnOverview">📊 Přehled roku</button>
       <button class="btn btn-secondary" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="btn btn-secondary" onclick="window.print()">🖨️ Tisk</button>
       <button class="btn btn-secondary" id="btnColleagueSync" onclick="syncPull()" title="Stáhnout nové klienty z formuláře" style="display:none">🔄 Aktualizovat klienty</button>
@@ -946,17 +946,17 @@ function renderOverview() {
         <div class="stat-value">${trips.length}</div>
         <div class="stat-sub">${activeTrips} aktivních</div>
       </div>
-      <div class="stat-card s-orange">
+      <div class="stat-card s-orange" data-financial="1">
         <div class="stat-label">Celkové náklady</div>
         <div class="stat-value">${fmtN(totalCosts/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalCosts)}</div>
       </div>
-      <div class="stat-card s-blue">
+      <div class="stat-card s-blue" data-financial="1">
         <div class="stat-label">Celkový obrat</div>
         <div class="stat-value">${fmtN(totalRevenue/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalRevenue)}</div>
       </div>
-      <div class="stat-card s-green">
+      <div class="stat-card s-green" data-financial="1">
         <div class="stat-label">Celkový zisk</div>
         <div class="stat-value" style="color:${totalProfit>=0?'var(--success)':'var(--danger)'}">${fmtN(totalProfit/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalProfit)}</div>
@@ -2420,7 +2420,11 @@ function initApp() {
   }
 
   renderSidebar();
-  showView('overview');
+  if (isColleague()) {
+    showView('clients');
+  } else {
+    showView('overview');
+  }
 
   // Skryj admin-only prvky pro kolegyni
   if (isColleague()) {
