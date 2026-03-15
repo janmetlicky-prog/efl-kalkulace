@@ -1679,7 +1679,7 @@ function saveTripModal() {
     savedTrip = db.trips.find(t => t.id === editingTripId);
     if (savedTrip) Object.assign(savedTrip, data);
   } else {
-    savedTrip = { id: uid(), ...data, costItems: [], participants: [], notes: '', status: 'active' };
+    savedTrip = { id: uid(), ...data, costItems: [], participants: [], notes: '', status: 'active', essenceRate: 0.15, mpRate: 0.05 };
     db.trips.push(savedTrip);
   }
 
