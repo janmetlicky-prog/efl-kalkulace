@@ -1232,6 +1232,13 @@ function renderTripDetail() {
       <td style="width:105px"><input type="number" value="${item.costPP||''}" onchange="updateItem('${trip.id}',${idx},'costPP',this.value)" placeholder="0" style="text-align:right"></td>
       <td><label style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFlight?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFlight',this.checked)" style="accent-color:var(--terracotta)"> <span class="flight-mark">✈</span></label></td>
       <td><span class="calc-cell">${item.costPP ? fmt(parseFloat(item.costPP)) : '—'}</span></td>
+      <td style="text-align:center">
+        ${item.url
+          ? `<a href="${item.url}" target="_blank" title="${item.url}" style="text-decoration:none;font-size:16px">🔗</a>
+             <button class="btn-icon" onclick="updateItem('${trip.id}',${idx},'url','');renderTripDetail()" title="Odebrat odkaz" style="font-size:10px;padding:1px 4px">✕</button>`
+          : `<button class="btn-icon" onclick="promptItemUrl('${trip.id}',${idx})" title="Přidat odkaz" style="font-size:13px;opacity:0.4">🔗</button>`
+        }
+      </td>
       <td><button class="btn-icon" onclick="removeItem('${trip.id}',${idx})" title="Odebrat">✕</button></td>
     </tr>`).join('');
 
@@ -1263,6 +1270,12 @@ function renderTripDetail() {
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">${trip.name}</h2>
           <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[trip.status]}</span>
+          <span style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);background:var(--bg-subtle,#f0f7f7);border:1px solid var(--border);border-radius:6px;padding:3px 8px" title="Číslo projektu">${(()=>{
+            const y = trip.year || new Date().getFullYear();
+            const m = String(trip.month || 1).padStart(2,'0');
+            const d = (trip.date||'').match(/(\d{1,2})[.\-]/)?.[1] || '01';
+            return y + m + String(d).padStart(2,'0');
+          })()}</span>
         </div>
         <div class="info-chips">
           ${trip.destination ? `<div class="info-chip">📍 ${trip.destination}</div>` : ''}
@@ -1435,11 +1448,19 @@ function renderTripDetail() {
 // ═══════════════════════════════════════════════
 // ACTIONS — ITEMS
 // ═══════════════════════════════════════════════
-function addItem(tripId) {
+function promptItemUrl(tripId, idx) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.costItems[idx]) return;
+  const url = prompt('Vložte URL odkaz na ubytování:', trip.costItems[idx].url || 'https://');
+  if (url === null) return;
+  trip.costItems[idx].url = url.trim();
+  save(db);
+  renderTripDetail();
+}
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
   if (!trip.costItems) trip.costItems = [];
-  trip.costItems.push({ id: uid(), name: '', thirdParty: '', costPP: '', isFlight: false });
+  trip.costItems.push({ id: uid(), name: '', thirdParty: '', costPP: '', isFlight: false, url: '' });
   save(db); renderTripDetail();
 }
 
