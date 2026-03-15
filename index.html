@@ -314,6 +314,10 @@
   .check-cell { text-align: center; }
   .check-cell input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--teal); }
 
+  /* Colleague mode — skryje admin prvky */
+  body.colleague-mode .admin-only { display: none !important; }
+  body.colleague-mode .btn-new-trip { display: none !important; }
+
   /* DIVIDER */
   .section-divider { display: flex; align-items: center; gap: 12px; margin: 6px 0 16px; }
   .section-divider span { font-family: 'Cormorant Garamond', serif; font-size: 16px; font-weight: 600; color: var(--navy); white-space: nowrap; }
@@ -454,7 +458,7 @@
 
   <div class="sidebar-footer">
     <div style="font-size:10px;color:rgba(255,255,255,.25);text-align:center;margin-bottom:10px;letter-spacing:.5px;font-style:italic">Cestuj a poznávej sebe i svět</div>
-    <button class="btn-new-trip" onclick="openNewTripModal()">
+    <button class="btn-new-trip admin-only" onclick="openNewTripModal()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Nový zájezd
     </button>
@@ -470,9 +474,9 @@
       <button class="btn btn-secondary" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="btn btn-secondary" onclick="window.print()">🖨️ Tisk</button>
       <button class="btn btn-secondary" id="btnColleagueSync" onclick="syncPull()" title="Stáhnout nové klienty z formuláře" style="display:none">🔄 Aktualizovat klienty</button>
-      <button class="btn btn-secondary" onclick="exportData()">💾 Záloha</button>
-      <button class="btn btn-secondary" onclick="importData()">📂 Import</button>
-      <button class="btn btn-secondary" onclick="openSyncModal()" id="btnSync" title="Google Sheets sync">☁️ Sync</button>
+      <button class="btn btn-secondary admin-only" onclick="exportData()">💾 Záloha</button>
+      <button class="btn btn-secondary admin-only" onclick="importData()">📂 Import</button>
+      <button class="btn btn-secondary admin-only" onclick="openSyncModal()" id="btnSync" title="Google Sheets sync">☁️ Sync</button>
     </div>
   </div>
   <div class="content" id="content"></div>
@@ -1429,7 +1433,7 @@ function renderTripDetail() {
     <div class="card">
       <div class="card-header">
         <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).length} / ${trip.totalPersons||0})</span></div>
-        <button class="btn btn-secondary btn-sm" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
+        <button class="btn btn-secondary btn-sm admin-only" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
       </div>
       <div style="overflow-x:auto">
         <table class="participants-table">
@@ -2391,6 +2395,7 @@ function checkPin() {
     sessionStorage.setItem(ROLE_KEY, role);
     document.getElementById('pinOverlay').remove();
     document.getElementById('app').style.display = 'contents';
+    if (role === 'colleague') document.body.classList.add('colleague-mode');
     initApp();
   } else {
     document.getElementById('pinError').textContent = 'Nesprávný PIN — zkuste znovu';
@@ -2440,6 +2445,7 @@ function applyColleagueMode() {
 // ═══════════════════════════════════════════════
 if (getRole()) {
   document.getElementById('app').style.display = 'contents';
+  if (getRole() === 'colleague') document.body.classList.add('colleague-mode');
   initApp();
 } else {
   showPinScreen();
