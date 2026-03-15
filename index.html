@@ -462,6 +462,7 @@
 
   <div class="sidebar-footer">
     <div style="font-size:10px;color:rgba(255,255,255,.25);text-align:center;margin-bottom:10px;letter-spacing:.5px;font-style:italic">Cestuj a poznávej sebe i svět</div>
+    <button id="btnColleagueSyncSidebar" onclick="syncPull()" style="display:none;width:100%;padding:10px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-size:13px;cursor:pointer;margin-bottom:8px">🔄 Aktualizovat klienty</button>
     <button class="btn-new-trip admin-only" onclick="openNewTripModal()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Nový zájezd
@@ -1266,7 +1267,7 @@ function renderTripDetail() {
 
   const participantsHtml = (trip.participants || []).map((p, idx) => `
     <tr data-pidx="${idx}">
-      <td><input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px"></td>
+      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px">`}</td>
       <td><input type="text" value="${p.birthDate||''}" onchange="updateParticipant('${trip.id}',${idx},'birthDate',this.value)" placeholder="DD.MM.RRRR" style="width:100px"></td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
       <td><input type="text" value="${p.email||''}" onchange="updateParticipant('${trip.id}',${idx},'email',this.value)" placeholder="Email" style="min-width:150px"></td>
@@ -1433,7 +1434,63 @@ function renderTripDetail() {
       </div>
     </div>
 
-        <!-- ÚČASTNÍCI -->
+    <!-- PRODEJNÍ CENA + UBYTOVÁNÍ pro kolegyni -->
+    \${isColleague() ? \`
+    <div class="package-price-hero" style="margin-bottom:16px">
+      <div>
+        <div class="pph-badge">🏷 Prodejní cena na web</div>
+        <div class="pph-label">Cena balíčku bez letenky / osoba</div>
+        <div class="pph-value">\${fmt(calc.packagePP)}</div>
+        <div class="pph-sublabel">= prodejní cena vč. letenky \${fmt(calc.sellingPP)} − letenka \${fmt(calc.flightCostPP)}</div>
+      </div>
+      <div class="pph-right">
+        <div style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prod. cena vč. letenky</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">\${fmt(calc.sellingPP)}</div>
+      </div>
+    </div>
+    \${(trip.costItems||[]).filter(i=>i.url).map(i=>\`
+      <a href="\${i.url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#f0f7f7;border:1px solid #c8e4e5;border-radius:8px;text-decoration:none;color:#026d72;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:16px">
+        🔗 \${i.name || 'Odkaz na ubytování'}
+      </a>
+    \`).join('')}
+    \` : ''}
+
+       <!-- PRODEJNÍ CENA + UBYTOVÁNÍ pro kolegyni -->
+    \${isColleague() ? `
+    <div class="package-price-hero" style="margin-bottom:16px">
+      <div>
+        <div class="pph-badge">&#127991; Prodejní cena na web</div>
+        <div class="pph-label">Cena balíčku bez letenky / osoba</div>
+        <div class="pph-value">\${fmt(calc.packagePP)}</div>
+        <div class="pph-sublabel">= prodejní cena vč. letenky \${fmt(calc.sellingPP)} − letenka \${fmt(calc.flightCostPP)}</div>
+      </div>
+      <div class="pph-right">
+        <div style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prod. cena vč. letenky</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">\${fmt(calc.sellingPP)}</div>
+      </div>
+    </div>
+    \${(trip.costItems||[]).filter(i=>i.url).map(i=>`
+      <a href="\${i.url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#f0f7f7;border:1px solid #c8e4e5;border-radius:8px;text-decoration:none;color:#026d72;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:16px">
+        &#128279; \${i.name || 'Odkaz na ubytování'}
+      </a>`).join('')}
+    ` : ''}
+
+    <!-- PRODEJNÍ CENA pro kolegyni -->
+    ${isColleague() ? `<div class="package-price-hero" style="margin-bottom:16px">
+      <div>
+        <div class="pph-badge">Prodejní cena na web</div>
+        <div class="pph-label">Cena bez letenky / osoba</div>
+        <div class="pph-value">${fmt(calc.packagePP)}</div>
+        <div class="pph-sublabel">vč. letenky ${fmt(calc.sellingPP)}</div>
+      </div>
+      <div class="pph-right">
+        <div style="font-size:10px;color:rgba(255,255,255,.45);margin-bottom:4px">Prod. cena vč. letenky</div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">${fmt(calc.sellingPP)}</div>
+      </div>
+    </div>
+    ${(trip.costItems||[]).filter(i=>i.url).map(i=>`<a href="${i.url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#f0f7f7;border:1px solid #c8e4e5;border-radius:8px;text-decoration:none;color:#026d72;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:16px">&#128279; ${i.name||'Ubytování'}</a>`).join('')}` : ''}
+
+     <!-- ÚČASTNÍCI-->
     <div class="card">
       <div class="card-header">
         <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).length} / ${trip.totalPersons||0})</span></div>
