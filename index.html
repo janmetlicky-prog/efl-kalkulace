@@ -426,6 +426,8 @@
 </head>
 <body>
 
+<div id="app" style="display:none">
+
 <!-- SIDEBAR -->
 <div id="sidebar">
   <div class="sidebar-logo">
@@ -465,6 +467,8 @@
   </div>
   <div class="content" id="content"></div>
 </div>
+
+</div><!-- /app -->
 
 <!-- MODAL: New/Edit Trip -->
 <div class="modal-overlay hidden" id="tripModal">
@@ -939,7 +943,7 @@ function renderOverview() {
         <div class="stat-value" style="color:${totalProfit>=0?'var(--success)':'var(--danger)'}">${fmtN(totalProfit/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalProfit)}</div>
       </div>
-    </div>
+    </div>` : ''}
 
     <div class="card">
       <div class="card-header">
@@ -960,17 +964,15 @@ function renderOverview() {
           <thead><tr>
             <th>Název</th><th>Měsíc</th><th>Termín</th><th>Lektor/Delegát</th>
             <th style="text-align:center">Osob (skut/min)</th>
-            <th style="text-align:right">Náklady</th>
-            <th style="text-align:right">Obrat</th>
-            <th style="text-align:right">Zisk</th>
+            ${!isColleague() ? '<th style=\"text-align:right\">Náklady</th><th style=\"text-align:right\">Obrat</th><th style=\"text-align:right\">Zisk</th>' : ''}
             <th>Status</th>
           </tr></thead>
           <tbody id="overviewBody">${rows}</tbody>
           <tfoot><tr>
-            <td colspan="5">CELKEM (aktivní + probíhá + dokončeno)</td>
-            <td style="text-align:right">${fmt(totalCosts)}</td>
+            <td colspan="5">${!isColleague() ? 'CELKEM (aktivní + probíhá + dokončeno)' : ''}</td>
+            ${!isColleague() ? `<td style="text-align:right">${fmt(totalCosts)}</td>
             <td style="text-align:right">${fmt(totalRevenue)}</td>
-            <td style="text-align:right" class="${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>
+            <td style="text-align:right" class="${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>` : ''}
             <td></td>
           </tr></tfoot>
         </table>`}
@@ -1081,7 +1083,7 @@ function renderClients(filter) {
   }).join('');
 
   document.getElementById('content').innerHTML = `
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
+    ${!isColleague() ? `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:24px">
       <div class="stat-card s-blue" style="position:relative;overflow:hidden">
         <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal)"></div>
         <div class="stat-label">Klientů celkem</div>
@@ -1269,6 +1271,7 @@ function renderTripDetail() {
 
   const profitCls = calc.profit >= 0 ? 'highlight-profit' : 'highlight-negative';
 
+  const colleagueMode = typeof isColleague === 'function' && isColleague();
   document.getElementById('content').innerHTML = `
     <!-- Trip Header -->
     <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;gap:16px;flex-wrap:wrap">
@@ -1302,7 +1305,7 @@ function renderTripDetail() {
       </div>
     </div>
 
-    <!-- KALKULACE -->
+    ${!colleagueMode ? `    <!-- KALKULACE -->
     <div class="card">
       <div class="card-header">
         <div class="card-title">💰 Kalkulace nákladů</div>
@@ -1408,9 +1411,9 @@ function renderTripDetail() {
           <div style="font-size:10px;color:var(--text-muted);margin-top:2px">provize MP/os: ${fmt(calc.mpPerPerson)}</div>
         </div>
       </div>
-    </div>
+    </div>` : ''}
 
-    <!-- ÚČASTNÍCI -->
+        <!-- ÚČASTNÍCI -->
     <div class="card">
       <div class="card-header">
         <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).length} / ${trip.totalPersons||0})</span></div>
@@ -2342,14 +2345,140 @@ function loadSampleData() {
 }
 
 // ═══════════════════════════════════════════════
+// ROLE & PIN SYSTEM
+// ═══════════════════════════════════════════════
+const PINS = { '2168': 'admin', '1234': 'colleague' };
+const ROLE_KEY = 'efl_role';
+
+function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
+function isAdmin() { return getRole() === 'admin'; }
+function isColleague() { return getRole() === 'colleague'; }
+
+function showPinScreen() {
+  document.getElementById('app').style.display = 'none';
+  const overlay = document.createElement('div');
+  overlay.id = 'pinOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#026d72,#03989E);display:flex;align-items:center;justify-content:center;z-index:99999';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:40px;min-width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <img src="https://essenceforlife.cz/wp-content/uploads/2024/03/EFL-logo.png" style="height:60px;margin-bottom:24px">
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#026d72;margin:0 0 8px">Správa zájezdů</h2>
+      <p style="color:#888;font-size:13px;margin:0 0 24px">Zadejte PIN pro přístup</p>
+      <input type="password" id="pinInput" maxlength="6" placeholder="••••"
+        style="width:100%;padding:12px;font-size:24px;text-align:center;border:2px solid #c8e4e5;border-radius:10px;letter-spacing:8px;outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter') checkPin()">
+      <div id="pinError" style="color:#e53e3e;font-size:12px;margin-top:8px;min-height:16px"></div>
+      <button onclick="checkPin()" style="margin-top:16px;width:100%;padding:12px;background:#03989E;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer">Vstoupit</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+}
+
+function checkPin() {
+  const pin = document.getElementById('pinInput').value.trim();
+  const role = PINS[pin];
+  if (role) {
+    sessionStorage.setItem(ROLE_KEY, role);
+    document.getElementById('pinOverlay').remove();
+    document.getElementById('app').style.display = '';
+    initApp();
+  } else {
+    document.getElementById('pinError').textContent = 'Nesprávný PIN — zkuste znovu';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+// ═══════════════════════════════════════════════
+// ROLE & PIN SYSTEM
+// ═══════════════════════════════════════════════
+const PINS = { '2168': 'admin', '1234': 'colleague' };
+const ROLE_KEY = 'efl_role';
+function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
+function isAdmin() { return getRole() === 'admin'; }
+function isColleague() { return getRole() === 'colleague'; }
+
+function showPinScreen() {
+  const overlay = document.createElement('div');
+  overlay.id = 'pinOverlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:linear-gradient(135deg,#026d72,#03989E);display:flex;align-items:center;justify-content:center;z-index:99999';
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:16px;padding:40px;min-width:320px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3)">
+      <img src="https://essenceforlife.cz/wp-content/uploads/2024/03/EFL-logo.png" style="height:60px;margin-bottom:24px;display:block;margin-left:auto;margin-right:auto">
+      <h2 style="font-family:'Cormorant Garamond',serif;font-size:24px;color:#026d72;margin:0 0 8px">Správa zájezdů</h2>
+      <p style="color:#888;font-size:13px;margin:0 0 24px">Zadejte PIN pro přístup</p>
+      <input type="password" id="pinInput" maxlength="6" placeholder="••••"
+        style="width:100%;padding:12px;font-size:24px;text-align:center;border:2px solid #c8e4e5;border-radius:10px;letter-spacing:8px;outline:none;box-sizing:border-box"
+        onkeydown="if(event.key==='Enter') checkPin()">
+      <div id="pinError" style="color:#e53e3e;font-size:12px;margin-top:8px;min-height:16px"></div>
+      <button onclick="checkPin()" style="margin-top:16px;width:100%;padding:12px;background:#03989E;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer">Vstoupit</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  setTimeout(() => document.getElementById('pinInput').focus(), 100);
+}
+
+function checkPin() {
+  const pin = document.getElementById('pinInput').value.trim();
+  const role = PINS[pin];
+  if (role) {
+    sessionStorage.setItem(ROLE_KEY, role);
+    document.getElementById('pinOverlay').remove();
+    document.getElementById('app').style.display = 'contents';
+    initApp();
+  } else {
+    document.getElementById('pinError').textContent = 'Nesprávný PIN — zkuste znovu';
+    document.getElementById('pinInput').value = '';
+    document.getElementById('pinInput').focus();
+  }
+}
+
+function initApp() {
+  loadSampleData();
+  injectImportedTrips();
+  injectImportedClients();
+  applyAutoStatuses();
+
+  // Kolegyně nevidí kalkulace v sidebaru
+  if (isColleague()) {
+    db.trips = db.trips.filter(t => t.status !== 'kalkulace');
+  }
+
+  renderSidebar();
+  showView('overview');
+
+  // Skryj admin-only prvky pro kolegyni
+  if (isColleague()) {
+    applyColleagueMode();
+  }
+}
+
+function applyColleagueMode() {
+  // Skryj tlačítka v topbaru
+  const hide = ['btnSync'];
+  hide.forEach(id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; });
+
+  // Skryj Záloha a Import tlačítka
+  document.querySelectorAll('.topbar-actions .btn').forEach(btn => {
+    const txt = btn.textContent.trim();
+    if (txt.includes('Záloha') || txt.includes('Import') || txt.includes('Sync')) {
+      btn.style.display = 'none';
+    }
+  });
+
+  // Skryj Nový zájezd tlačítko
+  const newTripBtn = document.querySelector('.btn-new-trip');
+  if (newTripBtn) newTripBtn.style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
-loadSampleData();
-injectImportedTrips();
-injectImportedClients();
-applyAutoStatuses();
-renderSidebar();
-showView('overview');
+if (getRole()) {
+  document.getElementById('app').style.display = 'contents';
+  initApp();
+} else {
+  showPinScreen();
+}
 
 // Zkontroluj URL hash pro sync data z Apps Script
 (function() {
