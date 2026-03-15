@@ -1334,8 +1334,6 @@ function renderTripDetail() {
             <th title="1. platba">💳 1. pl.</th>
             <th title="Kompletní platba">✅ Kompl.</th>
             <th title="Pojištění zaplaceno">🛡 Poj.</th>
-            <th title="Pojištění odesláno">📤 P.osl.</th>
-            <th title="Single pokoj">🛏 Singl</th>
             <th></th>
           </tr></thead>
           <tbody id="participantBody">
@@ -1489,8 +1487,8 @@ function confirmMoveParticipant(srcTripId, idx, destTripId, btn) {
 
   save(db);
   btn.closest('div').parentElement.remove();
-  renderTripDetail();
   renderSidebar();
+  showTrip(srcTripId);
 }
 
 // ═══════════════════════════════════════════════
