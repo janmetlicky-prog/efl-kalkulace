@@ -1248,11 +1248,17 @@ function renderTripDetail() {
       <td><input type="text" value="${p.birthDate||''}" onchange="updateParticipant('${trip.id}',${idx},'birthDate',this.value)" placeholder="DD.MM.RRRR" style="width:100px"></td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
       <td><input type="text" value="${p.email||''}" onchange="updateParticipant('${trip.id}',${idx},'email',this.value)" placeholder="Email" style="min-width:150px"></td>
-      <td class="check-cell"><input type="checkbox" ${p.contractSent?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSent',this.checked)"></td>
+      <td class="check-cell">
+        <div style="display:flex;align-items:center;gap:3px;justify-content:center">
+          <input type="checkbox" ${p.contractSent?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSent',this.checked)">
+          <button onclick="generateContract('${trip.id}',${idx})" title="Generovat smlouvu" style="font-size:11px;padding:1px 4px;border:1px solid #c8e4e5;border-radius:4px;background:#f0f7f7;cursor:pointer;line-height:1.4">📄</button>
+          <button onclick="generateAndSendContract('${trip.id}',${idx})" title="Generovat + odeslat smlouvu" style="font-size:11px;padding:1px 4px;border:1px solid #03989E;border-radius:4px;background:#e6f7f7;cursor:pointer;line-height:1.4">📨</button>
+        </div>
+      </td>
       <td class="check-cell"><input type="checkbox" ${p.contractSigned?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSigned',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.flightBought?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'flightBought',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'firstPayment',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'fullPayment',this.checked)"></td>
+      <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'firstPayment',this.checked)"></td>
+      <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
 
       <td style="display:flex;gap:4px;align-items:center">
@@ -1522,6 +1528,96 @@ function updateParticipant(tripId, idx, field, val) {
   if (!trip || !trip.participants[idx]) return;
   trip.participants[idx][field] = val;
   save(db);
+}
+
+// Aktualizuje pole + synchronizuje platbu do Sheetu
+async function updateParticipantAndSync(tripId, idx, field, val) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  trip.participants[idx][field] = val;
+  save(db);
+
+  if (!val) return;
+  const url = getSyncUrl();
+  if (!url) return;
+  const p = trip.participants[idx];
+  if (!p.email) return;
+  const paymentType = field === 'firstPayment' ? '1st' : 'full';
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'markPayment', clientEmail: p.email, tripName: trip.name, paymentType })
+    });
+    const data = await res.json();
+    if (!data.ok) console.warn('markPayment:', data.error);
+  } catch(e) {
+    console.warn('markPayment error:', e.message);
+  }
+}
+
+// Generovat smlouvu (bez odeslání)
+async function generateContract(tripId, idx) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  const p = trip.participants[idx];
+  if (!p.name) { alert('Účastník nemá jméno.'); return; }
+  const url = getSyncUrl();
+  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  const btn = event.target;
+  btn.textContent = '⏳'; btn.disabled = true;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'generateContract', clientName: p.name, tripName: trip.name })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = '✅';
+      setTimeout(() => { btn.textContent = '📄'; btn.disabled = false; }, 3000);
+    } else {
+      alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+      btn.textContent = '📄'; btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Chyba spojení: ' + e.message);
+    btn.textContent = '📄'; btn.disabled = false;
+  }
+}
+
+// Generovat + odeslat smlouvu
+async function generateAndSendContract(tripId, idx) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  const p = trip.participants[idx];
+  if (!p.name) { alert('Účastník nemá jméno.'); return; }
+  if (!p.email) { alert('Účastník nemá email — smlouvu nelze odeslat.'); return; }
+  const url = getSyncUrl();
+  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  if (!confirm('Vygenerovat a odeslat smlouvu pro ' + p.name + '?')) return;
+  const btn = event.target;
+  btn.textContent = '⏳'; btn.disabled = true;
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'generateAndSend', clientName: p.name, tripName: trip.name })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      trip.participants[idx].contractSent = true;
+      save(db); renderTripDetail();
+      btn.textContent = '✅';
+      setTimeout(() => { btn.textContent = '📨'; btn.disabled = false; }, 3000);
+    } else {
+      alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+      btn.textContent = '📨'; btn.disabled = false;
+    }
+  } catch(e) {
+    alert('Chyba spojení: ' + e.message);
+    btn.textContent = '📨'; btn.disabled = false;
+  }
 }
 
 function removeParticipant(tripId, idx) {
