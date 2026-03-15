@@ -1967,38 +1967,12 @@ applyAutoStatuses();
 renderSidebar();
 showView('overview');
 
-// Auto-sync při otevření aplikace
+// Auto-sync při otevření — stáhne pouze nové klienty z formuláře
 setTimeout(function() {
   const url = getSyncUrl();
   if (!url) return;
-  const callbackName = 'efl_autoload_' + Date.now();
-  const script = document.createElement('script');
-  const timeout = setTimeout(() => { script.remove(); delete window[callbackName]; }, 8000);
-  window[callbackName] = function(data) {
-    clearTimeout(timeout);
-    script.remove();
-    delete window[callbackName];
-    if (!data || !data.trips || data.trips.length === 0) return;
-    const merged = mergeData(db, data);
-    db = migrateData(merged);
-    applyAutoStatuses();
-    save(db);
-    renderSidebar();
-    // Pokud jsme na přehledu, překresli
-    if (currentView === 'overview') renderOverview();
-    // Tiché oznámení
-    const bar = document.getElementById('syncStatusBar');
-    if (bar) {
-      const prev = bar.className;
-      bar.className = 'sync-status ok';
-      bar.innerHTML = '<div class="sync-dot dot-ok"></div><span>Automaticky synchronizováno — ' + new Date().toLocaleTimeString('cs-CZ') + '</span>';
-      setTimeout(() => { bar.className = prev; }, 3000);
-    }
-  };
-  script.src = url + '?action=pull&callback=' + callbackName;
-  script.onerror = () => { clearTimeout(timeout); script.remove(); delete window[callbackName]; };
-  document.head.appendChild(script);
-}, 1500); // Počkej 1.5s než se aplikace plně načte
+  autoSyncClients(url);
+}, 1500);
 </script>
 </body>
 </html>
