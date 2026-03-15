@@ -1790,14 +1790,10 @@ async function syncPull() {
     delete window[callbackName];
   }, 10000);
 
-  window[callbackName] = function(data) {
-    clearTimeout(timeout);
-    script.remove();
-    delete window[callbackName];
-
-    // BEZPEČNÉ: přidáme POUZE nové klienty z formuláře — cesty se NIKDY nemění
-    if (!data || !data.formClients) {
-      showSyncLog('⚠ Žádné klienty k přidání nebo chyba připojení.');
+  // Globální callback funkce
+  window['efl_process_clients'] = function(formClients) {
+    if (!formClients || !Array.isArray(formClients)) {
+      showSyncLog('⚠ Žádné klienty k přidání.');
       setSyncing(false);
       return;
     }
@@ -1805,7 +1801,7 @@ async function syncPull() {
     if (!db.manualClients) db.manualClients = [];
     let added = 0;
 
-    data.formClients.forEach(fc => {
+    formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
       const exists = db.manualClients.some(c =>
         c.name.toLowerCase() === fc.name.toLowerCase() ||
@@ -1825,15 +1821,18 @@ async function syncPull() {
     showSyncLog('✓ Přidáno ' + added + ' nových klientů z formuláře — ' + new Date().toLocaleTimeString('cs-CZ'));
     setSyncing(false);
     if (currentView === 'clients') renderClients();
+    clearTimeout(timeout);
+    script.remove();
+    delete window['efl_process_clients'];
   };
 
-  script.src = url + '?action=pullClients&callback=' + callbackName;
+  script.src = url + '?action=pullClients&callback=efl_process_clients';
   script.onerror = () => {
     clearTimeout(timeout);
     showSyncLog('✕ Chyba načítání — zkontroluj URL a nastavení Apps Script (Přístup: Kdokoli).');
     setSyncing(false);
     script.remove();
-    delete window[callbackName];
+    delete window['efl_process_clients'];
   };
   document.head.appendChild(script);
 }
