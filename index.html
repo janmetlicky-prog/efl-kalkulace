@@ -315,8 +315,12 @@
   .check-cell input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--teal); }
 
   /* Colleague mode — skryje admin prvky */
-  body.colleague-mode .admin-only { display: none !important; }
-  body.colleague-mode .btn-new-trip { display: none !important; }
+  .colleague-mode .admin-only { display: none !important; }
+  .colleague-mode .btn-new-trip { display: none !important; }
+  /* Stat cards pro colleague - skryj finanční */
+  .colleague-mode .stat-card.s-green,
+  .colleague-mode .stat-card.s-gold,
+  .colleague-mode .stat-card.s-teal { display: none !important; }
 
   /* DIVIDER */
   .section-divider { display: flex; align-items: center; gap: 12px; margin: 6px 0 16px; }
