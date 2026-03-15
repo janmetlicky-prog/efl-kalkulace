@@ -1800,7 +1800,26 @@ async function syncPull() {
     const res = await fetch(sheetCsvUrl);
     const text = await res.text();
     
-    // Parse CSV
+    // Parse CSV — podpora pro quoted fields s čárkami uvnitř
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQuotes && line[i+1] === '"') { current += '"'; i++; }
+          else inQuotes = !inQuotes;
+        } else if (ch === ',' && !inQuotes) {
+          result.push(current.trim()); current = '';
+        } else {
+          current += ch;
+        }
+      }
+      result.push(current.trim());
+      return result;
+    }
+    
     const lines = text.split('\n').filter(l => l.trim());
     if (lines.length < 2) {
       showSyncLog('⚠ Žádná data v Sheets.');
@@ -1808,15 +1827,55 @@ async function syncPull() {
       return;
     }
     
-    // Header: name,email,phone,birthDate,city,note,tripName,timestamp
+    // Najdi indexy sloupců z hlavičky
+    const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/"/g,'').trim());
+    function hCol(keywords) {
+      for (const kw of keywords) {
+        const i = headers.findIndex(h => h.includes(kw));
+        if (i >= 0) return i;
+      }
+      return -1;
+    }
+    
+    const nameCol  = hCol(['jméno a příjmení','jméno']);
+    const emailCol = hCol(['email:', 'e-mailová adresa', 'email']);
+    const phoneCol = hCol(['telefon']);
+    const birthCol = hCol(['datum narozen']);
+    const cityCol  = hCol(['adresa']);
+    const destCol  = hCol(['vyberte destinaci']);
+    const natCol   = hCol(['státní příslušnost']);
+    const rcCol    = hCol(['rodné číslo']);
+    const pasCol   = hCol(['číslo pasu']);
+    
     const formClients = lines.slice(1).map(line => {
-      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      const cols = parseCSVLine(line);
+      const name = nameCol >= 0 ? (cols[nameCol]||'').replace(/"/g,'').trim() : '';
+      if (!name || name.length < 3) return null;
+      
+      let email = '';
+      // Zkus oba email sloupce
+      [emailCol, hCol(['e-mailová'])].forEach(ec => {
+        if (ec >= 0 && cols[ec] && cols[ec].includes('@') && !email) {
+          email = cols[ec].replace(/"/g,'').trim();
+        }
+      });
+      
+      const note = [
+        natCol >= 0 && cols[natCol] ? 'Státní příslušnost: ' + cols[natCol] : '',
+        rcCol  >= 0 && cols[rcCol]  ? 'RČ: ' + cols[rcCol] : '',
+        pasCol >= 0 && cols[pasCol] ? 'Pas: ' + cols[pasCol] : '',
+      ].filter(Boolean).join(' | ');
+      
       return {
-        name: cols[0]||'', email: cols[1]||'', phone: cols[2]||'',
-        birthDate: cols[3]||'', city: cols[4]||'', note: cols[5]||'',
-        tripName: cols[6]||''
+        name,
+        email,
+        phone:     phoneCol >= 0 ? (cols[phoneCol]||'').replace(/"/g,'').trim() : '',
+        birthDate: birthCol >= 0 ? (cols[birthCol]||'').replace(/"/g,'').trim() : '',
+        city:      cityCol  >= 0 ? (cols[cityCol] ||'').replace(/"/g,'').trim() : '',
+        note,
+        tripName:  destCol  >= 0 ? (cols[destCol] ||'').replace(/"/g,'').trim() : '',
       };
-    }).filter(c => c.name && c.name.length > 2);
+    }).filter(c => c && c.name && c.name.length > 2);
     
     if (!formClients.length) {
       showSyncLog('⚠ Žádní noví klienti v formuláři.');
