@@ -1888,42 +1888,52 @@ async function syncPull() {
     
     formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
-      const exists = db.manualClients.some(c =>
-        c.name.toLowerCase() === fc.name.toLowerCase() ||
-        (fc.email && c.email && c.email.toLowerCase() === fc.email.toLowerCase())
+      
+      // Najdi existujícího klienta POUZE podle jména
+      // (email nestačí — rodina může mít stejný email ale různá jména)
+      let client = db.manualClients.find(c =>
+        c.name.toLowerCase() === fc.name.toLowerCase()
       );
-      if (!exists) {
-        db.manualClients.push({
+      
+      if (!client) {
+        // Nový klient — přidej do databáze
+        client = {
           id: 'form_' + Date.now() + '_' + Math.random().toString(36).slice(2),
           name: fc.name, email: fc.email||'', phone: fc.phone||'',
           birthDate: fc.birthDate||'', city: fc.city||'', note: fc.note||''
-        });
+        };
+        db.manualClients.push(client);
         added++;
-        
-        // Přiřaď ke cestě
-        if (fc.tripName) {
-          const trip = db.trips.find(t => t.name && (
-            t.name.toLowerCase() === fc.tripName.toLowerCase() ||
-            fc.tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
-            t.name.toLowerCase().includes(fc.tripName.toLowerCase().slice(0,10))
-          ));
-          if (trip) {
-            if (!trip.participants) trip.participants = [];
-            const inTrip = trip.participants.some(p =>
-              p.name.toLowerCase() === fc.name.toLowerCase() ||
-              (fc.email && p.email && p.email.toLowerCase() === fc.email.toLowerCase())
-            );
-            if (!inTrip) {
-              trip.participants.push({
-                id: 'form_p_' + Date.now(),
-                name: fc.name, email: fc.email||'', phone: fc.phone||'',
-                birthDate: fc.birthDate||'', city: fc.city||'',
-                contractSent:false, contractSigned:false, flightBought:false,
-                firstPayment:false, fullPayment:false, insurance:false,
-                insuranceSent:false, isSingle:false
-              });
-              trip.totalPersons = trip.participants.length;
-            }
+      } else {
+        // Existující klient — aktualizuj chybějící údaje
+        if (!client.phone && fc.phone) client.phone = fc.phone;
+        if (!client.email && fc.email) client.email = fc.email;
+        if (!client.birthDate && fc.birthDate) client.birthDate = fc.birthDate;
+        if (!client.city && fc.city) client.city = fc.city;
+      }
+      
+      // Přiřaď ke cestě — vždy, i pro existující klienty
+      if (fc.tripName) {
+        const trip = db.trips.find(t => t.name && (
+          t.name.toLowerCase() === fc.tripName.toLowerCase() ||
+          fc.tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
+          t.name.toLowerCase().includes(fc.tripName.toLowerCase().slice(0,10))
+        ));
+        if (trip) {
+          if (!trip.participants) trip.participants = [];
+          const inTrip = trip.participants.some(p =>
+            p.name.toLowerCase() === fc.name.toLowerCase()
+          );
+          if (!inTrip) {
+            trip.participants.push({
+              id: 'form_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+              name: fc.name, email: fc.email||'', phone: fc.phone||'',
+              birthDate: fc.birthDate||'', city: fc.city||'',
+              contractSent:false, contractSigned:false, flightBought:false,
+              firstPayment:false, fullPayment:false, insurance:false,
+              insuranceSent:false, isSingle:false
+            });
+            trip.totalPersons = trip.participants.length;
           }
         }
       }
