@@ -1135,60 +1135,77 @@ function renderClients(filter) {
 }
 
 function filterClientsOnly(filterVal) {
-  // Překreslí pouze seznam klientů bez inputu — zachová focus
   const container = document.getElementById('clientListContainer');
   if (!container) { renderClients(filterVal); return; }
 
   const filter = (filterVal || '').toLowerCase().trim();
+
+  // Rebuild same clientMap as renderClients
   const clientMap = {};
   db.trips.forEach(trip => {
     (trip.participants || []).forEach(p => {
       if (!p.name || !p.name.trim()) return;
       const key = p.name.trim().toLowerCase();
-      if (!clientMap[key]) {
-        clientMap[key] = { name: p.name.trim(), phone: p.phone||'', email: p.email||'', birthDate: p.birthDate||'', trips: [], totalTrips: 0 };
-      }
+      if (!clientMap[key]) clientMap[key] = { name: p.name.trim(), phone: p.phone||'', email: p.email||'', birthDate: p.birthDate||'', city: p.city||'', note:'', trips: [], totalTrips: 0, isManual: false, manualId: null };
       if (!clientMap[key].phone && p.phone) clientMap[key].phone = p.phone;
       if (!clientMap[key].email && p.email) clientMap[key].email = p.email;
       if (!clientMap[key].birthDate && p.birthDate) clientMap[key].birthDate = p.birthDate;
-      if (!clientMap[key].trips.includes(trip.name)) clientMap[key].trips.push(trip.name);
+      if (!clientMap[key].city && p.city) clientMap[key].city = p.city;
+      clientMap[key].trips.push({ name: trip.name, year: trip.year });
       clientMap[key].totalTrips++;
     });
   });
   (db.manualClients || []).forEach(c => {
     if (!c.name || !c.name.trim()) return;
     const key = c.name.trim().toLowerCase();
-    if (!clientMap[key]) {
-      clientMap[key] = { name: c.name.trim(), phone: c.phone||'', email: c.email||'', birthDate: c.birthDate||'', trips: [], totalTrips: 0 };
-    }
+    if (!clientMap[key]) clientMap[key] = { name: c.name.trim(), phone: c.phone||'', email: c.email||'', birthDate: c.birthDate||'', city: c.city||'', note: c.note||'', trips: [], totalTrips: 0, isManual: true, manualId: c.id };
+    else { clientMap[key].isManual = true; clientMap[key].manualId = c.id; if (c.note) clientMap[key].note = c.note; }
     if (!clientMap[key].phone && c.phone) clientMap[key].phone = c.phone;
     if (!clientMap[key].email && c.email) clientMap[key].email = c.email;
   });
 
   let clients = Object.values(clientMap).sort((a,b) => a.name.localeCompare(b.name,'cs'));
-  if (filter) {
-    clients = clients.filter(c =>
-      c.name.toLowerCase().includes(filter) ||
-      (c.email||'').toLowerCase().includes(filter) ||
-      (c.phone||'').includes(filter)
-    );
-  }
+  if (filter) clients = clients.filter(c =>
+    c.name.toLowerCase().includes(filter) ||
+    (c.email||'').toLowerCase().includes(filter) ||
+    (c.phone||'').includes(filter)
+  );
 
   if (clients.length === 0) {
     container.innerHTML = `<div class="empty-state"><div class="es-icon">👥</div><h3>Žádní klienti</h3><p>Nic neodpovídá hledání.</p></div>`;
     return;
   }
 
-  const rows = clients.map(c => `
-    <div class="client-row">
-      <div class="client-info">
-        <div class="client-name">${esc(c.name)}</div>
-        <div class="client-contact">${[c.phone, c.email].filter(Boolean).join(' · ')}</div>
-      </div>
-      <div class="client-trips">${c.trips.slice(0,2).map(t => `<span class="client-trip-tag">${esc(t)}</span>`).join('')}${c.trips.length>2?`<span class="client-trip-tag">+${c.trips.length-2}</span>`:''}</div>
-      <div></div>
-      <div style="text-align:right;font-weight:600;color:var(--teal)">${c.totalTrips}×</div>
-    </div>`).join('');
+  const rows = clients.map(c => {
+    const tripTags = c.trips.length
+      ? c.trips.map(t => `<span class="client-trip-tag">${t.name} ${t.year}</span>`).join('')
+      : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Pouze v databázi</span>';
+    const manualBadge = c.isManual && c.trips.length === 0
+      ? '<span style="font-size:10px;background:var(--sand-dark);color:var(--text-muted);padding:1px 7px;border-radius:8px;margin-left:6px">ruční</span>' : '';
+    const editBtn = c.manualId
+      ? `<button class="btn-icon" onclick="event.stopPropagation();openEditClientModal('${c.manualId}')" title="Upravit">✏️</button>
+         <button class="btn-icon" onclick="event.stopPropagation();deleteClient('${c.manualId}')" title="Smazat">✕</button>` : '';
+    return `
+      <div class="client-card">
+        <div>
+          <div class="client-name">${esc(c.name)}${manualBadge}</div>
+          <div class="client-contact">
+            ${c.phone ? `📞 ${esc(c.phone)}` : ''}
+            ${c.phone && c.email ? ' · ' : ''}
+            ${c.email ? `✉ ${esc(c.email)}` : ''}
+            ${c.birthDate ? ` · 🎂 ${esc(c.birthDate)}` : ''}
+            ${c.city ? ` · 📍 ${esc(c.city)}` : ''}
+          </div>
+          ${c.note ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic">${esc(c.note)}</div>` : ''}
+        </div>
+        <div class="client-trips">${tripTags}</div>
+        <div style="display:flex;gap:2px;justify-content:flex-end">${editBtn}</div>
+        <div class="client-stats">
+          <div class="cs-count">${c.totalTrips}</div>
+          <div class="cs-label">${c.totalTrips === 1 ? 'zájezd' : c.totalTrips < 5 ? 'zájezdy' : 'zájezdů'}</div>
+        </div>
+      </div>`;
+  }).join('');
 
   container.innerHTML = `
     <div class="clients-header">
