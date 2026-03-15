@@ -544,16 +544,25 @@
       <span id="syncStatusText">Sync není nakonfigurován</span>
     </div>
 
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Apps Script URL</label>
+    <div class="form-group" style="margin-bottom:10px">
+      <label>Apps Script URL <span style="font-size:10px;color:var(--text-muted)">(pro nahrávání dat)</span></label>
       <input type="url" id="syncUrl" placeholder="https://script.google.com/macros/s/..." oninput="checkSyncUrl(this.value)"
         style="font-size:12px;">
       <div class="url-status missing" id="urlStatus">Vložte URL z Google Apps Script</div>
     </div>
 
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Google Sheets CSV URL <span style="font-size:10px;color:var(--text-muted)">(pro stahování klientů)</span></label>
+      <input type="url" id="sheetCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=..."
+        style="font-size:12px;" oninput="localStorage.setItem('efl_sheet_csv_url',this.value)">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">
+        Sheets → Soubor → Sdílet → Publikovat na web → List "App_Sync" → CSV → zkopíruj URL
+      </div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="syncPush()">⬆️ Nahrát data do Sheets</button>
-      <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout data ze Sheets</button>
+      <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
       <button class="btn btn-secondary btn-sm" onclick="saveSyncUrl()">💾 Uložit URL</button>
     </div>
 
@@ -1694,7 +1703,10 @@ function doPost(e) {
 }
 // =================== KONEC KÓDU ===================`;
 
+const SHEET_CSV_KEY = 'efl_sheet_csv_url';
 function getSyncUrl() { return localStorage.getItem(SYNC_URL_KEY) || ''; }
+function getSheetCsvUrl() { return localStorage.getItem(SHEET_CSV_KEY) || ''; }
+function saveSheetCsvUrl(url) { localStorage.setItem(SHEET_CSV_KEY, url); }
 function saveSyncUrl() {
   const url = document.getElementById('syncUrl').value.trim();
   localStorage.setItem(SYNC_URL_KEY, url);
@@ -1705,6 +1717,7 @@ function saveSyncUrl() {
 function openSyncModal() {
   const url = getSyncUrl();
   document.getElementById('syncUrl').value = url;
+  document.getElementById('sheetCsvUrl').value = getSheetCsvUrl();
   document.getElementById('scriptCode').value = APPS_SCRIPT_CODE;
   checkSyncUrl(url);
   document.getElementById('syncModal').classList.remove('hidden');
@@ -1774,42 +1787,46 @@ async function syncPush() {
 }
 
 async function syncPull() {
-  const url = getSyncUrl();
-  if (!url) { alert('Nejdříve nastavte Apps Script URL.'); return; }
+  const sheetCsvUrl = getSheetCsvUrl();
+  if (!sheetCsvUrl) {
+    alert('Nastavte URL Google Sheets CSV v poli níže a uložte.');
+    setSyncing(false);
+    return;
+  }
   setSyncing(true);
-  showSyncLog('Stahuji nové klienty z formuláře...');
-
+  showSyncLog('Stahuji klienty z Google Sheets...');
+  
   try {
-    // Přímý fetch — funguje z GitHub Pages (HTTPS → HTTPS)
-    const res = await fetch(url + '?action=pullClients', {
-      method: 'GET',
-      redirect: 'follow',
-    });
+    const res = await fetch(sheetCsvUrl);
     const text = await res.text();
-
-    // Apps Script někdy vrátí JSONP wrapper nebo čistý JSON
-    let formClients = null;
-    try {
-      // Zkus čistý JSON
-      const json = JSON.parse(text);
-      formClients = json.formClients || json;
-    } catch(e) {
-      // Zkus odstranit JSONP wrapper efl_process_clients([...])
-      const match = text.match(/efl_process_clients\s*\(([\s\S]*)\)/);
-      if (match) {
-        try { formClients = JSON.parse(match[1]); } catch(e2) {}
-      }
-    }
-
-    if (!formClients || !Array.isArray(formClients)) {
-      showSyncLog('⚠ Nepodařilo se načíst klienty. Zkontroluj Apps Script.');
+    
+    // Parse CSV
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length < 2) {
+      showSyncLog('⚠ Žádná data v Sheets.');
       setSyncing(false);
       return;
     }
-
+    
+    // Header: name,email,phone,birthDate,city,note,tripName,timestamp
+    const formClients = lines.slice(1).map(line => {
+      const cols = line.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+      return {
+        name: cols[0]||'', email: cols[1]||'', phone: cols[2]||'',
+        birthDate: cols[3]||'', city: cols[4]||'', note: cols[5]||'',
+        tripName: cols[6]||''
+      };
+    }).filter(c => c.name && c.name.length > 2);
+    
+    if (!formClients.length) {
+      showSyncLog('⚠ Žádní noví klienti v formuláři.');
+      setSyncing(false);
+      return;
+    }
+    
     if (!db.manualClients) db.manualClients = [];
     let added = 0;
-
+    
     formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
       const exists = db.manualClients.some(c =>
@@ -1823,13 +1840,42 @@ async function syncPull() {
           birthDate: fc.birthDate||'', city: fc.city||'', note: fc.note||''
         });
         added++;
+        
+        // Přiřaď ke cestě
+        if (fc.tripName) {
+          const trip = db.trips.find(t => t.name && (
+            t.name.toLowerCase() === fc.tripName.toLowerCase() ||
+            fc.tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
+            t.name.toLowerCase().includes(fc.tripName.toLowerCase().slice(0,10))
+          ));
+          if (trip) {
+            if (!trip.participants) trip.participants = [];
+            const inTrip = trip.participants.some(p =>
+              p.name.toLowerCase() === fc.name.toLowerCase() ||
+              (fc.email && p.email && p.email.toLowerCase() === fc.email.toLowerCase())
+            );
+            if (!inTrip) {
+              trip.participants.push({
+                id: 'form_p_' + Date.now(),
+                name: fc.name, email: fc.email||'', phone: fc.phone||'',
+                birthDate: fc.birthDate||'', city: fc.city||'',
+                contractSent:false, contractSigned:false, flightBought:false,
+                firstPayment:false, fullPayment:false, insurance:false,
+                insuranceSent:false, isSingle:false
+              });
+              trip.totalPersons = trip.participants.length;
+            }
+          }
+        }
       }
     });
-
-    if (added > 0) save(db);
-    showSyncLog('✓ Přidáno ' + added + ' nových klientů z formuláře — ' + new Date().toLocaleTimeString('cs-CZ'));
-    if (currentView === 'clients') renderClients();
-
+    
+    if (added > 0) {
+      save(db);
+      renderSidebar();
+      if (currentView === 'clients') renderClients();
+    }
+    showSyncLog('✓ Přidáno ' + added + ' nových klientů — ' + new Date().toLocaleTimeString('cs-CZ'));
   } catch(e) {
     showSyncLog('✕ Chyba: ' + e.message);
   }
@@ -1979,6 +2025,87 @@ injectImportedClients();
 applyAutoStatuses();
 renderSidebar();
 showView('overview');
+
+// Zkontroluj URL hash pro sync data z Apps Script
+(function() {
+  const hash = window.location.hash;
+  if (!hash || !hash.startsWith('#sync=')) return;
+  try {
+    const encoded = hash.slice(6);
+    const decoded = atob(encoded);
+    const minimal = JSON.parse(decoded);
+    
+    if (!db.manualClients) db.manualClients = [];
+    let added = 0;
+    
+    minimal.forEach(function(fc) {
+      const name = fc.n || '';
+      if (!name || name.length < 3) return;
+      const email = fc.e || '';
+      const exists = db.manualClients.some(function(c) {
+        return c.name.toLowerCase() === name.toLowerCase() ||
+          (email && c.email && c.email.toLowerCase() === email.toLowerCase());
+      });
+      if (!exists) {
+        db.manualClients.push({
+          id: 'form_' + Date.now() + '_' + Math.random().toString(36).slice(2),
+          name: name, email: email, phone: fc.p||'',
+          birthDate: fc.b||'', city: fc.ci||'', note: fc.no||''
+        });
+        added++;
+      }
+    });
+    
+    // Přiřaď ke cestám
+    minimal.forEach(function(fc) {
+      if (!fc.no) return;
+      // tripName je v note poli
+      const tripName = fc.no.split('|')[0].trim();
+      if (!tripName) return;
+      const trip = db.trips.find(function(t) {
+        return t.name && (
+          t.name.toLowerCase() === tripName.toLowerCase() ||
+          tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
+          t.name.toLowerCase().includes(tripName.toLowerCase().slice(0,10))
+        );
+      });
+      if (trip) {
+        if (!trip.participants) trip.participants = [];
+        const name = fc.n || '';
+        const email = fc.e || '';
+        const inTrip = trip.participants.some(function(p) {
+          return p.name.toLowerCase() === name.toLowerCase() ||
+            (email && p.email && p.email.toLowerCase() === email.toLowerCase());
+        });
+        if (!inTrip && name) {
+          trip.participants.push({
+            id: 'form_p_' + Date.now(),
+            name: name, email: email, phone: fc.p||'',
+            birthDate: fc.b||'', city: fc.ci||'',
+            contractSent:false, contractSigned:false, flightBought:false,
+            firstPayment:false, fullPayment:false, insurance:false,
+            insuranceSent:false, isSingle:false
+          });
+          trip.totalPersons = trip.participants.length;
+        }
+      }
+    });
+    
+    if (added > 0) save(db);
+    
+    // Vymaž hash z URL
+    history.replaceState(null, '', window.location.pathname);
+    
+    // Zobraz výsledek
+    setTimeout(function() {
+      alert('✓ Sync dokončen — přidáno ' + added + ' nových klientů z formuláře.');
+      renderSidebar();
+    }, 500);
+    
+  } catch(err) {
+    console.error('Sync hash error:', err);
+  }
+})();
 
 
 </script>
