@@ -522,13 +522,9 @@
         <label>Termín (text)</label>
         <input type="text" id="mTripDate" placeholder="např. 17.5.–24.5.">
       </div>
-      <div class="form-group" style="position:relative">
+      <div class="form-group">
         <label>Lektor / delegát</label>
-        <input type="text" id="mTripInstructor" placeholder="Jméno lektora nebo začni psát..."
-          oninput="showInstrSuggest(this.value)"
-          onblur="setTimeout(()=>hideInstrSuggest(),200)"
-          autocomplete="off">
-        <div id="instrSuggestBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--teal);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:200px;overflow-y:auto"></div>
+        <input type="text" id="mTripInstructor" placeholder="Jméno lektora">
       </div>
       <div class="form-group">
         <label>Destinace</label>
@@ -721,7 +717,7 @@ function migrateData(data) {
     }
   });
   if (!data.manualClients) data.manualClients = [];
-  if (!data.instructors || data.instructors.length === 0) data.instructors = null;
+  if (!data.instructors) data.instructors = [];
   return data;
 }
 function save(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -1335,15 +1331,28 @@ function renderInstructors() {
   db.trips.forEach(trip => {
     const lname = (trip.instructor || '').toLowerCase().trim();
     if (!lname) return;
+    const actualPersons = (trip.participants || []).length;
     instructors.forEach(ins => {
       const iname = ins.name.toLowerCase();
-      if (lname.includes(iname.split(' ')[0].toLowerCase()) || iname.includes(lname.split(' ')[0].toLowerCase())) {
-        if (!tripStats[ins.id]) tripStats[ins.id] = { count: 0, totalPersons: 0, trips: [] };
-        const calc = calcTrip(trip);
-        tripStats[ins.id].count++;
-        tripStats[ins.id].totalPersons += trip.totalPersons || 0;
-        tripStats[ins.id].trips.push({ name: trip.name, year: trip.year, persons: trip.totalPersons, costPP: calc.costPP, status: trip.status });
-      }
+      // Přesnější matching: obě příjmení musí sedět (porovnáváme příjmení = poslední slovo)
+      const lParts = lname.split(/\s+/);
+      const iParts = iname.split(/\s+/);
+      const lLast = lParts[lParts.length - 1];
+      const iLast = iParts[iParts.length - 1];
+      const lFirst = lParts[0];
+      const iFirst = iParts[0];
+      // Match jen pokud příjmení sedí (nebo celé jméno je obsaženo)
+      const match = lLast === iLast ||
+        (lLast.length > 4 && iLast.startsWith(lLast.substring(0, lLast.length - 1))) ||
+        (iLast.length > 4 && lLast.startsWith(iLast.substring(0, iLast.length - 1))) ||
+        lname === iname ||
+        (lname.length > 5 && iname.includes(lname)) ||
+        (iname.length > 5 && lname.includes(iname));
+      if (!match) return;
+      if (!tripStats[ins.id]) tripStats[ins.id] = { count: 0, totalPersons: 0, trips: [] };
+      tripStats[ins.id].count++;
+      tripStats[ins.id].totalPersons += actualPersons;
+      tripStats[ins.id].trips.push({ name: trip.name, year: trip.year, persons: actualPersons, status: trip.status });
     });
   });
 
@@ -1383,6 +1392,7 @@ function renderInstructors() {
               <div style="display:flex;gap:6px;align-items:center">
                 ${ins.status ? `<span style="font-size:10px;font-weight:600;color:${statusCol};background:${statusCol}18;padding:3px 8px;border-radius:20px;white-space:nowrap">${esc(ins.status.substring(0,30))}${ins.status.length>30?'…':''}</span>` : ''}
                 <button onclick="openInstructorModal('${ins.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:16px;padding:2px 4px" title="Upravit">✏️</button>
+                <button onclick="deleteInstructor('${ins.id}')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px 4px;line-height:1" title="Smazat" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='#ccc'">✕</button>
               </div>
             </div>
 
@@ -1446,34 +1456,6 @@ function openInstructorModal(id) {
 
 function closeInstructorModal() {
   document.getElementById('instructorModal').classList.add('hidden');
-}
-
-function showInstrSuggest(val) {
-  const box = document.getElementById('instrSuggestBox');
-  if (!box) return;
-  const q = val.toLowerCase().trim();
-  const instructors = getInstructors();
-  const matches = q.length === 0
-    ? instructors.slice(0, 12)
-    : instructors.filter(i => i.name.toLowerCase().includes(q)).slice(0, 10);
-  if (matches.length === 0) { box.style.display = 'none'; return; }
-  box.innerHTML = matches.map(i =>
-    `<div onclick="pickInstructor('${i.name.replace(/'/g,"\\'")}');this.parentNode.style.display='none'"
-      style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
-      onmouseover="this.style.background='#f0f9f9'" onmouseout="this.style.background=''">${i.name}${i.city ? ` <span style="color:#aaa;font-size:11px">— ${i.city}</span>` : ''}</div>`
-  ).join('');
-  box.style.display = 'block';
-}
-
-function pickInstructor(name) {
-  const input = document.getElementById('mTripInstructor');
-  if (input) input.value = name;
-  hideInstrSuggest();
-}
-
-function hideInstrSuggest() {
-  const box = document.getElementById('instrSuggestBox');
-  if (box) box.style.display = 'none';
 }
 
 function saveInstructorModal() {
