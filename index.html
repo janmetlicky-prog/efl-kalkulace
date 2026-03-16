@@ -2319,12 +2319,29 @@ function handleImport(e) {
   reader.onload = ev => {
     try {
       const imported = JSON.parse(ev.target.result);
-      if (imported.trips && Array.isArray(imported.trips)) {
-        if (confirm(`Import přidá ${imported.trips.length} zájezdů. Pokračovat?`)) {
-          db.trips = [...db.trips, ...imported.trips.filter(it => !db.trips.find(t => t.id === it.id))];
-          save(db); renderSidebar(); showView('overview');
-        }
-      } else alert('Neplatný formát souboru.');
+      const hasTrips = imported.trips && Array.isArray(imported.trips);
+      const hasClients = imported.manualClients && Array.isArray(imported.manualClients);
+      if (!hasTrips && !hasClients) { alert('Neplatný formát souboru.'); return; }
+      let msg = [];
+      if (hasTrips) msg.push(imported.trips.length + ' zájezdů');
+      if (hasClients) msg.push(imported.manualClients.length + ' klientů');
+      if (!confirm('Import přidá: ' + msg.join(' a ') + '. Pokračovat?')) return;
+      if (hasTrips) {
+        db.trips = [...db.trips, ...imported.trips.filter(it => !db.trips.find(t => t.id === it.id))];
+      }
+      if (hasClients) {
+        if (!db.manualClients) db.manualClients = [];
+        imported.manualClients.forEach(ic => {
+          const exists = db.manualClients.some(mc =>
+            mc.name.toLowerCase() === ic.name.toLowerCase() ||
+            (ic.email && mc.email && mc.email.toLowerCase() === ic.email.toLowerCase())
+          );
+          if (!exists) db.manualClients.push(ic);
+        });
+      }
+      save(db); renderSidebar();
+      if (hasTrips) showView('overview'); else showView('clients');
+      alert('Import dokončen ✓');
     } catch { alert('Chyba při čtení souboru.'); }
   };
   reader.readAsText(file);
