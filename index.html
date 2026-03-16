@@ -1778,10 +1778,14 @@ function renderTripDetail() {
       <!-- HERO: Cena balíčku bez letenky -->
       <div class="package-price-hero">
         <div>
-          <div class="pph-badge">🏷 Prodejní cena na web</div>
+          <div class="pph-badge">🏷 Kalkulovaná prodejní cena</div>
           <div class="pph-label">Cena balíčku bez letenky / osoba</div>
           <div class="pph-value">${fmt(calc.packagePP)}</div>
           <div class="pph-sublabel">= prodejní cena vč. letenky ${fmt(calc.sellingPP)} − letenka ${fmt(calc.flightCostPP)}</div>
+          ${trip.price ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
+            <div style="font-size:10px;color:rgba(255,255,255,.55);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Smluvní cena cesty</div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">${fmt(trip.price)}</div>
+          </div>` : ''}
         </div>
         <div class="pph-right">
           <div style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prod. cena vč. letenky</div>
@@ -1830,13 +1834,17 @@ function renderTripDetail() {
     <!-- PRODEJNÍ CENA pro kolegyni -->
     ${isColleague() ? `<div class="package-price-hero" style="margin-bottom:16px">
       <div>
-        <div class="pph-badge">Prodejní cena na web</div>
+        <div class="pph-badge">Kalkulovaná prodejní cena</div>
         <div class="pph-label">Cena bez letenky / osoba</div>
         <div class="pph-value">${fmt(calc.packagePP)}</div>
         <div class="pph-sublabel">vč. letenky ${fmt(calc.sellingPP)}</div>
+        ${trip.price ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
+          <div style="font-size:10px;color:rgba(255,255,255,.55);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Smluvní cena cesty</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">${fmt(trip.price)}</div>
+        </div>` : ''}
       </div>
       <div class="pph-right">
-        <div style="font-size:10px;color:rgba(255,255,255,.45);margin-bottom:4px">Prod. cena vč. letenky</div>
+        <div style="font-size:10px;color:rgba(255,255,255,.45);margin-bottom:4px">Kalkulovaná cena vč. letenky</div>
         <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:#fff">${fmt(calc.sellingPP)}</div>
       </div>
     </div>
