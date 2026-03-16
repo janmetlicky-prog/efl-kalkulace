@@ -3223,6 +3223,25 @@ function saveParticipantModal(approve) {
     mc.passport    = p.passport;
     console.log('[Klienti] aktualizován:', mc.name, 'passport:', mc.passport);
   }
+
+  // Sync zpět do VŠECH trip.participants se stejným jménem/emailem
+  const mcName  = mc.name.toLowerCase();
+  const mcEmail = (mc.email || '').toLowerCase();
+  db.trips.forEach(t => {
+    (t.participants || []).forEach(pp => {
+      const sameName  = pp.name && pp.name.toLowerCase() === mcName;
+      const sameEmail = mcEmail && pp.email && pp.email.toLowerCase() === mcEmail;
+      if (sameName || sameEmail) {
+        if (mc.phone)       pp.phone       = mc.phone;
+        if (mc.email)       pp.email       = mc.email;
+        if (mc.birthDate)   pp.birthDate   = mc.birthDate;
+        if (mc.nationality) pp.nationality = mc.nationality;
+        if (mc.city)        pp.city        = mc.city;
+        if (mc.passport)    pp.passport    = mc.passport;
+      }
+    });
+  });
+  console.log('[Klienti] synced passport do všech trips:', mc.passport);
   save(db);
 
   const statusEl = document.getElementById('pSyncStatus');
