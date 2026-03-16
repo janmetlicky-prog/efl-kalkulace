@@ -563,10 +563,7 @@
         <label>Min. osob (kalkulace)</label>
         <input type="number" id="mTripMinP" value="8">
       </div>
-      <div class="form-group">
-        <label>Osob celkem</label>
-        <input type="number" id="mTripTotalP" value="0">
-      </div>
+      <input type="hidden" id="mTripTotalP" value="0">
       <div class="form-group">
         <label>Počet nocí</label>
         <input type="number" id="mTripNights" value="7">
@@ -1628,7 +1625,7 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'firstPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.isCancelled?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isCancelled',this.checked);this.closest('tr').classList.toggle('participant-cancelled',this.checked)" title="Storno"></td>
+      <td class="check-cell"><input type="checkbox" ${p.isCancelled?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isCancelled',this.checked);renderTripDetail()" title="Storno"></td>
 
       <td style="display:flex;gap:4px;align-items:center">
         <button class="btn-icon" title="Přesunout na jinou cestu" onclick="moveParticipant('${trip.id}',${idx})" style="font-size:12px;padding:2px 5px">↪</button>
