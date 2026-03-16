@@ -522,9 +522,13 @@
         <label>Termín (text)</label>
         <input type="text" id="mTripDate" placeholder="např. 17.5.–24.5.">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="position:relative">
         <label>Lektor / delegát</label>
-        <input type="text" id="mTripInstructor" placeholder="Jméno lektora">
+        <input type="text" id="mTripInstructor" placeholder="Začni psát jméno..." autocomplete="off"
+          oninput="showInstrSuggest(this.value)"
+          onkeydown="if(event.key==='Escape')hideInstrSuggest()"
+          onfocus="showInstrSuggest(this.value)">
+        <div id="instrSuggestBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--teal);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="form-group">
         <label>Destinace</label>
@@ -1372,13 +1376,13 @@ function renderInstructors() {
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="instrSearch" type="text" placeholder="🔍 Hledat..." value="${filter}"
-            oninput="filterInstructorsOnly(this.value)"
+            oninput="renderInstructors()"
             style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:200px;outline:none">
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
         </div>
       </div>
 
-      <div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
         ${filtered.map(ins => {
           const stats = tripStats[ins.id];
           const statusCol = getStatusColor(ins.status || '');
@@ -1437,16 +1441,6 @@ function renderInstructors() {
     </div>`;
 }
 
-function filterInstructorsOnly(val) {
-  const grid = document.getElementById('instrGrid');
-  if (!grid) { renderInstructors(); return; }
-  const q = (val || '').toLowerCase().trim();
-  Array.from(grid.children).forEach(card => {
-    const text = card.textContent.toLowerCase();
-    card.style.display = (!q || text.includes(q)) ? '' : 'none';
-  });
-}
-
 let editingInstructorId = null;
 
 function openInstructorModal(id) {
@@ -1467,6 +1461,45 @@ function openInstructorModal(id) {
 function closeInstructorModal() {
   document.getElementById('instructorModal').classList.add('hidden');
 }
+
+function showInstrSuggest(val) {
+  const box = document.getElementById('instrSuggestBox');
+  if (!box) return;
+  const q = (val || '').toLowerCase().trim();
+  const instructors = getInstructors();
+  const matches = q.length === 0
+    ? instructors.slice(0, 15)
+    : instructors.filter(i => i.name.toLowerCase().includes(q)).slice(0, 10);
+  if (matches.length === 0) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(i =>
+    `<div onmousedown="pickInstructor(${JSON.stringify(i.name)})"
+      style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
+      onmouseover="this.style.background='#f0f9f9'" onmouseout="this.style.background=''">
+      ${esc(i.name)}${i.city ? `<span style="color:#aaa;font-size:11px;margin-left:6px">— ${esc(i.city)}</span>` : ''}
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function pickInstructor(name) {
+  const input = document.getElementById('mTripInstructor');
+  if (input) { input.value = name; input.focus(); }
+  hideInstrSuggest();
+}
+
+function hideInstrSuggest() {
+  const box = document.getElementById('instrSuggestBox');
+  if (box) box.style.display = 'none';
+}
+
+// Zavři suggest při kliknutí mimo
+document.addEventListener('click', function(e) {
+  const box = document.getElementById('instrSuggestBox');
+  const input = document.getElementById('mTripInstructor');
+  if (box && input && !box.contains(e.target) && e.target !== input) {
+    box.style.display = 'none';
+  }
+});
 
 function saveInstructorModal() {
   const name = document.getElementById('mInstrName').value.trim();
