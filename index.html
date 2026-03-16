@@ -1471,18 +1471,23 @@ function renderInstructors() {
               </div>
             </div>` : ''}
 
-            ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div>` : ''}
+            ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;position:relative;cursor:pointer"
+  data-full="${esc(ins.about)}"
+  onmouseenter="showInstrTooltip(this, this.dataset.full)"
+  onmouseleave="hideInstrTooltip(this)">
+  <div style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div>
+</div>` : ''}
 
             ${ins.demand ? `
             <div style="margin-bottom:6px">
               <span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span>
-              <div style="font-size:12px;color:var(--navy);margin-top:2px">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div>
+              <div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" onmouseenter="showInstrTooltip(this, this.dataset.full)" data-full="${esc(ins.demand)}" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div>
             </div>` : ''}
 
             ${ins.process ? `
             <div>
               <span style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px">Proces</span>
-              <div style="font-size:12px;color:var(--navy);margin-top:2px">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div>
+              <div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" onmouseenter="showInstrTooltip(this, this.dataset.full)" data-full="${esc(ins.process)}" onmouseleave="hideInstrTooltip(this)">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div>
             </div>` : ''}
           </div>`;
         }).join('')}
@@ -1509,6 +1514,22 @@ function openInstructorModal(id) {
 
 function closeInstructorModal() {
   document.getElementById('instructorModal').classList.add('hidden');
+}
+
+
+function showInstrTooltip(el, text) {
+  if (!text || String(text).length < 60) return;
+  hideInstrTooltip(el);
+  const tt = document.createElement('div');
+  tt.className = 'note-tooltip';
+  tt.style.cssText = 'min-width:260px;max-width:360px;white-space:pre-wrap;z-index:9999';
+  tt.textContent = String(text);
+  el.style.position = 'relative';
+  el.appendChild(tt);
+}
+
+function hideInstrTooltip(el) {
+  el.querySelectorAll('.note-tooltip').forEach(t => t.remove());
 }
 
 function filterInstructorsOnly(val) {
