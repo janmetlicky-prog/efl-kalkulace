@@ -527,7 +527,8 @@
         <input type="text" id="mTripInstructor" placeholder="Začni psát jméno..." autocomplete="off"
           oninput="showInstrSuggest(this.value)"
           onkeydown="if(event.key==='Escape')hideInstrSuggest()"
-          onfocus="showInstrSuggest(this.value)">
+          onfocus="showInstrSuggest(this.value)"
+          onblur="setTimeout(hideInstrSuggest,200)">
         <div id="instrSuggestBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--teal);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:9999;max-height:220px;overflow-y:auto;margin-top:2px"></div>
       </div>
       <div class="form-group">
@@ -1376,13 +1377,13 @@ function renderInstructors() {
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="instrSearch" type="text" placeholder="🔍 Hledat..." value="${filter}"
-            oninput="renderInstructors()"
+            oninput="filterInstructorsOnly(this.value)"
             style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:200px;outline:none">
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
+      <div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
         ${filtered.map(ins => {
           const stats = tripStats[ins.id];
           const statusCol = getStatusColor(ins.status || '');
@@ -1462,6 +1463,15 @@ function closeInstructorModal() {
   document.getElementById('instructorModal').classList.add('hidden');
 }
 
+function filterInstructorsOnly(val) {
+  const grid = document.getElementById('instrGrid');
+  if (!grid) { renderInstructors(); return; }
+  const q = (val || '').toLowerCase().trim();
+  Array.from(grid.children).forEach(card => {
+    card.style.display = (!q || card.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+
 function showInstrSuggest(val) {
   const box = document.getElementById('instrSuggestBox');
   if (!box) return;
@@ -1472,12 +1482,19 @@ function showInstrSuggest(val) {
     : instructors.filter(i => i.name.toLowerCase().includes(q)).slice(0, 10);
   if (matches.length === 0) { box.style.display = 'none'; return; }
   box.innerHTML = matches.map(i =>
-    `<div onmousedown="pickInstructor(${JSON.stringify(i.name)})"
+    `<div data-name="${i.name.replace(/"/g,'&quot;')}"
       style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
       onmouseover="this.style.background='#f0f9f9'" onmouseout="this.style.background=''">
       ${esc(i.name)}${i.city ? `<span style="color:#aaa;font-size:11px;margin-left:6px">— ${esc(i.city)}</span>` : ''}
     </div>`
   ).join('');
+  box.onclick = function(e) {
+    const item = e.target.closest('[data-name]');
+    if (!item) return;
+    const input = document.getElementById('mTripInstructor');
+    if (input) input.value = item.getAttribute('data-name');
+    box.style.display = 'none';
+  };
   box.style.display = 'block';
 }
 
