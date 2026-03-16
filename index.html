@@ -439,6 +439,30 @@
   body.colleague-mode #tripAdminBtns { display: none !important; }
   body.colleague-mode .btn-new-trip { display: none !important; }
   body.colleague-mode #btnSync, body.colleague-mode #btnBackup, body.colleague-mode #btnImport { display: none !important; }
+
+  /* Note tooltip */
+  .note-tooltip {
+    position:absolute;
+    left:0;top:calc(100% + 4px);
+    background:#1a2332;color:#fff;
+    font-size:12px;line-height:1.5;
+    padding:8px 12px;border-radius:8px;
+    min-width:200px;max-width:320px;
+    white-space:pre-wrap;word-break:break-word;
+    z-index:9999;pointer-events:none;
+    box-shadow:0 4px 16px rgba(0,0,0,.25);
+  }
+  .note-tooltip::before {
+    content:'';position:absolute;
+    top:-5px;left:12px;
+    border:5px solid transparent;
+    border-bottom-color:#1a2332;
+    border-top:0;
+  }
+
+  .participant-cancelled td { background:#fff5f5 !important; }
+  .participant-cancelled td input[type="text"] { color:#e53935; text-decoration:line-through; }
+  .participant-cancelled td input[type="checkbox"] { opacity:0.5; }
 </style>
 </head>
 <body>
@@ -1576,9 +1600,19 @@ function renderTripDetail() {
     </tr>`).join('');
 
   const participantsHtml = (trip.participants || []).map((p, idx) => `
-    <tr data-pidx="${idx}">
-      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px">`}</td>
-      <td><input type="text" value="${p.birthDate||''}" onchange="updateParticipant('${trip.id}',${idx},'birthDate',this.value)" placeholder="DD.MM.RRRR" style="width:100px"></td>
+    <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : ''}">
+      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}">`}</td>
+      <td style="position:relative">
+        <div style="position:relative">
+          <input type="text" value="${(p.notes||'').replace(/"/g,'&quot;')}"
+            onchange="updateParticipant('${trip.id}',${idx},'notes',this.value)"
+            placeholder="Poznámka..."
+            title="${esc(p.notes||'')}"
+            style="width:130px;cursor:text"
+            onfocus="showNoteTooltip(this)"
+            onblur="hideNoteTooltip(this)">
+        </div>
+      </td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
       <td><input type="text" value="${p.email||''}" onchange="updateParticipant('${trip.id}',${idx},'email',this.value)" placeholder="Email" style="min-width:150px"></td>
       <td class="check-cell">
@@ -1593,6 +1627,7 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'firstPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
+      <td class="check-cell"><input type="checkbox" ${p.isCancelled?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isCancelled',this.checked);this.closest('tr').classList.toggle('participant-cancelled',this.checked)" title="Storno"></td>
 
       <td style="display:flex;gap:4px;align-items:center">
         <button class="btn-icon" title="Přesunout na jinou cestu" onclick="moveParticipant('${trip.id}',${idx})" style="font-size:12px;padding:2px 5px">↪</button>
@@ -1772,7 +1807,7 @@ function renderTripDetail() {
         <table class="participants-table">
           <thead><tr>
             <th style="min-width:140px">Jméno a příjmení</th>
-            <th>Datum nar.</th>
+            <th style="min-width:140px">Poznámky</th>
             <th>Telefon</th>
             <th>Email</th>
             <th title="Smlouva poslána">📨 Sml.</th>
@@ -1781,6 +1816,7 @@ function renderTripDetail() {
             <th title="1. platba">💳 1. pl.</th>
             <th title="Kompletní platba">✅ Kompl.</th>
             <th title="Pojištění zaplaceno">🛡 Poj.</th>
+            <th title="Storno">🚫</th>
             <th></th>
           </tr></thead>
           <tbody id="participantBody">
@@ -2879,6 +2915,24 @@ if (getRole()) {
 })();
 
 
+
+function showNoteTooltip(input) {
+  const val = input.value.trim();
+  if (!val || val.length < 20) return; // kratší texty jsou celé viditelné
+  hideNoteTooltip(input);
+  const tt = document.createElement('div');
+  tt.className = 'note-tooltip';
+  tt.textContent = val;
+  tt._input = input;
+  input.parentNode.style.position = 'relative';
+  input.parentNode.appendChild(tt);
+}
+
+function hideNoteTooltip(input) {
+  const parent = input.parentNode;
+  if (!parent) return;
+  parent.querySelectorAll('.note-tooltip').forEach(t => t.remove());
+}
 </script>
 </body>
 </html>
