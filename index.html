@@ -1668,9 +1668,9 @@ function renderTripDetail() {
             onblur="hideNoteTooltip(this)">
         </div>
       </td>
-      <td style="font-size:11px;color:var(--text-muted);line-height:1.6;min-width:150px;padding:4px 8px;vertical-align:middle">
-        ${(p.payment1Date || p.payment1Amount) ? `<div style="margin-bottom:2px"><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">📅 ' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
-        ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">📅 ' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
+      <td style="font-size:11px;color:var(--text-muted);line-height:1.7;min-width:150px;padding:4px 8px;vertical-align:middle;white-space:nowrap">
+        ${(p.payment1Date || p.payment1Amount) ? `<div><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
+        ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
         ${(!p.payment1Date && !p.payment1Amount && !p.payment2Date && !p.payment2Amount) ? '<span style="color:#ddd">—</span>' : ''}
       </td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
