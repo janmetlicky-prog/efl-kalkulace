@@ -2549,7 +2549,7 @@ async function syncPayments() {
   setSyncing(true);
   showSyncLog('Stahuji platební data...');
   let updated = 0, errors = 0;
-  const trips = db.trips.filter(t => t.participants && t.participants.length > 0 && !['storno','kalkulace'].includes(t.status));
+  const trips = db.trips.filter(t => t.participants && t.participants.length > 0 && ['active','ongoing'].includes(t.status));
   for (const trip of trips) {
     try {
       const url = baseUrl + '?trip=' + encodeURIComponent(trip.name);
