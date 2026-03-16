@@ -822,16 +822,19 @@ function migrateData(data) {
       const natM = c.note.match(/St\u00e1tn\u00ed p\u0159\u00edslu\u0161nost:\s*([^|\n]+)/);
       if (natM) c.nationality = natM[1].trim();
     }
-    if (c.note && !c.passport) {
-      const rcM = c.note.match(/R\u010c:\s*([^|\n]+)/);
-      if (rcM) c.passport = rcM[1].trim();
+    if (c.note && c.note.includes('RČ:') && !c._passportManual) {
+      const rcM = c.note.match(/RČ:\s*([^|\n]+)/);
+      if (rcM) c.passport = rcM[1].trim(); // jen pokud note ještě nebylo vyčištěno a nebyl ručně nastaven
     }
-    if ((c.nationality || c.passport) && c.note) {
-      c.note = c.note
-        .replace(/St\u00e1tn\u00ed p\u0159\u00edslu\u0161nost:\s*[^|\n]+/g, '')
-        .replace(/R\u010c:\s*[^|\n]+/g, '')
-        .replace(/Typ:\s*[^|\n]+/g, '')
-        .replace(/\|\s*\|/g, '').replace(/^[\s|]+|[\s|]+$/g, '').trim();
+    if (c.note && c.note.includes('Pas:') && !c.passport) {
+      const pasM = c.note.match(/Pas:\s*([^|\n]+)/);
+      if (pasM) c.passport = pasM[1].trim();
+    }
+    // Vždy vyčisti note od RČ/státní příslušnost dat
+    if (c.note) {
+      c.note = c.note.split('|').map(s => s.trim()).filter(s =>
+        s && !s.startsWith('Státní příslušnost:') && !s.startsWith('RČ:') && !s.startsWith('Pas:') && !s.startsWith('Typ:')
+      ).join(' | ').trim();
     }
   });
   return data;
@@ -3163,6 +3166,7 @@ function saveParticipantModal(approve) {
   p.city        = document.getElementById('pCity').value.trim();
   p.passport    = document.getElementById('pPassport').value.trim();
   p.notes       = document.getElementById('pNotes').value.trim();
+  p._passportManual = true; // označení že passport byl ručně nastaven
   if (approve) p.pendingReview = false;
 
   save(db);
