@@ -138,6 +138,13 @@
   .trip-item:hover { background: rgba(255,255,255,.08); }
   .trip-item.active { background: rgba(46,125,156,.25); border-color: rgba(46,125,156,.4); }
   .trip-item-name { font-size: 13px; font-weight: 500; color: #fff; line-height: 1.3; margin-right: 40px; }
+  .trip-alert-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    margin-left: 6px; vertical-align: middle; flex-shrink: 0;
+    box-shadow: 0 0 4px rgba(0,0,0,.4);
+  }
+  .trip-alert-dot.dot-yellow { background: #f5c842; }
+  .trip-alert-dot.dot-red    { background: #e05252; }
   .trip-item-sub { font-size: 11px; color: rgba(255,255,255,.45); margin-top: 2px; }
   .trip-item-badge {
     position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
@@ -1037,10 +1044,18 @@ function renderSidebar() {
       storno:    `<span class="trip-item-badge badge-storno">storno</span>`,
       kalkulace: `<span class="trip-item-badge badge-kalkulace">kalkulace</span>`
     }[t.status] || '';
+    const activeParticipants = (t.participants||[]).filter(p => !p.isCancelled);
+    const hasPending  = activeParticipants.some(p => p.pendingReview);
+    const hasNoContract = activeParticipants.some(p => !p.contractSent && !p.pendingReview && !p.isCancelled);
+    const dot = hasPending
+      ? '<span class="trip-alert-dot dot-yellow" title="Čeká na schválení"></span>'
+      : hasNoContract
+        ? '<span class="trip-alert-dot dot-red" title="Někdo nemá smlouvu"></span>'
+        : '';
     return `<div class="trip-item ${t.id === currentTripId ? 'active' : ''}" onclick="openTrip('${t.id}')">
       ${badge}
-      <div class="trip-item-name">${t.name}</div>
-      <div class="trip-item-sub">${MONTHS[t.month] || ''} · ${(t.participants||[]).filter(p=>!p.isCancelled).length || t.totalPersons || 0} os.</div>
+      <div class="trip-item-name">${t.name}${dot}</div>
+      <div class="trip-item-sub">${MONTHS[t.month] || ''} · ${activeParticipants.length || t.totalPersons || 0} os.</div>
     </div>`;
   }).join('');
 }
