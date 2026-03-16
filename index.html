@@ -1372,13 +1372,13 @@ function renderInstructors() {
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <input id="instrSearch" type="text" placeholder="🔍 Hledat..." value="${filter}"
-            oninput="renderInstructors()"
+            oninput="filterInstructorsOnly(this.value)"
             style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:200px;outline:none">
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
+      <div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
         ${filtered.map(ins => {
           const stats = tripStats[ins.id];
           const statusCol = getStatusColor(ins.status || '');
@@ -1435,6 +1435,16 @@ function renderInstructors() {
         }).join('')}
       </div>
     </div>`;
+}
+
+function filterInstructorsOnly(val) {
+  const grid = document.getElementById('instrGrid');
+  if (!grid) { renderInstructors(); return; }
+  const q = (val || '').toLowerCase().trim();
+  Array.from(grid.children).forEach(card => {
+    const text = card.textContent.toLowerCase();
+    card.style.display = (!q || text.includes(q)) ? '' : 'none';
+  });
 }
 
 let editingInstructorId = null;
