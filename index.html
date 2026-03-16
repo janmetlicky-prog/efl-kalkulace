@@ -1196,6 +1196,9 @@ function renderClients(filter) {
           phone: p.phone || '',
           email: p.email || '',
           birthDate: p.birthDate || '',
+          nationality: p.nationality || '',
+          passport: p.passport || '',
+          city: p.city || '',
           trips: [],
           totalTrips: 0,
         };
@@ -1204,23 +1207,33 @@ function renderClients(filter) {
       if (!clientMap[key].phone && p.phone) clientMap[key].phone = p.phone;
       if (!clientMap[key].email && p.email) clientMap[key].email = p.email;
       if (!clientMap[key].birthDate && p.birthDate) clientMap[key].birthDate = p.birthDate;
+      if (!clientMap[key].nationality && p.nationality) clientMap[key].nationality = p.nationality;
+      if (!clientMap[key].passport && p.passport) clientMap[key].passport = p.passport;
+      if (!clientMap[key].city && p.city) clientMap[key].city = p.city;
       clientMap[key].trips.push({ name: trip.name, year: trip.year, month: trip.month, status: trip.status });
       clientMap[key].totalTrips++;
     });
   });
 
-  // Merge manual clients
+  // Merge manual clients — manualClients mají přednost pro pole která vyplnil user
   (db.manualClients || []).forEach(mc => {
     const key = mc.name.trim().toLowerCase();
     if (!clientMap[key]) {
       clientMap[key] = {
         name: mc.name.trim(), phone: mc.phone||'', email: mc.email||'',
-        birthDate: mc.birthDate||'', city: mc.city||'', note: mc.note||'',
+        birthDate: mc.birthDate||'', nationality: mc.nationality||'',
+        passport: mc.passport||'', city: mc.city||'', note: mc.note||'',
         trips: [], totalTrips: 0, manualId: mc.id, isManual: true
       };
     } else {
-      if (!clientMap[key].city) clientMap[key].city = mc.city||'';
-      if (!clientMap[key].note) clientMap[key].note = mc.note||'';
+      // manualClients přepíší prázdná pole z participants
+      if (mc.phone) clientMap[key].phone = mc.phone;
+      if (mc.email) clientMap[key].email = mc.email;
+      if (mc.birthDate) clientMap[key].birthDate = mc.birthDate;
+      if (mc.nationality) clientMap[key].nationality = mc.nationality;
+      if (mc.passport) clientMap[key].passport = mc.passport;
+      if (mc.city) clientMap[key].city = mc.city;
+      if (mc.note) clientMap[key].note = mc.note;
       clientMap[key].manualId = mc.id;
     }
   });
@@ -1341,10 +1354,12 @@ function filterClientsOnly(filterVal) {
     (trip.participants || []).forEach(p => {
       if (!p.name || !p.name.trim()) return;
       const key = p.name.trim().toLowerCase();
-      if (!clientMap[key]) clientMap[key] = { name: p.name.trim(), phone: p.phone||'', email: p.email||'', birthDate: p.birthDate||'', city: p.city||'', note:'', trips: [], totalTrips: 0, isManual: false, manualId: null };
+      if (!clientMap[key]) clientMap[key] = { name: p.name.trim(), phone: p.phone||'', email: p.email||'', birthDate: p.birthDate||'', nationality: p.nationality||'', passport: p.passport||'', city: p.city||'', note:'', trips: [], totalTrips: 0, isManual: false, manualId: null };
       if (!clientMap[key].phone && p.phone) clientMap[key].phone = p.phone;
       if (!clientMap[key].email && p.email) clientMap[key].email = p.email;
       if (!clientMap[key].birthDate && p.birthDate) clientMap[key].birthDate = p.birthDate;
+      if (!clientMap[key].nationality && p.nationality) clientMap[key].nationality = p.nationality;
+      if (!clientMap[key].passport && p.passport) clientMap[key].passport = p.passport;
       if (!clientMap[key].city && p.city) clientMap[key].city = p.city;
       clientMap[key].trips.push({ name: trip.name, year: trip.year });
       clientMap[key].totalTrips++;
@@ -1353,10 +1368,17 @@ function filterClientsOnly(filterVal) {
   (db.manualClients || []).forEach(c => {
     if (!c.name || !c.name.trim()) return;
     const key = c.name.trim().toLowerCase();
-    if (!clientMap[key]) clientMap[key] = { name: c.name.trim(), phone: c.phone||'', email: c.email||'', birthDate: c.birthDate||'', city: c.city||'', note: c.note||'', trips: [], totalTrips: 0, isManual: true, manualId: c.id };
-    else { clientMap[key].isManual = true; clientMap[key].manualId = c.id; if (c.note) clientMap[key].note = c.note; }
-    if (!clientMap[key].phone && c.phone) clientMap[key].phone = c.phone;
-    if (!clientMap[key].email && c.email) clientMap[key].email = c.email;
+    if (!clientMap[key]) clientMap[key] = { name: c.name.trim(), phone: c.phone||'', email: c.email||'', birthDate: c.birthDate||'', nationality: c.nationality||'', passport: c.passport||'', city: c.city||'', note: c.note||'', trips: [], totalTrips: 0, isManual: true, manualId: c.id };
+    else {
+      clientMap[key].isManual = true; clientMap[key].manualId = c.id;
+      if (c.phone) clientMap[key].phone = c.phone;
+      if (c.email) clientMap[key].email = c.email;
+      if (c.birthDate) clientMap[key].birthDate = c.birthDate;
+      if (c.nationality) clientMap[key].nationality = c.nationality;
+      if (c.passport) clientMap[key].passport = c.passport;
+      if (c.city) clientMap[key].city = c.city;
+      if (c.note) clientMap[key].note = c.note;
+    }
   });
 
   let clients = Object.values(clientMap).sort((a,b) => a.name.localeCompare(b.name,'cs'));
