@@ -763,7 +763,8 @@ let editingTripId = null;
 // ═══════════════════════════════════════════════
 function calcTrip(trip) {
   const minPersons  = trip.minPersons   || 0;
-  const totalPersons = trip.totalPersons || minPersons;
+  const activeParticipants = (trip.participants || []).filter(p => !p.isCancelled).length;
+  const totalPersons = activeParticipants > 0 ? activeParticipants : (trip.totalPersons || minPersons);
   const items = trip.costItems || [];
   const essenceRate = parseFloat(trip.essenceRate) || 0;
   const mpRate      = parseFloat(trip.mpRate)      || 0;
@@ -949,7 +950,7 @@ function renderSidebar() {
     return `<div class="trip-item ${t.id === currentTripId ? 'active' : ''}" onclick="openTrip('${t.id}')">
       ${badge}
       <div class="trip-item-name">${t.name}</div>
-      <div class="trip-item-sub">${MONTHS[t.month] || ''} · ${t.totalPersons || 0} os.</div>
+      <div class="trip-item-sub">${MONTHS[t.month] || ''} · ${(t.participants||[]).filter(p=>!p.isCancelled).length || t.totalPersons || 0} os.</div>
     </div>`;
   }).join('');
 }
@@ -1652,7 +1653,7 @@ function renderTripDetail() {
           ${trip.date ? `<div class="info-chip">📅 ${trip.date}</div>` : ''}
           ${trip.instructor ? `<div class="info-chip">👤 ${trip.instructor}</div>` : ''}
           <div class="info-chip">🌙 ${trip.nights||'?'} nocí</div>
-          <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${trip.totalPersons||0} os.</div>
+          <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${(trip.participants||[]).filter(p=>!p.isCancelled).length || trip.totalPersons||0} os.</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
@@ -1800,7 +1801,7 @@ function renderTripDetail() {
      <!-- ÚČASTNÍCI-->
     <div class="card">
       <div class="card-header">
-        <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).length} / ${trip.totalPersons||0})</span></div>
+        <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).filter(p=>!p.isCancelled).length} aktivních / ${(trip.participants||[]).length} celkem)</span></div>
         <button class="btn btn-secondary btn-sm admin-only" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
       </div>
       <div style="overflow-x:auto">
