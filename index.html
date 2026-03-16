@@ -3112,7 +3112,7 @@ function hideNoteTooltip(input) {
 }
 
 // ─── PARTICIPANT MODAL ───
-const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbzFPemDx7Y9wKXJs8kJTvQgp490ZsLdcwnqIg7DXloTYNFn5EG8T1J_eip2Xtxq5pw/exec';
+const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbz2_mgzxaTPmvhNvLYbYS8EHl9gz_BrYDZUgilm8uqhWjPFkhsnY5HO4uPgTYTzYEY5/exec';
 let pModalTripId = null;
 let pModalIdx = null;
 
@@ -3157,6 +3157,9 @@ function saveParticipantModal(approve) {
   const p = trip.participants[pModalIdx];
   if (!p) return;
 
+  // Zapamatuj si stav před uložením
+  const wasPending = !!p.pendingReview;
+
   // Ulož do appky
   p.name        = document.getElementById('pName').value.trim();
   p.phone       = document.getElementById('pPhone').value.trim();
@@ -3189,45 +3192,45 @@ function saveParticipantModal(approve) {
     }
   }
 
-  // Propis do Sheets přes Apps Script
   const statusEl = document.getElementById('pSyncStatus');
-  statusEl.textContent = '⏳ Ukládám do Google Sheets...';
 
-  fetch(PARTICIPANT_POST_URL, {
-    method: 'POST',
-    body: JSON.stringify({
-      email:       p.email,
-      name:        p.name,
-      phone:       p.phone,
-      birthDate:   p.birthDate,
-      nationality: p.nationality,
-      city:        p.city,
-      passport:    p.passport
+  // Propis do Sheets jen pokud byl ve stavu "čeká na kontrolu"
+  if (wasPending) {
+    statusEl.textContent = '⏳ Ukládám do Google Sheets...';
+    fetch(PARTICIPANT_POST_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        name:        p.name,
+        phone:       p.phone,
+        birthDate:   p.birthDate,
+        nationality: p.nationality,
+        city:        p.city,
+        passport:    p.passport,
+        matchByName: true  // hledej podle jména, ne emailu (kvůli rodinám)
+      })
     })
-  })
-  .then(r => r.json())
-  .then(json => {
-    if (json.ok) {
-      statusEl.style.color = '#026d72';
-      statusEl.textContent = '✓ Uloženo do Google Sheets (řádek ' + json.row + ')';
-      setTimeout(() => {
-        closeParticipantModal();
-        renderTripDetail();
-      }, 1200);
-    } else {
+    .then(r => r.json())
+    .then(json => {
+      if (json.ok) {
+        statusEl.style.color = '#026d72';
+        statusEl.textContent = '✓ Uloženo do Google Sheets (' + (json.updated || 1) + ' záznam/ů)';
+      } else {
+        statusEl.style.color = '#e53935';
+        statusEl.textContent = '⚠ Sheets: ' + (json.error || 'Chyba');
+      }
+      setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 1200);
+    })
+    .catch(() => {
       statusEl.style.color = '#e53935';
-      statusEl.textContent = '⚠ Sheets: ' + (json.error || 'Chyba');
-    }
-  })
-  .catch(err => {
-    statusEl.style.color = '#e53935';
-    statusEl.textContent = '⚠ Nepodařilo se spojit se Sheets';
-    // I přesto ulož lokálně
-    setTimeout(() => {
-      closeParticipantModal();
-      renderTripDetail();
-    }, 1500);
-  });
+      statusEl.textContent = '⚠ Sheets nedostupné — uloženo jen lokálně';
+      setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 1500);
+    });
+  } else {
+    // Jen lokální změna — zavři modal
+    statusEl.style.color = '#026d72';
+    statusEl.textContent = '✓ Uloženo lokálně';
+    setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 600);
+  }
 }
 
 function approveParticipant() {
