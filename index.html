@@ -2627,6 +2627,38 @@ async function syncPush() {
   setSyncing(false);
 }
 
+
+// Pomocná funkce pro matching názvu cesty — přesný nebo Levenshtein 80%+
+function tripNameMatch(tripName, formTripName) {
+  if (!tripName || !formTripName) return false;
+  const a = tripName.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
+  const b = formTripName.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
+  if (a === b) return true;
+  // Similarity: počet shodných znaků / délka delšího řetězce
+  function similarity(s1, s2) {
+    const longer = s1.length > s2.length ? s1 : s2;
+    const shorter = s1.length > s2.length ? s2 : s1;
+    if (longer.length === 0) return 1.0;
+    // Levenshtein distance
+    const costs = [];
+    for (let i = 0; i <= longer.length; i++) {
+      let lastVal = i;
+      for (let j = 0; j <= shorter.length; j++) {
+        if (i === 0) { costs[j] = j; }
+        else if (j > 0) {
+          let newVal = costs[j - 1];
+          if (longer[i-1] !== shorter[j-1]) newVal = Math.min(Math.min(newVal, lastVal), costs[j]) + 1;
+          costs[j - 1] = lastVal;
+          lastVal = newVal;
+        }
+      }
+      if (i > 0) costs[shorter.length] = lastVal;
+    }
+    return (longer.length - costs[shorter.length]) / longer.length;
+  }
+  return similarity(a, b) >= 0.80;
+}
+
 async function syncPull() {
   const sheetCsvUrl = getSheetCsvUrl();
   if (!sheetCsvUrl) {
@@ -2755,11 +2787,7 @@ async function syncPull() {
       
       // Přiřaď ke cestě — vždy, i pro existující klienty
       if (fc.tripName) {
-        const trip = db.trips.find(t => t.name && (
-          t.name.toLowerCase() === fc.tripName.toLowerCase() ||
-          fc.tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
-          t.name.toLowerCase().includes(fc.tripName.toLowerCase().slice(0,10))
-        ));
+        const trip = db.trips.find(t => t.name && tripNameMatch(t.name, fc.tripName));
         if (trip) {
           if (!trip.participants) trip.participants = [];
           const inTrip = trip.participants.some(p =>
@@ -3070,11 +3098,7 @@ if (getRole()) {
       const tripName = fc.no.split('|')[0].trim();
       if (!tripName) return;
       const trip = db.trips.find(function(t) {
-        return t.name && (
-          t.name.toLowerCase() === tripName.toLowerCase() ||
-          tripName.toLowerCase().includes(t.name.toLowerCase().slice(0,10)) ||
-          t.name.toLowerCase().includes(tripName.toLowerCase().slice(0,10))
-        );
+        return t.name && tripNameMatch(t.name, tripName);
       });
       if (trip) {
         if (!trip.participants) trip.participants = [];
