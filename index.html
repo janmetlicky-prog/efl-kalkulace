@@ -1093,7 +1093,7 @@ function renderClients(filter) {
 
   // Aggregate all participants across all trips
   const clientMap = {};
-  db.trips.forEach(trip => {
+  db.trips.filter(t => ['active','done','ongoing'].includes(t.status)).forEach(trip => {
     (trip.participants || []).forEach(p => {
       if (!p.name || !p.name.trim()) return;
       const key = p.name.trim().toLowerCase();
@@ -1244,7 +1244,7 @@ function filterClientsOnly(filterVal) {
 
   // Rebuild same clientMap as renderClients
   const clientMap = {};
-  db.trips.forEach(trip => {
+  db.trips.filter(t => ['active','done','ongoing'].includes(t.status)).forEach(trip => {
     (trip.participants || []).forEach(p => {
       if (!p.name || !p.name.trim()) return;
       const key = p.name.trim().toLowerCase();
@@ -2266,7 +2266,7 @@ document.getElementById('instructorModal').addEventListener('click', e => {
 function exportClientsCSV() {
   // Rebuild full client list same way as renderClients
   const clientMap = {};
-  db.trips.forEach(trip => {
+  db.trips.filter(t => ['active','done','ongoing'].includes(t.status)).forEach(trip => {
     (trip.participants || []).forEach(p => {
       if (!p.name || !p.name.trim()) return;
       const key = p.name.trim().toLowerCase();
