@@ -665,6 +665,14 @@
         <label>Město / kraj</label>
         <input type="text" id="mClientCity" placeholder="Praha">
       </div>
+      <div class="form-group">
+        <label>Státní příslušnost</label>
+        <input type="text" id="mClientNationality" placeholder="ČR">
+      </div>
+      <div class="form-group">
+        <label>RČ / Cestovní pas</label>
+        <input type="text" id="mClientPassport" placeholder="123456/7890">
+      </div>
       <div class="form-group" style="grid-column:span 2">
         <label>Poznámka</label>
         <textarea id="mClientNote" style="min-height:60px" placeholder="Zájmy, preference, odkud přišla..."></textarea>
@@ -744,6 +752,24 @@ function migrateData(data) {
   });
   if (!data.manualClients) data.manualClients = [];
   if (!data.instructors) data.instructors = [];
+  // Migrace: parsni státní příslušnost a RČ/pas z poznámky
+  (data.manualClients || []).forEach(c => {
+    if (c.note && !c.nationality) {
+      const natM = c.note.match(/St\u00e1tn\u00ed p\u0159\u00edslu\u0161nost:\s*([^|\n]+)/);
+      if (natM) c.nationality = natM[1].trim();
+    }
+    if (c.note && !c.passport) {
+      const rcM = c.note.match(/R\u010c:\s*([^|\n]+)/);
+      if (rcM) c.passport = rcM[1].trim();
+    }
+    if ((c.nationality || c.passport) && c.note) {
+      c.note = c.note
+        .replace(/St\u00e1tn\u00ed p\u0159\u00edslu\u0161nost:\s*[^|\n]+/g, '')
+        .replace(/R\u010c:\s*[^|\n]+/g, '')
+        .replace(/Typ:\s*[^|\n]+/g, '')
+        .replace(/\|\s*\|/g, '').replace(/^[\s|]+|[\s|]+$/g, '').trim();
+    }
+  });
   return data;
 }
 function save(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -1168,7 +1194,7 @@ function renderClients(filter) {
             ${c.phone ? `📞 ${esc(c.phone)}` : ''}
             ${c.phone && c.email ? ' · ' : ''}
             ${c.email ? `✉ ${esc(c.email)}` : ''}
-            ${c.birthDate ? ` · 🎂 ${esc(c.birthDate)}` : ''}
+            ${c.birthDate ? ` · 🎂 ${esc(c.birthDate)}` : ''}${c.nationality ? ` · 🌍 ${esc(c.nationality)}` : ''}${c.passport ? ` · 🪪 ${esc(c.passport)}` : ''}
             ${c.city ? ` · 📍 ${esc(c.city)}` : ''}
           </div>
           ${c.note ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic">${esc(c.note)}</div>` : ''}
@@ -1295,7 +1321,7 @@ function filterClientsOnly(filterVal) {
             ${c.phone ? `📞 ${esc(c.phone)}` : ''}
             ${c.phone && c.email ? ' · ' : ''}
             ${c.email ? `✉ ${esc(c.email)}` : ''}
-            ${c.birthDate ? ` · 🎂 ${esc(c.birthDate)}` : ''}
+            ${c.birthDate ? ` · 🎂 ${esc(c.birthDate)}` : ''}${c.nationality ? ` · 🌍 ${esc(c.nationality)}` : ''}${c.passport ? ` · 🪪 ${esc(c.passport)}` : ''}
             ${c.city ? ` · 📍 ${esc(c.city)}` : ''}
           </div>
           ${c.note ? `<div style="font-size:11px;color:var(--text-muted);margin-top:3px;font-style:italic">${esc(c.note)}</div>` : ''}
@@ -2201,7 +2227,7 @@ let editingClientId = null;
 function openNewClientModal() {
   editingClientId = null;
   document.getElementById('clientModalTitle').textContent = 'Nový klient';
-  ['mClientName','mClientPhone','mClientEmail','mClientBirth','mClientCity','mClientNote'].forEach(id => {
+  ['mClientName','mClientPhone','mClientEmail','mClientBirth','mClientCity','mClientNationality','mClientPassport','mClientNote'].forEach(id => {
     document.getElementById(id).value = '';
   });
   document.getElementById('clientModal').classList.remove('hidden');
@@ -2215,9 +2241,11 @@ function openEditClientModal(clientId) {
   document.getElementById('mClientName').value  = mc.name      || '';
   document.getElementById('mClientPhone').value = mc.phone     || '';
   document.getElementById('mClientEmail').value = mc.email     || '';
-  document.getElementById('mClientBirth').value = mc.birthDate || '';
-  document.getElementById('mClientCity').value  = mc.city      || '';
-  document.getElementById('mClientNote').value  = mc.note      || '';
+  document.getElementById('mClientBirth').value       = mc.birthDate    || '';
+  document.getElementById('mClientCity').value        = mc.city         || '';
+  document.getElementById('mClientNationality').value = mc.nationality  || '';
+  document.getElementById('mClientPassport').value    = mc.passport     || '';
+  document.getElementById('mClientNote').value        = mc.note         || '';
   document.getElementById('clientModal').classList.remove('hidden');
 }
 
@@ -2233,9 +2261,11 @@ function saveClientModal() {
     name,
     phone:     document.getElementById('mClientPhone').value.trim(),
     email:     document.getElementById('mClientEmail').value.trim(),
-    birthDate: document.getElementById('mClientBirth').value.trim(),
-    city:      document.getElementById('mClientCity').value.trim(),
-    note:      document.getElementById('mClientNote').value.trim(),
+    birthDate:   document.getElementById('mClientBirth').value.trim(),
+    city:        document.getElementById('mClientCity').value.trim(),
+    nationality: document.getElementById('mClientNationality').value.trim(),
+    passport:    document.getElementById('mClientPassport').value.trim(),
+    note:        document.getElementById('mClientNote').value.trim(),
   };
   if (editingClientId) {
     const mc = db.manualClients.find(c => c.id === editingClientId);
