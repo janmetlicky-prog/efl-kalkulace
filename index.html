@@ -461,6 +461,8 @@
   }
 
   .participant-cancelled td { background:#fff5f5 !important; }
+  .participant-pending td { background:#fffbe6 !important; }
+  .participant-pending td:first-child::before { content:'🟡 '; font-size:10px; }
   .participant-cancelled td input[type="text"] { color:#e53935; text-decoration:line-through; }
   .participant-cancelled td input[type="checkbox"] { opacity:0.5; }
 </style>
@@ -510,6 +512,58 @@
     </div>
   </div>
   <div class="content" id="content"></div>
+</div>
+
+
+<!-- MODAL: Editace účastníka -->
+<div class="modal-overlay hidden" id="participantModal">
+  <div class="modal" style="max-width:560px">
+    <h2 id="pModalTitle">Upravit účastníka</h2>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;padding:10px 14px;border-radius:8px;background:#fffbe6;border:1px solid #f0d060" id="pModalPending" style="display:none">
+      <span style="font-size:18px">🟡</span>
+      <span style="font-size:13px;color:#856404">Čeká na kontrolu — zkontrolujte data a schvalte</span>
+    </div>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:span 2">
+        <label>Jméno a příjmení *</label>
+        <input type="text" id="pName" placeholder="Jana Nováková">
+      </div>
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="text" id="pPhone" placeholder="+420 777 123 456">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="text" id="pEmail" placeholder="jana@email.cz">
+      </div>
+      <div class="form-group">
+        <label>Datum narození</label>
+        <input type="text" id="pBirthDate" placeholder="15.3.1980">
+      </div>
+      <div class="form-group">
+        <label>Státní příslušnost</label>
+        <input type="text" id="pNationality" placeholder="ČR">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Adresa</label>
+        <input type="text" id="pCity" placeholder="Ulice 1, Praha 110 00">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>RČ / Cestovní pas</label>
+        <input type="text" id="pPassport" placeholder="123456/7890">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Poznámka</label>
+        <input type="text" id="pNotes" placeholder="Poznámka k účastníkovi...">
+      </div>
+    </div>
+    <div id="pSyncStatus" style="font-size:12px;color:var(--text-muted);margin-top:8px;min-height:18px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeParticipantModal()">Zrušit</button>
+      <button class="btn btn-secondary" id="pApproveBtn" onclick="approveParticipant()" style="background:#e8f7f0;color:#026d72;border-color:#03989E">✅ Schválit</button>
+      <button class="btn btn-primary" onclick="saveParticipantModal()">Uložit změny</button>
+    </div>
+  </div>
 </div>
 
 </div><!-- /app -->
@@ -1655,7 +1709,7 @@ function renderTripDetail() {
     </tr>`).join('');
 
   const participantsHtml = (trip.participants || []).map((p, idx) => `
-    <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : ''}">
+    <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : p.pendingReview ? 'participant-pending' : ''}">
       <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px;border:none;background:transparent;outline:none;padding:6px 4px;font-size:inherit;color:inherit;cursor:default${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}" onfocus="this.style.cursor='text';this.style.background='#f0f7f7';this.style.borderRadius='6px'" onblur="this.style.cursor='default';this.style.background='transparent'">`}</td>
       <td style="position:relative">
         <div style="position:relative">
@@ -1690,6 +1744,7 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.isCancelled?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isCancelled',this.checked);renderTripDetail()" title="Storno"></td>
 
       <td style="display:flex;gap:4px;align-items:center">
+        <button class="btn-icon" onclick="openParticipantModal('${trip.id}',${idx})" title="Upravit" style="font-size:12px;color:var(--teal)">✏️</button>
         <button class="btn-icon" title="Přesunout na jinou cestu" onclick="moveParticipant('${trip.id}',${idx})" style="font-size:12px;padding:2px 5px">↪</button>
         <button class="btn-icon" onclick="removeParticipant('${trip.id}',${idx})">✕</button>
       </td>
@@ -2333,6 +2388,9 @@ function deleteClient(clientId) {
 document.getElementById('clientModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeClientModal();
 });
+document.getElementById('participantModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeParticipantModal();
+});
 document.getElementById('instructorModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeInstructorModal();
 });
@@ -2686,9 +2744,10 @@ async function syncPull() {
               id: 'form_p_' + Date.now() + '_' + Math.random().toString(36).slice(2),
               name: fc.name, email: fc.email||'', phone: fc.phone||'',
               birthDate: fc.birthDate||'', city: fc.city||'',
+              nationality: fc.nationality||'', passport: fc.passport||'',
               contractSent:false, contractSigned:false, flightBought:false,
               firstPayment:false, fullPayment:false, insurance:false,
-              insuranceSent:false, isSingle:false
+              insuranceSent:false, isSingle:false, pendingReview:true
             });
             trip.totalPersons = trip.participants.length;
           }
@@ -3048,6 +3107,129 @@ function hideNoteTooltip(input) {
   if (!parent) return;
   parent.querySelectorAll('.note-tooltip').forEach(t => t.remove());
 }
+
+// ─── PARTICIPANT MODAL ───
+const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbzFPemDx7Y9wKXJs8kJTvQgp490ZsLdcwnqIg7DXloTYNFn5EG8T1J_eip2Xtxq5pw/exec';
+let pModalTripId = null;
+let pModalIdx = null;
+
+function openParticipantModal(tripId, idx) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  const p = trip.participants[idx];
+  if (!p) return;
+  pModalTripId = tripId;
+  pModalIdx = idx;
+
+  document.getElementById('pModalTitle').textContent = 'Upravit účastníka';
+  document.getElementById('pName').value       = p.name        || '';
+  document.getElementById('pPhone').value      = p.phone       || '';
+  document.getElementById('pEmail').value      = p.email       || '';
+  document.getElementById('pBirthDate').value  = p.birthDate   || '';
+  document.getElementById('pNationality').value= p.nationality || '';
+  document.getElementById('pCity').value       = p.city        || '';
+  document.getElementById('pPassport').value   = p.passport    || '';
+  document.getElementById('pNotes').value      = p.notes       || '';
+  document.getElementById('pSyncStatus').textContent = '';
+
+  // Zobraz "Čeká na kontrolu" banner
+  const pending = document.getElementById('pModalPending');
+  pending.style.display = p.pendingReview ? 'flex' : 'none';
+
+  // Schválit tlačítko jen pokud čeká
+  document.getElementById('pApproveBtn').style.display = p.pendingReview ? '' : 'none';
+
+  document.getElementById('participantModal').classList.remove('hidden');
+}
+
+function closeParticipantModal() {
+  document.getElementById('participantModal').classList.add('hidden');
+  pModalTripId = null;
+  pModalIdx = null;
+}
+
+function saveParticipantModal(approve) {
+  const trip = db.trips.find(t => t.id === pModalTripId);
+  if (!trip) return;
+  const p = trip.participants[pModalIdx];
+  if (!p) return;
+
+  // Ulož do appky
+  p.name        = document.getElementById('pName').value.trim();
+  p.phone       = document.getElementById('pPhone').value.trim();
+  p.email       = document.getElementById('pEmail').value.trim();
+  p.birthDate   = document.getElementById('pBirthDate').value.trim();
+  p.nationality = document.getElementById('pNationality').value.trim();
+  p.city        = document.getElementById('pCity').value.trim();
+  p.passport    = document.getElementById('pPassport').value.trim();
+  p.notes       = document.getElementById('pNotes').value.trim();
+  if (approve) p.pendingReview = false;
+
+  save(db);
+
+  // Propis do Klientů
+  if (db.manualClients) {
+    const mc = db.manualClients.find(c =>
+      c.name.toLowerCase() === p.name.toLowerCase() ||
+      (p.email && c.email && c.email.toLowerCase() === p.email.toLowerCase())
+    );
+    if (mc) {
+      mc.name        = p.name;
+      mc.phone       = p.phone;
+      mc.email       = p.email;
+      mc.birthDate   = p.birthDate;
+      mc.nationality = p.nationality;
+      mc.city        = p.city;
+      mc.passport    = p.passport;
+      save(db);
+    }
+  }
+
+  // Propis do Sheets přes Apps Script
+  const statusEl = document.getElementById('pSyncStatus');
+  statusEl.textContent = '⏳ Ukládám do Google Sheets...';
+
+  fetch(PARTICIPANT_POST_URL, {
+    method: 'POST',
+    body: JSON.stringify({
+      email:       p.email,
+      name:        p.name,
+      phone:       p.phone,
+      birthDate:   p.birthDate,
+      nationality: p.nationality,
+      city:        p.city,
+      passport:    p.passport
+    })
+  })
+  .then(r => r.json())
+  .then(json => {
+    if (json.ok) {
+      statusEl.style.color = '#026d72';
+      statusEl.textContent = '✓ Uloženo do Google Sheets (řádek ' + json.row + ')';
+      setTimeout(() => {
+        closeParticipantModal();
+        renderTripDetail();
+      }, 1200);
+    } else {
+      statusEl.style.color = '#e53935';
+      statusEl.textContent = '⚠ Sheets: ' + (json.error || 'Chyba');
+    }
+  })
+  .catch(err => {
+    statusEl.style.color = '#e53935';
+    statusEl.textContent = '⚠ Nepodařilo se spojit se Sheets';
+    // I přesto ulož lokálně
+    setTimeout(() => {
+      closeParticipantModal();
+      renderTripDetail();
+    }, 1500);
+  });
+}
+
+function approveParticipant() {
+  saveParticipantModal(true);
+}
+
 </script>
 </body>
 </html>
