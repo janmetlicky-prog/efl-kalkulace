@@ -610,9 +610,19 @@
       </div>
     </div>
 
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Smluvní data — Web App URL <span style="font-size:10px;color:var(--text-muted)">(pro platební data účastníků)</span></label>
+      <input type="url" id="paymentSyncUrl" placeholder="https://script.google.com/macros/s/..."
+        style="font-size:12px;" oninput="localStorage.setItem('efl_payment_sync_url',this.value)">
+      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">
+        URL z nasazeného Apps Script (doGet funkce)
+      </div>
+    </div>
+
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="syncPush()">⬆️ Nahrát data do Sheets</button>
       <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
+      <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
       <button class="btn btn-secondary btn-sm" onclick="saveSyncUrl()">💾 Uložit URL</button>
     </div>
 
@@ -1658,6 +1668,11 @@ function renderTripDetail() {
             onblur="hideNoteTooltip(this)">
         </div>
       </td>
+      <td style="font-size:11px;color:var(--text-muted);line-height:1.6;min-width:150px;padding:4px 8px;vertical-align:middle">
+        ${(p.payment1Date || p.payment1Amount) ? `<div style="margin-bottom:2px"><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">📅 ' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
+        ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">📅 ' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
+        ${(!p.payment1Date && !p.payment1Amount && !p.payment2Date && !p.payment2Amount) ? '<span style="color:#ddd">—</span>' : ''}
+      </td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
       <td><input type="text" value="${p.email||''}" onchange="updateParticipant('${trip.id}',${idx},'email',this.value)" placeholder="Email" style="min-width:150px"></td>
       <td class="check-cell">
@@ -1861,6 +1876,7 @@ function renderTripDetail() {
           <thead><tr>
             <th style="min-width:140px">Jméno a příjmení</th>
             <th style="min-width:140px">Poznámky</th>
+            <th style="min-width:160px">Platby</th>
             <th>Telefon</th>
             <th>Email</th>
             <th title="Smlouva poslána">📨 Sml.</th>
@@ -2422,10 +2438,47 @@ function openSyncModal() {
   const url = getSyncUrl();
   document.getElementById('syncUrl').value = url;
   document.getElementById('sheetCsvUrl').value = getSheetCsvUrl();
+  const pUrl = localStorage.getItem('efl_payment_sync_url') || '';
+  document.getElementById('paymentSyncUrl').value = pUrl;
   document.getElementById('scriptCode').value = APPS_SCRIPT_CODE;
   checkSyncUrl(url);
   document.getElementById('syncModal').classList.remove('hidden');
 }
+async function syncPayments() {
+  const baseUrl = (localStorage.getItem('efl_payment_sync_url') || '').trim();
+  if (!baseUrl) { alert('Nastavte URL Smluvní data — Web App URL v Sync nastavení.'); return; }
+  setSyncing(true);
+  showSyncLog('Stahuji platební data...');
+  let updated = 0, errors = 0;
+  const trips = db.trips.filter(t => t.participants && t.participants.length > 0 && !['storno','kalkulace'].includes(t.status));
+  for (const trip of trips) {
+    try {
+      const url = baseUrl + '?trip=' + encodeURIComponent(trip.name);
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (!Array.isArray(data) || !data.length) continue;
+      data.forEach(pd => {
+        if (!pd.email && !pd.name) return;
+        const p = trip.participants.find(p =>
+          (pd.email && p.email && p.email.toLowerCase() === pd.email.toLowerCase()) ||
+          (pd.name && p.name && p.name.toLowerCase().includes(pd.name.toLowerCase().split(' ')[0].toLowerCase()))
+        );
+        if (!p) return;
+        if (pd.payment1Date) p.payment1Date = pd.payment1Date;
+        if (pd.payment1Amount) p.payment1Amount = pd.payment1Amount;
+        if (pd.payment2Date) p.payment2Date = pd.payment2Date;
+        if (pd.payment2Amount) p.payment2Amount = pd.payment2Amount;
+        updated++;
+      });
+    } catch(e) { errors++; }
+  }
+  save(db);
+  if (currentView === 'trip') renderTripDetail();
+  showSyncLog('✓ Platební data aktualizována (' + updated + ' účastníků' + (errors ? ', ' + errors + ' chyb' : '') + ') — ' + new Date().toLocaleTimeString('cs-CZ'));
+  setSyncing(false);
+}
+
 function closeSyncModal() { document.getElementById('syncModal').classList.add('hidden'); }
 document.getElementById('syncModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeSyncModal(); });
 
@@ -2882,6 +2935,11 @@ function applyColleagueMode() {
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
+// Nastav výchozí URL pro platební sync
+if (!localStorage.getItem('efl_payment_sync_url')) {
+  localStorage.setItem('efl_payment_sync_url', 'https://script.google.com/macros/s/AKfycbxzGEu_4VLeKRJhkBfu5sFHaRZCWX7dgIPZKasa-KYcESnR7rCLWYw1qrPlCwdzUL0T/exec');
+}
+
 if (getRole()) {
   document.getElementById('app').style.display = 'contents';
   if (getRole() === 'colleague') document.body.classList.add('colleague-mode');
