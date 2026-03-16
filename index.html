@@ -477,6 +477,7 @@
     <div class="topbar-actions">
       <button class="btn btn-secondary admin-only" onclick="showView('overview')" id="btnOverview">📊 Přehled roku</button>
       <button class="btn btn-secondary" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
+      <button class="btn btn-secondary admin-only" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
       <button class="btn btn-secondary" onclick="window.print()">🖨️ Tisk</button>
       <button class="btn btn-secondary" id="btnColleagueSync" onclick="syncPull()" title="Stáhnout nové klienty z formuláře" style="display:none">🔄 Aktualizovat klienty</button>
       <button class="btn btn-secondary admin-only" onclick="exportData()">💾 Záloha</button>
@@ -650,6 +651,51 @@
   </div>
 </div>
 
+<!-- MODAL: Instructor -->
+<div class="modal-overlay hidden" id="instructorModal">
+  <div class="modal" style="max-width:580px">
+    <h2 id="instrModalTitle">Nový lektor</h2>
+    <div class="form-grid">
+      <div class="form-group" style="grid-column:span 2">
+        <label>Jméno a příjmení *</label>
+        <input type="text" id="mInstrName" placeholder="Jana Nováková">
+      </div>
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="text" id="mInstrPhone" placeholder="+420 777 123 456">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="mInstrEmail" placeholder="jana@email.cz">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Město / kraj</label>
+        <input type="text" id="mInstrCity" placeholder="Praha">
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>O lektorce / poznámky</label>
+        <textarea id="mInstrAbout" style="min-height:80px" placeholder="Styl cvičení, klientela, zkušenosti..."></textarea>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Poptávka</label>
+        <textarea id="mInstrDemand" style="min-height:60px" placeholder="Co hledá, jaké destinace..."></textarea>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Proces</label>
+        <textarea id="mInstrProcess" style="min-height:60px" placeholder="Co bylo posláno, nabídnuto..."></textarea>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Stav spolupráce</label>
+        <input type="text" id="mInstrStatus" placeholder="PRODEJ / jednání / čekáme...">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeInstructorModal()">Zrušit</button>
+      <button class="btn btn-primary" onclick="saveInstructorModal()">Uložit</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ═══════════════════════════════════════════════
 // DATA & STORAGE
@@ -671,6 +717,7 @@ function migrateData(data) {
     }
   });
   if (!data.manualClients) data.manualClients = [];
+  if (!data.instructors) data.instructors = [];
   return data;
 }
 function save(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -900,6 +947,11 @@ function showView(view, tripId) {
     renderSidebar();
     document.getElementById('topbarTitle').textContent = 'Databáze klientů';
     renderClients();
+  } else if (view === 'instructors') {
+    currentTripId = null;
+    renderSidebar();
+    document.getElementById('topbarTitle').textContent = 'Lektoři & partneři';
+    renderInstructors();
   }
 }
 
@@ -1238,6 +1290,190 @@ function filterClientsOnly(filterVal) {
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ─── INSTRUCTORS ───
+const DEFAULT_INSTRUCTORS = [
+  { id: 'ins_001', name: 'Martina Ježková', phone: '', email: '', city: '', about: 'Cestuje, spolupracovala s Villas ale poslední pobyt neobsadila v termínu a zrušil se, na Sri Lance před 7 lety, byla na pobytu v Thajku, studuje vědy, letí na měsíc do Indie.', demand: 'Sri Lanka začátek února 10 nocí pobytu tam, ubytování s jógovnou, yogalanka (tip na top), 8-10 osob', process: 'Jungle resort, booking od 1.2.', status: '' },
+  { id: 'ins_002', name: 'Lucie Ryjáčková', phone: '608 011 473', email: '', city: '', about: 'Poptávala pobyt u nich z města ale nevěnuje se skupinám tedy to nedopadlo, nabídla jí sever Barcelony, ví že jsem prodávala pobyty Ivě a Domu jogy v Příbrami, klientela ženy ve věku, Ischii nezná ale líbí se jí to, původní poptávka byla Mallorca/Španělsko.', demand: 'Nabídka Ischia / Malta / příp. Nerja aparthotel', process: 'Poslaná malta na termín od 7.11., poslaná Ischia', status: 'PRODEJ, rezervace 6 pokojů od 26.9.' },
+  { id: 'ins_003', name: 'Jana Blahutová', phone: '', email: 'jana.blahut@seznam.cz', city: '', about: 'Stalo se že měla lektorovat na Bali před 7 lety a pak ji z pobytu vystřípali, tak zkouší znovu po letech.', demand: 'Ischia na podzim', process: 'Poslaná nabídka Ischia San Nicola 15.1.', status: 'Z osobních důvodů nebude pořádat' },
+  { id: 'ins_004', name: 'Veronika Hynková', phone: '', email: '', city: '', about: 'Dělá si výběrko na kolegyni která jí bude asistovat během organizace do fabrik Young living (Francie, Španělsko Sevilla), náročná na rychlost, má korporátní návyky, promo v uzavřené komunitě na FB, líbí se jí i myšlenka cesty za odměnu pro VIP zákazníky na méně známá místa (LA PALMA).', demand: '', process: '', status: '' },
+  { id: 'ins_005', name: 'Kateřina Tomíčková', phone: '', email: '', city: 'Jičín', about: 'Zajímá jí život v komunitách, nemá děti, léčitelství, s kamarádkou mindfulness a jóga, klientky 45+, cenově dostupné.', demand: 'Černá Hora v létě, Ischia v září, počet osob 12-20', process: 'Černá Hora červenec 9.-19.7., srpen 13.-30.8. / Ischia září 10.9.-20.9.', status: 'Balíček do 20tis - bohužel nelze zrealizovat' },
+  { id: 'ins_006', name: 'Ivon She Hlava', phone: '', email: '', city: 'Vídeň', about: 'Dechové techniky, jóga, komunita ve Vídni, miluje Mallorcu - dělala tam pobyt ve vlastní režii, bylo to stresující kvůli platebním podmínkám, ráda bude mít partnera pro organizaci, láká CZ/SK/Alpy víkendy nebo Mallorca, Portugalsko.', demand: 'Mallorca předběžně / Portugalsko pobyt září, možná víkend v květnu', process: 'Možnosti Mallorca, víkend Rakousko - Marco polo, statek Samsara', status: 'V tabulce - Miramonte favorit' },
+  { id: 'ins_007', name: 'Anastazia Ciesarova', phone: '', email: 'anastasia.ciesarova@outlook.com', city: '', about: 'Psycholožka, bude dodávat program, Nasťa řeší komunikaci a promo, zajímali se o propagaci ve skupině.', demand: 'Malta kolem 17.11., pobyt 2 lektoři, terapeutka - konstelace, případně lokalita pro rodiny s dětmi - Andalusie, Černá hora', process: 'Poslaná nabídka na MALTU od 17.11.', status: 'Podmínky Eurowings poslané' },
+  { id: 'ins_008', name: 'Kaa Zárubová', phone: '', email: '', city: 'Praha', about: '2 děti 5 a 8 let, pobyt pro mámy s dětmi, zatím byla jen účastnice, chce zkusit zorganizovat, potřebuje hodně vedení a jistotu.', demand: 'Flexibilní balík: máma cvičí, jede celá rodina, máma a dítě cvičí, případně hlídání', process: 'Nabídka Černá hora přes léto pobyt 7 nocí', status: '' },
+  { id: 'ins_009', name: 'Petra Šedinová', phone: '', email: '', city: '', about: 'Kamarádka od Bety přes Janičku. Pobyty pro 16 lidí, průvodce po Bhutanu pro Persikop, byla na Seychelách, příjemná.', demand: 'Prodloužený víkend so-ne, Ischia / Malta podzim začátek října, případně Malta i později', process: 'Poslaná možnost Ischia, Malta info na listopad 16.1.', status: 'Rozhodila mezi lidi, čekáme na reakce, pak dáme rezervaci' },
+  { id: 'ins_010', name: 'Lucie Lívancová', phone: '', email: '', city: '', about: '', demand: '', process: 'Poslaná nabídka Oasis 3.-10.10.', status: '1 místo' },
+  { id: 'ins_011', name: 'Alice Tvarůžková', phone: '', email: 'PustaPusta@seznam.cz', city: '', about: 'Pořádá pobyty v Chorvatsku, jezdí autem/busem přes CK, pobyty do 20.000, bere svojí kuchařku. Chce změnu - láká Portugalsko Algarve, Madeira, Azory. Spíš apartmány, zahrada na cvičení, příroda. Pobyty pro rodiny i 40 osob.', demand: 'Albánie, Černá hora, Gozo, Madeira, Azory - apartmány, Villa na Ischii', process: '', status: 'Neposlané možnosti' },
+  { id: 'ins_012', name: 'Andrea Karasová', phone: '', email: '', city: '', about: '', demand: '', process: '', status: 'Čekám jak bude po kurzu, pak dáme call' },
+  { id: 'ins_013', name: 'Ahimsa Bruntál', phone: '', email: '', city: 'Bruntál', about: 'Indie, ášram a cestování, 14denní pobyty, jedou do Ománu k moři, cena 45tis plus dva lidi z týmu.', demand: 'Rozhodit sítě na Indii', process: '', status: 'Meeting s Petulí' },
+  { id: 'ins_014', name: 'Pavla Bícová', phone: '', email: '', city: 'České Budějovice', about: 'Mladá kočka pozitivní, teď má víkendy přes cestovku v Lovětíně, chtěla by i jinam příští rok, Zahrada živlů, postupně by chtěla jezdit s klienty i k moři.', demand: 'Krásné společné sladění', process: 'Víkendy v ČR', status: 'PRODEJ Ischia, 8 míst' },
+  { id: 'ins_015', name: 'Dana Radimcová', phone: '', email: '', city: '', about: '', demand: 'Poslaná ukázka Villy v Lago Amenno, Ischii zná, má už nějakou představu.', process: '', status: '' },
+  { id: 'ins_016', name: 'Eva Annabell', phone: '', email: '', city: '', about: '', demand: 'Bali transformační pobyt na podzim 2027', process: '', status: 'Bali první nástřel pobytu' },
+  { id: 'ins_017', name: 'Adesh Petr', phone: '', email: '', city: '', about: '', demand: '', process: '', status: 'Srí Lanka' },
+  { id: 'ins_018', name: 'Martina Sedláková', phone: '', email: '', city: '', about: '', demand: '', process: '', status: 'Sleeping Elephant přelom leden-únor, nocleh v Galle, přelom leden-únor 2027' },
+  { id: 'ins_019', name: 'Dana Becicková', phone: '', email: 'dan.kabe@email.cz', city: '', about: '', demand: 'Madeira, termínově od 11.10.', process: '', status: '' },
+  { id: 'ins_020', name: 'Aneta Jůzová', phone: '', email: '', city: '', about: '', demand: 'Scogliera - kalkulace, 2 lektorky, Anet 1000, kolegyně hrazené náklady mimo letenky', process: '', status: 'Odeslané podklady emailem' },
+];
+
+function getInstructors() {
+  if (!db.instructors) db.instructors = JSON.parse(JSON.stringify(DEFAULT_INSTRUCTORS));
+  return db.instructors;
+}
+
+function renderInstructors() {
+  const content = document.getElementById('content');
+  const instructors = getInstructors();
+  const filter = document.getElementById('instrSearch') ? document.getElementById('instrSearch').value.toLowerCase() : '';
+
+  // Statistiky ze zájezdů pro každého lektora
+  const tripStats = {};
+  db.trips.forEach(trip => {
+    const lname = (trip.instructor || '').toLowerCase().trim();
+    if (!lname) return;
+    instructors.forEach(ins => {
+      const iname = ins.name.toLowerCase();
+      if (lname.includes(iname.split(' ')[0].toLowerCase()) || iname.includes(lname.split(' ')[0].toLowerCase())) {
+        if (!tripStats[ins.id]) tripStats[ins.id] = { count: 0, totalPersons: 0, trips: [] };
+        const calc = calcTrip(trip);
+        tripStats[ins.id].count++;
+        tripStats[ins.id].totalPersons += trip.totalPersons || 0;
+        tripStats[ins.id].trips.push({ name: trip.name, year: trip.year, persons: trip.totalPersons, costPP: calc.costPP, status: trip.status });
+      }
+    });
+  });
+
+  const statusColor = { 'PRODEJ': '#03989E', 'rezervace': '#03989E', 'Čekám': '#b8860b', 'STORNO': '#e53935', 'Neposlané': '#999' };
+  const getStatusColor = (s) => { for (const [k,v] of Object.entries(statusColor)) { if (s && s.includes(k)) return v; } return '#666'; };
+
+  const filtered = instructors.filter(ins =>
+    !filter || ins.name.toLowerCase().includes(filter) || (ins.city||'').toLowerCase().includes(filter) || (ins.status||'').toLowerCase().includes(filter)
+  );
+
+  content.innerHTML = `
+    <div style="padding:24px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:12px">
+        <div>
+          <div style="font-size:22px;font-weight:700;color:var(--navy)">Lektoři & partneři</div>
+          <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${instructors.length} kontaktů</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="instrSearch" type="text" placeholder="🔍 Hledat..." value="${filter}"
+            oninput="renderInstructors()"
+            style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:200px;outline:none">
+          <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
+        ${filtered.map(ins => {
+          const stats = tripStats[ins.id];
+          const statusCol = getStatusColor(ins.status || '');
+          return `
+          <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px;transition:box-shadow .2s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+              <div>
+                <div style="font-size:16px;font-weight:700;color:var(--navy)">${esc(ins.name)}</div>
+                ${ins.city ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">📍 ${esc(ins.city)}</div>` : ''}
+              </div>
+              <div style="display:flex;gap:6px;align-items:center">
+                ${ins.status ? `<span style="font-size:10px;font-weight:600;color:${statusCol};background:${statusCol}18;padding:3px 8px;border-radius:20px;white-space:nowrap">${esc(ins.status.substring(0,30))}${ins.status.length>30?'…':''}</span>` : ''}
+                <button onclick="openInstructorModal('${ins.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:16px;padding:2px 4px" title="Upravit">✏️</button>
+              </div>
+            </div>
+
+            ${ins.phone || ins.email ? `
+            <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+              ${ins.phone ? `<a href="tel:${ins.phone}" style="font-size:12px;color:var(--teal);text-decoration:none">📞 ${esc(ins.phone)}</a>` : ''}
+              ${ins.email ? `<a href="mailto:${ins.email}" style="font-size:12px;color:var(--teal);text-decoration:none">✉️ ${esc(ins.email)}</a>` : ''}
+            </div>` : ''}
+
+            ${stats ? `
+            <div style="background:#f0f9f9;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:16px">
+              <div style="text-align:center">
+                <div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.count}</div>
+                <div style="font-size:10px;color:var(--text-muted)">cest</div>
+              </div>
+              <div style="text-align:center">
+                <div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.totalPersons}</div>
+                <div style="font-size:10px;color:var(--text-muted)">účastníků</div>
+              </div>
+              <div style="flex:1">
+                ${stats.trips.slice(0,3).map(t => `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ${esc(t.name)} (${t.year})</div>`).join('')}
+                ${stats.trips.length > 3 ? `<div style="font-size:11px;color:var(--teal)">+ ${stats.trips.length-3} dalších</div>` : ''}
+              </div>
+            </div>` : ''}
+
+            ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div>` : ''}
+
+            ${ins.demand ? `
+            <div style="margin-bottom:6px">
+              <span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span>
+              <div style="font-size:12px;color:var(--navy);margin-top:2px">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div>
+            </div>` : ''}
+
+            ${ins.process ? `
+            <div>
+              <span style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px">Proces</span>
+              <div style="font-size:12px;color:var(--navy);margin-top:2px">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div>
+            </div>` : ''}
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+}
+
+let editingInstructorId = null;
+
+function openInstructorModal(id) {
+  editingInstructorId = id || null;
+  const ins = id ? getInstructors().find(i => i.id === id) : null;
+  document.getElementById('instrModalTitle').textContent = ins ? 'Upravit lektora' : 'Nový lektor';
+  document.getElementById('mInstrName').value = ins ? ins.name : '';
+  document.getElementById('mInstrPhone').value = ins ? ins.phone : '';
+  document.getElementById('mInstrEmail').value = ins ? ins.email : '';
+  document.getElementById('mInstrCity').value = ins ? ins.city : '';
+  document.getElementById('mInstrAbout').value = ins ? ins.about : '';
+  document.getElementById('mInstrDemand').value = ins ? ins.demand : '';
+  document.getElementById('mInstrProcess').value = ins ? ins.process : '';
+  document.getElementById('mInstrStatus').value = ins ? ins.status : '';
+  document.getElementById('instructorModal').classList.remove('hidden');
+}
+
+function closeInstructorModal() {
+  document.getElementById('instructorModal').classList.add('hidden');
+}
+
+function saveInstructorModal() {
+  const name = document.getElementById('mInstrName').value.trim();
+  if (!name) { alert('Zadejte jméno.'); return; }
+  if (!db.instructors) db.instructors = JSON.parse(JSON.stringify(DEFAULT_INSTRUCTORS));
+  const data = {
+    name,
+    phone:   document.getElementById('mInstrPhone').value.trim(),
+    email:   document.getElementById('mInstrEmail').value.trim(),
+    city:    document.getElementById('mInstrCity').value.trim(),
+    about:   document.getElementById('mInstrAbout').value.trim(),
+    demand:  document.getElementById('mInstrDemand').value.trim(),
+    process: document.getElementById('mInstrProcess').value.trim(),
+    status:  document.getElementById('mInstrStatus').value.trim(),
+  };
+  if (editingInstructorId) {
+    const ins = db.instructors.find(i => i.id === editingInstructorId);
+    if (ins) Object.assign(ins, data);
+  } else {
+    db.instructors.push({ id: 'ins_' + uid(), ...data });
+  }
+  save(db);
+  closeInstructorModal();
+  renderInstructors();
+}
+
+function deleteInstructor(id) {
+  if (!confirm('Smazat tohoto lektora?')) return;
+  db.instructors = (db.instructors || []).filter(i => i.id !== id);
+  save(db);
+  renderInstructors();
 }
 
 // ─── TRIP DETAIL ───
@@ -1914,6 +2150,9 @@ function deleteClient(clientId) {
 document.getElementById('clientModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) closeClientModal();
 });
+document.getElementById('instructorModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeInstructorModal();
+});
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 function exportClientsCSV() {
@@ -2319,29 +2558,12 @@ function handleImport(e) {
   reader.onload = ev => {
     try {
       const imported = JSON.parse(ev.target.result);
-      const hasTrips = imported.trips && Array.isArray(imported.trips);
-      const hasClients = imported.manualClients && Array.isArray(imported.manualClients);
-      if (!hasTrips && !hasClients) { alert('Neplatný formát souboru.'); return; }
-      let msg = [];
-      if (hasTrips) msg.push(imported.trips.length + ' zájezdů');
-      if (hasClients) msg.push(imported.manualClients.length + ' klientů');
-      if (!confirm('Import přidá: ' + msg.join(' a ') + '. Pokračovat?')) return;
-      if (hasTrips) {
-        db.trips = [...db.trips, ...imported.trips.filter(it => !db.trips.find(t => t.id === it.id))];
-      }
-      if (hasClients) {
-        if (!db.manualClients) db.manualClients = [];
-        imported.manualClients.forEach(ic => {
-          const exists = db.manualClients.some(mc =>
-            mc.name.toLowerCase() === ic.name.toLowerCase() ||
-            (ic.email && mc.email && mc.email.toLowerCase() === ic.email.toLowerCase())
-          );
-          if (!exists) db.manualClients.push(ic);
-        });
-      }
-      save(db); renderSidebar();
-      if (hasTrips) showView('overview'); else showView('clients');
-      alert('Import dokončen ✓');
+      if (imported.trips && Array.isArray(imported.trips)) {
+        if (confirm(`Import přidá ${imported.trips.length} zájezdů. Pokračovat?`)) {
+          db.trips = [...db.trips, ...imported.trips.filter(it => !db.trips.find(t => t.id === it.id))];
+          save(db); renderSidebar(); showView('overview');
+        }
+      } else alert('Neplatný formát souboru.');
     } catch { alert('Chyba při čtení souboru.'); }
   };
   reader.readAsText(file);
