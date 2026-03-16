@@ -3159,6 +3159,8 @@ function saveParticipantModal(approve) {
 
   // Zapamatuj si stav před uložením
   const wasPending = !!p.pendingReview;
+  const origName  = p.name;
+  const origEmail = p.email;
 
   // Ulož do appky
   p.name        = document.getElementById('pName').value.trim();
@@ -3174,23 +3176,31 @@ function saveParticipantModal(approve) {
 
   save(db);
 
-  // Propis do Klientů
-  if (db.manualClients) {
-    const mc = db.manualClients.find(c =>
-      c.name.toLowerCase() === p.name.toLowerCase() ||
-      (p.email && c.email && c.email.toLowerCase() === p.email.toLowerCase())
-    );
-    if (mc) {
-      mc.name        = p.name;
-      mc.phone       = p.phone;
-      mc.email       = p.email;
-      mc.birthDate   = p.birthDate;
-      mc.nationality = p.nationality;
-      mc.city        = p.city;
-      mc.passport    = p.passport;
-      save(db);
-    }
+  // Propis do Klientů — hledej podle PŮVODNÍHO jména/emailu
+  if (!db.manualClients) db.manualClients = [];
+  let mc = db.manualClients.find(c =>
+    c.name.toLowerCase() === origName.toLowerCase() ||
+    (origEmail && c.email && c.email.toLowerCase() === origEmail.toLowerCase()) ||
+    c.name.toLowerCase() === p.name.toLowerCase()
+  );
+  console.log('[Klienti] hledám:', origName, '→ nalezen:', mc ? mc.name : 'NE');
+  if (!mc) {
+    mc = { id: 'p_' + uid(), name: p.name, email: p.email||'', phone: p.phone||'',
+           birthDate: p.birthDate||'', city: p.city||'', nationality: p.nationality||'',
+           passport: p.passport||'', note: '' };
+    db.manualClients.push(mc);
+    console.log('[Klienti] vytvořen nový:', mc.name);
+  } else {
+    mc.name        = p.name;
+    mc.phone       = p.phone;
+    mc.email       = p.email;
+    mc.birthDate   = p.birthDate;
+    mc.nationality = p.nationality;
+    mc.city        = p.city;
+    mc.passport    = p.passport;
+    console.log('[Klienti] aktualizován:', mc.name, 'passport:', mc.passport);
   }
+  save(db);
 
   const statusEl = document.getElementById('pSyncStatus');
 
