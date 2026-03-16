@@ -522,9 +522,13 @@
         <label>Termín (text)</label>
         <input type="text" id="mTripDate" placeholder="např. 17.5.–24.5.">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="position:relative">
         <label>Lektor / delegát</label>
-        <input type="text" id="mTripInstructor" placeholder="Jméno lektora">
+        <input type="text" id="mTripInstructor" placeholder="Jméno lektora nebo začni psát..."
+          oninput="showInstrSuggest(this.value)"
+          onblur="setTimeout(()=>hideInstrSuggest(),200)"
+          autocomplete="off">
+        <div id="instrSuggestBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--teal);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:999;max-height:200px;overflow-y:auto"></div>
       </div>
       <div class="form-group">
         <label>Destinace</label>
@@ -717,7 +721,7 @@ function migrateData(data) {
     }
   });
   if (!data.manualClients) data.manualClients = [];
-  if (!data.instructors) data.instructors = [];
+  if (!data.instructors || data.instructors.length === 0) data.instructors = null;
   return data;
 }
 function save(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
@@ -1442,6 +1446,34 @@ function openInstructorModal(id) {
 
 function closeInstructorModal() {
   document.getElementById('instructorModal').classList.add('hidden');
+}
+
+function showInstrSuggest(val) {
+  const box = document.getElementById('instrSuggestBox');
+  if (!box) return;
+  const q = val.toLowerCase().trim();
+  const instructors = getInstructors();
+  const matches = q.length === 0
+    ? instructors.slice(0, 12)
+    : instructors.filter(i => i.name.toLowerCase().includes(q)).slice(0, 10);
+  if (matches.length === 0) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(i =>
+    `<div onclick="pickInstructor('${i.name.replace(/'/g,"\\'")}');this.parentNode.style.display='none'"
+      style="padding:9px 14px;cursor:pointer;font-size:13px;border-bottom:1px solid #f0f0f0"
+      onmouseover="this.style.background='#f0f9f9'" onmouseout="this.style.background=''">${i.name}${i.city ? ` <span style="color:#aaa;font-size:11px">— ${i.city}</span>` : ''}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function pickInstructor(name) {
+  const input = document.getElementById('mTripInstructor');
+  if (input) input.value = name;
+  hideInstrSuggest();
+}
+
+function hideInstrSuggest() {
+  const box = document.getElementById('instrSuggestBox');
+  if (box) box.style.display = 'none';
 }
 
 function saveInstructorModal() {
