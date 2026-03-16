@@ -2360,6 +2360,7 @@ function openNewClientModal() {
 
 function openEditClientModal(clientId) {
   const mc = (db.manualClients || []).find(c => c.id === clientId);
+  console.log('[EditModal] clientId:', clientId, '→ mc:', mc ? JSON.stringify({name:mc.name, passport:mc.passport, birthDate:mc.birthDate}) : 'NE');
   if (!mc) return;
   editingClientId = clientId;
   document.getElementById('clientModalTitle').textContent = 'Upravit klienta';
