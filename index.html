@@ -2716,9 +2716,14 @@ async function syncPull() {
     const birthCol = hCol(['datum narozen']);
     const cityCol  = hCol(['adresa']);
     const destCol  = hCol(['vyberte destinaci']);
-    const natCol   = hCol(['státní příslušnost']);
-    const rcCol    = hCol(['rodné číslo']);
-    const pasCol   = hCol(['číslo pasu']);
+    const natCol   = hCol(['státní příslušnost', 'státní p']);
+    const rcCol    = hCol(['rodné číslo', 'rodné č', 'rč']);
+    const pasCol   = hCol(['číslo pasu', 'pas']);
+    const noteCol  = hCol(['poznámky', 'poznamky', 'ostatní', 'ostatni']);
+    
+    // Debug: loguj nalezené sloupce
+    console.log('[Sync] sloupce → name:', nameCol, 'email:', emailCol, 'nat:', natCol, 'rc:', rcCol, 'note:', noteCol, 'dest:', destCol);
+    console.log('[Sync] headers:', headers);
     
     const formClients = lines.slice(1).map(line => {
       const cols = parseCSVLine(line);
@@ -2739,14 +2744,19 @@ async function syncPull() {
         pasCol >= 0 && cols[pasCol] ? 'Pas: ' + cols[pasCol] : '',
       ].filter(Boolean).join(' | ');
       
+      const extraNote = noteCol >= 0 ? (cols[noteCol]||'').replace(/"/g,'').trim() : '';
+      const fullNote = [note, extraNote].filter(Boolean).join(' | ');
+      
       return {
         name,
         email,
-        phone:     phoneCol >= 0 ? (cols[phoneCol]||'').replace(/"/g,'').trim() : '',
-        birthDate: birthCol >= 0 ? (cols[birthCol]||'').replace(/"/g,'').trim() : '',
-        city:      cityCol  >= 0 ? (cols[cityCol] ||'').replace(/"/g,'').trim() : '',
-        note,
-        tripName:  destCol  >= 0 ? (cols[destCol] ||'').replace(/"/g,'').trim() : '',
+        phone:       phoneCol >= 0 ? (cols[phoneCol]||'').replace(/"/g,'').trim() : '',
+        birthDate:   birthCol >= 0 ? (cols[birthCol]||'').replace(/"/g,'').trim() : '',
+        city:        cityCol  >= 0 ? (cols[cityCol] ||'').replace(/"/g,'').trim() : '',
+        nationality: natCol   >= 0 ? (cols[natCol]  ||'').replace(/"/g,'').trim() : '',
+        passport:    rcCol    >= 0 ? (cols[rcCol]   ||'').replace(/"/g,'').trim() : '',
+        note:        fullNote,
+        tripName:    destCol  >= 0 ? (cols[destCol] ||'').replace(/"/g,'').trim() : '',
       };
     }).filter(c => c && c.name && c.name.length > 2);
     
@@ -2773,16 +2783,20 @@ async function syncPull() {
         client = {
           id: 'form_' + Date.now() + '_' + Math.random().toString(36).slice(2),
           name: fc.name, email: fc.email||'', phone: fc.phone||'',
-          birthDate: fc.birthDate||'', city: fc.city||'', note: fc.note||''
+          birthDate: fc.birthDate||'', city: fc.city||'',
+          nationality: fc.nationality||'', passport: fc.passport||'',
+          note: fc.note||''
         };
         db.manualClients.push(client);
         added++;
       } else {
         // Existující klient — aktualizuj chybějící údaje
-        if (!client.phone && fc.phone) client.phone = fc.phone;
-        if (!client.email && fc.email) client.email = fc.email;
-        if (!client.birthDate && fc.birthDate) client.birthDate = fc.birthDate;
-        if (!client.city && fc.city) client.city = fc.city;
+        if (!client.phone       && fc.phone)       client.phone       = fc.phone;
+        if (!client.email       && fc.email)       client.email       = fc.email;
+        if (!client.birthDate   && fc.birthDate)   client.birthDate   = fc.birthDate;
+        if (!client.city        && fc.city)        client.city        = fc.city;
+        if (!client.nationality && fc.nationality) client.nationality = fc.nationality;
+        if (!client.passport    && fc.passport)    client.passport    = fc.passport;
       }
       
       // Přiřaď ke cestě — vždy, i pro existující klienty
