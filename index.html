@@ -1656,7 +1656,7 @@ function renderTripDetail() {
 
   const participantsHtml = (trip.participants || []).map((p, idx) => `
     <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : ''}">
-      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}">`}</td>
+      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px;border:none;background:transparent;outline:none;padding:6px 4px;font-size:inherit;color:inherit;cursor:default${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}" onfocus="this.style.cursor='text';this.style.background='#f0f7f7';this.style.borderRadius='6px'" onblur="this.style.cursor='default';this.style.background='transparent'">`}</td>
       <td style="position:relative">
         <div style="position:relative">
           <input type="text" value="${(p.notes||'').replace(/"/g,'&quot;')}"
