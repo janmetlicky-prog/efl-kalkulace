@@ -3212,15 +3212,16 @@ function saveParticipantModal(approve) {
            birthDate: p.birthDate||'', city: p.city||'', nationality: p.nationality||'',
            passport: p.passport||'', note: '' };
     db.manualClients.push(mc);
-    console.log('[Klienti] vytvořen nový:', mc.name);
+    console.log('[Klienti] vytvořen nový:', mc.name, 'passport:', mc.passport);
   } else {
     mc.name        = p.name;
-    mc.phone       = p.phone;
-    mc.email       = p.email;
-    mc.birthDate   = p.birthDate;
-    mc.nationality = p.nationality;
-    mc.city        = p.city;
-    mc.passport    = p.passport;
+    mc.phone       = p.phone       || mc.phone;
+    mc.email       = p.email       || mc.email;
+    mc.birthDate   = p.birthDate   || mc.birthDate;
+    mc.nationality = p.nationality || mc.nationality;
+    mc.city        = p.city        || mc.city;
+    // passport: vezmi nově zadaný, nebo zachovej stávající pokud nový je prázdný
+    mc.passport    = p.passport    || mc.passport || '';
     console.log('[Klienti] aktualizován:', mc.name, 'passport:', mc.passport);
   }
 
@@ -3237,7 +3238,8 @@ function saveParticipantModal(approve) {
         if (mc.birthDate)   pp.birthDate   = mc.birthDate;
         if (mc.nationality) pp.nationality = mc.nationality;
         if (mc.city)        pp.city        = mc.city;
-        if (mc.passport)    pp.passport    = mc.passport;
+        // passport vždy přepiš — i prázdným stringem (aby byl konzistentní)
+        pp.passport = mc.passport || '';
       }
     });
   });
