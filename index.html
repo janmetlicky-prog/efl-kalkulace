@@ -701,6 +701,10 @@
           Nastavuje se automaticky podle datumu cesty.<br>Pro Storno použij checkbox v detailu.
         </div>
       </div>
+      <div class="form-group admin-only">
+        <label>Smluvní cena (Kč)</label>
+        <input type="number" id="mTripPrice" placeholder="např. 38000">
+      </div>
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeTripModal()">Zrušit</button>
@@ -3026,6 +3030,7 @@ function openNewTripModal() {
   document.getElementById('mTripMinP').value = 8;
   document.getElementById('mTripTotalP').value = 0;
   document.getElementById('mTripNights').value = 7;
+  document.getElementById('mTripPrice').value = '';
   document.getElementById('tripModal').classList.remove('hidden');
 }
 
@@ -3042,6 +3047,7 @@ function openEditModal(tripId) {
   document.getElementById('mTripMinP').value       = trip.minPersons  || 8;
   document.getElementById('mTripTotalP').value     = trip.totalPersons || 0;
   document.getElementById('mTripNights').value     = trip.nights      || 7;
+  document.getElementById('mTripPrice').value      = trip.price       || '';
   document.getElementById('tripModal').classList.remove('hidden');
 }
 
@@ -3061,6 +3067,7 @@ function saveTripModal() {
     minPersons: parseInt(document.getElementById('mTripMinP').value) || 0,
     totalPersons: parseInt(document.getElementById('mTripTotalP').value) || 0,
     nights: parseInt(document.getElementById('mTripNights').value) || 0,
+    price:  parseFloat(document.getElementById('mTripPrice').value) || undefined,
   };
 
   let savedTrip = null;
@@ -3287,18 +3294,6 @@ async function syncPayments() {
       const data = await res.json();
       console.log('[syncPayments] data:', trip.name, Array.isArray(data) ? data.length + ' záznamů' : data);
       if (!Array.isArray(data) || !data.length) continue;
-      // Smluvní cena — buňka I28:J28 (sloučená), přichází jako číslo nebo string
-      const firstWithPrice = data.find(r => r.tripPrice != null && r.tripPrice !== '' && r.tripPrice !== 0);
-      if (firstWithPrice) {
-        const raw = String(firstWithPrice.tripPrice).replace(/\s/g,'').replace(/Kč/g,'').replace(',','.').replace(/[^\d.]/g,'');
-        const parsed = parseFloat(raw);
-        console.log('[syncPayments] tripPrice raw:', JSON.stringify(firstWithPrice.tripPrice), '→', parsed, 'for', trip.name);
-        if (parsed > 0) trip.price = parsed;
-        else console.warn('[syncPayments] tripPrice neparsován:', firstWithPrice.tripPrice);
-      } else {
-        console.log('[syncPayments] tripPrice nenalezen — first record:', JSON.stringify(data[0]));
-      }
-
       data.forEach(pd => {
         if (!pd.email && !pd.name) return;
         const p = trip.participants.find(p =>
