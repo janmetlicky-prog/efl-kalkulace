@@ -1266,100 +1266,262 @@ function showView(view, tripId) {
 
 // ─── OVERVIEW ───
 function renderOverview() {
-  const trips = db.trips.filter(t => t.year === currentYear)
-    .sort((a, b) => {
-    const statusOrder = { ongoing: 0, active: 1, done: 2, storno: 3, kalkulace: 4 };
-    const sa = statusOrder[a.status] ?? 1;
-    const sb = statusOrder[b.status] ?? 1;
-    if (sa !== sb) return sa - sb;
-    // Same status — sort by month, then by day from date string
-    if ((a.month || 0) !== (b.month || 0)) return (a.month || 0) - (b.month || 0);
-    // Try to extract day from date string e.g. "12.-19.2.2026"
-    const dayA = parseInt((a.date || '').match(/^(\d+)/)?.[1] || '0');
-    const dayB = parseInt((b.date || '').match(/^(\d+)/)?.[1] || '0');
-    return dayA - dayB;
-  });
+  const MONTH_NAMES = ['Led','Úno','Bře','Dub','Kvě','Čvn','Čvc','Srp','Zář','Říj','Lis','Pro'];
+  const activeStatuses = ['active','ongoing','done'];
 
-  let totalRevenue = 0, totalCosts = 0, totalProfit = 0, activeTrips = 0;
-  const rows = trips.map(t => {
-    const c = calcTrip(t);
-    if (t.status === 'active' || t.status === 'ongoing' || t.status === 'done') {
-      totalRevenue += c.revenue; totalCosts += c.totalCosts; totalProfit += c.profit; activeTrips++;
+  const allTrips = db.trips.filter(t => t.year === currentYear);
+  const trips = allTrips.filter(t => activeStatuses.includes(t.status))
+    .sort((a,b) => (a.month||0) - (b.month||0) || a.name.localeCompare(b.name,'cs'));
+
+  // KPI celkem
+  let totalRevenue=0, totalCosts=0, totalProfit=0, totalPersons=0;
+  const tripCalcs = trips.map(t => { const c=calcTrip(t); return {t,c}; });
+  tripCalcs.forEach(({t,c}) => {
+    totalRevenue += c.revenue;
+    totalCosts   += c.totalCosts;
+    totalProfit  += c.profit;
+    totalPersons += (t.participants||[]).filter(p=>!p.isCancelled).length || t.totalPersons||0;
+  });
+  const margin = totalRevenue > 0 ? Math.round(totalProfit/totalRevenue*100) : 0;
+
+  // Top cesta (zisk)
+  const topTrip = tripCalcs.length ? tripCalcs.reduce((a,b) => b.c.profit > a.c.profit ? b : a) : null;
+  const avgProfitPP = totalPersons > 0 ? Math.round(totalProfit/totalPersons) : 0;
+
+  // Data po měsících (1–12)
+  const monthData = Array.from({length:12},(_,i) => ({
+    month: i+1, revenue:0, costs:0, profit:0, count:0
+  }));
+  tripCalcs.forEach(({t,c}) => {
+    const m = (t.month||1)-1;
+    if (m>=0 && m<12) {
+      monthData[m].revenue += c.revenue;
+      monthData[m].costs   += c.totalCosts;
+      monthData[m].profit  += c.profit;
+      monthData[m].count++;
     }
-    const cls = t.status === 'storno' ? ' class="storno"' : (t.status === 'ongoing' ? ' class="ongoing-row"' : '');
-    const profitCls = c.profit >= 0 ? 'highlight-profit' : 'highlight-negative';
-    return `<tr${cls} onclick="openTrip('${t.id}')">
-      <td><strong>${t.name}</strong><br><span style="color:var(--text-muted);font-size:11px">${t.destination||''}</span></td>
-      <td>${MONTHS[t.month]||'—'}</td>
-      <td style="white-space:nowrap">${t.date||'—'}</td>
-      <td>${t.instructor||'—'}</td>
-      <td style="text-align:center">${t.totalPersons||0} / ${t.minPersons||0}</td>
-      <td style="text-align:right">${fmt(c.totalCosts)}</td>
-      <td style="text-align:right">${fmt(c.revenue)}</td>
-      <td style="text-align:right" class="${profitCls}">${fmt(c.profit)}</td>
-      <td><span class="status-pill status-${t.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[t.status]}</span></td>
+  });
+  const activeMonths = monthData.filter(m => m.count > 0);
+
+  // Donut data — zisk podle destinace
+  const destMap = {};
+  tripCalcs.forEach(({t,c}) => {
+    if (c.profit <= 0) return;
+    const dest = t.destination || t.name.split('|')[0].trim() || 'Ostatní';
+    destMap[dest] = (destMap[dest]||0) + c.profit;
+  });
+  const destData = Object.entries(destMap).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  const donutColors = ['#03989E','#CDAA3A','#2d6a8f','#5cb85c','#e09c3a','#9b59b6'];
+
+  // Tabulka cest
+  const tableRows = trips.map(({t,c}={t:0,c:0}, i) => {
+    // fix: use tripCalcs
+    return '';
+  });
+  const tRows = tripCalcs.map(({t,c}) => {
+    const pCnt = (t.participants||[]).filter(p=>!p.isCancelled).length || t.totalPersons||0;
+    const fill = t.minPersons > 0 ? Math.min(100,Math.round(pCnt/t.minPersons*100)) : 0;
+    const profCls = c.profit>=0 ? 'color:var(--success)' : 'color:var(--danger)';
+    const statusLabel = {active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno'}[t.status]||t.status;
+    return `<tr onclick="openTrip('${t.id}')" style="cursor:pointer">
+      <td>
+        <div style="font-weight:600;font-size:13px">${esc(t.name)}</div>
+        <div style="font-size:11px;color:var(--text-muted)">${esc(t.destination||'')} ${t.date ? '· '+esc(t.date) : ''}</div>
+      </td>
+      <td style="text-align:center;font-size:13px">${MONTH_NAMES[(t.month||1)-1]||'—'}</td>
+      <td style="text-align:center">
+        <div style="font-size:13px;font-weight:600">${pCnt} / ${t.minPersons||0}</div>
+        <div style="margin-top:3px;height:4px;background:var(--sand);border-radius:2px;width:60px">
+          <div style="height:4px;background:${fill>=100?'var(--success)':'var(--teal)'};border-radius:2px;width:${fill}%"></div>
+        </div>
+      </td>
+      <td style="text-align:right;font-size:13px">${fmt(c.totalCosts)}</td>
+      <td style="text-align:right;font-size:13px">${fmt(c.revenue)}</td>
+      <td style="text-align:right;font-size:13px;font-weight:700;${profCls}">${fmt(c.profit)}</td>
+      <td><span class="status-pill status-${t.status}">${statusLabel}</span></td>
     </tr>`;
   }).join('');
 
   document.getElementById('content').innerHTML = `
-    <div class="overview-stats">
-      <div class="stat-card s-navy">
-        <div class="stat-label">Zájezdů celkem</div>
+    <!-- KPI KARTY -->
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:24px">
+      <div class="stat-card s-blue" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--teal)"></div>
+        <div class="stat-label">Aktivní cesty</div>
         <div class="stat-value">${trips.length}</div>
-        <div class="stat-sub">${activeTrips} aktivních</div>
+        <div class="stat-sub">z ${allTrips.length} celkem</div>
       </div>
-      <div class="stat-card s-orange" data-financial="1">
-        <div class="stat-label">Celkové náklady</div>
-        <div class="stat-value">${fmtN(totalCosts/1000)} tis.</div>
+      <div class="stat-card s-blue" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#2d6a8f"></div>
+        <div class="stat-label">Účastníků</div>
+        <div class="stat-value">${totalPersons}</div>
+        <div class="stat-sub">přes aktivní cesty</div>
+      </div>
+      <div class="stat-card s-orange" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:#e09c3a"></div>
+        <div class="stat-label">Náklady celkem</div>
+        <div class="stat-value">${Math.round(totalCosts/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalCosts)}</div>
       </div>
-      <div class="stat-card s-blue" data-financial="1">
-        <div class="stat-label">Celkový obrat</div>
-        <div class="stat-value">${fmtN(totalRevenue/1000)} tis.</div>
+      <div class="stat-card s-blue" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--navy)"></div>
+        <div class="stat-label">Obrat celkem</div>
+        <div class="stat-value">${Math.round(totalRevenue/1000)} tis.</div>
         <div class="stat-sub">${fmt(totalRevenue)}</div>
       </div>
-      <div class="stat-card s-green" data-financial="1">
-        <div class="stat-label">Celkový zisk</div>
-        <div class="stat-value" style="color:${totalProfit>=0?'var(--success)':'var(--danger)'}">${fmtN(totalProfit/1000)} tis.</div>
-        <div class="stat-sub">${fmt(totalProfit)}</div>
+      <div class="stat-card s-green" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--success)"></div>
+        <div class="stat-label">Zisk celkem</div>
+        <div class="stat-value" style="color:${totalProfit>=0?'var(--success)':'var(--danger)'}">${Math.round(totalProfit/1000)} tis.</div>
+        <div class="stat-sub">marže ${margin}%</div>
+      </div>
+      <div class="stat-card s-green" style="position:relative;overflow:hidden">
+        <div style="position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent)"></div>
+        <div class="stat-label">Zisk / osoba</div>
+        <div class="stat-value" style="font-size:20px">${Math.round(avgProfitPP/1000*10)/10} tis.</div>
+        <div class="stat-sub">${fmt(avgProfitPP)}</div>
       </div>
     </div>
 
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Všechny zájezdy — ${currentYear}</div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <select onchange="filterStatus(this.value)" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:#fff;outline:none;">
-            <option value="">Všechny statusy</option>
-            <option value="active">Aktivní</option>
-            <option value="ongoing">Probíhá</option>
-            <option value="done">Dokončeno</option>
-            <option value="storno">Storno</option>
-          </select>
+    <!-- GRAFY -->
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:24px">
+
+      <!-- Bar chart — měsíce -->
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="margin-bottom:16px">Obrat / Náklady / Zisk po měsících</div>
+        <div style="position:relative;height:220px" id="barChartWrap">
+          <canvas id="barChart"></canvas>
+        </div>
+        <div style="display:flex;gap:16px;justify-content:center;margin-top:12px;font-size:12px">
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--navy);border-radius:2px;display:inline-block"></span>Obrat</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:#e09c3a;border-radius:2px;display:inline-block"></span>Náklady</span>
+          <span style="display:flex;align-items:center;gap:5px"><span style="width:12px;height:12px;background:var(--success);border-radius:2px;display:inline-block"></span>Zisk</span>
         </div>
       </div>
-      <div class="trip-table-wrap">
-        ${trips.length === 0 ? `<div class="empty-state"><div class="es-icon">🏖️</div><h3>Žádné zájezdy</h3><p>Přidejte první zájezd tlačítkem níže v postranním panelu.</p></div>` : `
-        <table id="overviewTable">
-          <thead><tr>
-            <th>Název</th><th>Měsíc</th><th>Termín</th><th>Lektor/Delegát</th>
-            <th style="text-align:center">Osob (skut/min)</th>
-            <th style="text-align:right" class="col-financial">Náklady</th>
-            <th style="text-align:right" class="col-financial">Obrat</th>
-            <th style="text-align:right" class="col-financial">Zisk</th>
-            <th>Status</th>
-          </tr></thead>
-          <tbody id="overviewBody">${rows}</tbody>
-          <tfoot><tr>
-            <td colspan="5">CELKEM (aktivní + probíhá + dokončeno)</td>
-            <td style="text-align:right" class="col-financial">${fmt(totalCosts)}</td>
-            <td style="text-align:right" class="col-financial">${fmt(totalRevenue)}</td>
-            <td style="text-align:right" class="col-financial ${totalProfit>=0?'highlight-profit':'highlight-negative'}">${fmt(totalProfit)}</td>
-            <td></td>
-          </tr></tfoot>
-        </table>`}
+
+      <!-- Donut chart — destinace -->
+      <div class="card" style="padding:20px">
+        <div class="card-title" style="margin-bottom:16px">Zisk podle destinace</div>
+        <div style="position:relative;height:180px;display:flex;justify-content:center">
+          <canvas id="donutChart"></canvas>
+        </div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:5px" id="donutLegend"></div>
       </div>
-    </div>`;
+    </div>
+
+    <!-- TABULKA CEST -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">Cesty ${currentYear} — aktivní, probíhá, dokončené</div>
+        <div style="font-size:12px;color:var(--text-muted)">${trips.length} cest</div>
+      </div>
+      <div class="trip-table-wrap">
+        ${trips.length === 0
+          ? '<div class="empty-state"><div class="es-icon">🏖️</div><h3>Žádné aktivní cesty</h3></div>'
+          : `<table>
+              <thead><tr>
+                <th>Název</th>
+                <th style="text-align:center">Měsíc</th>
+                <th style="text-align:center">Obsazenost</th>
+                <th style="text-align:right" class="col-financial">Náklady</th>
+                <th style="text-align:right" class="col-financial">Obrat</th>
+                <th style="text-align:right" class="col-financial">Zisk</th>
+                <th>Status</th>
+              </tr></thead>
+              <tbody>${tRows}</tbody>
+              <tfoot><tr>
+                <td colspan="3" style="font-weight:700">CELKEM</td>
+                <td style="text-align:right;font-weight:700" class="col-financial">${fmt(totalCosts)}</td>
+                <td style="text-align:right;font-weight:700" class="col-financial">${fmt(totalRevenue)}</td>
+                <td style="text-align:right;font-weight:700;color:${totalProfit>=0?'var(--success)':'var(--danger)'}" class="col-financial">${fmt(totalProfit)}</td>
+                <td></td>
+              </tr></tfoot>
+            </table>`
+        }
+      </div>
+    </div>
+  `;
+
+  // Render bar chart
+  setTimeout(() => {
+    const barCtx = document.getElementById('barChart');
+    if (!barCtx) return;
+    const labels = activeMonths.map(m => MONTH_NAMES[m.month-1]);
+    const maxVal = Math.max(...activeMonths.map(m => m.revenue), 1);
+
+    barCtx.width = barCtx.parentElement.offsetWidth;
+    barCtx.height = 220;
+    const ctx = barCtx.getContext('2d');
+    const W = barCtx.width, H = 200;
+    const n = activeMonths.length;
+    const groupW = Math.floor((W - 40) / Math.max(n,1));
+    const barW = Math.max(8, Math.floor(groupW * 0.22));
+    const gap = 3;
+    const colors = ['#1a3a5c','#e09c3a','#2ecc71'];
+
+    ctx.clearRect(0,0,W,H+20);
+
+    // Grid lines
+    ctx.strokeStyle = '#e8f0f0';
+    ctx.lineWidth = 1;
+    for (let i=1;i<=4;i++) {
+      const y = H - (H * i/4);
+      ctx.beginPath(); ctx.moveTo(40,y); ctx.lineTo(W,y); ctx.stroke();
+      ctx.fillStyle = '#aaa'; ctx.font = '10px sans-serif'; ctx.textAlign = 'right';
+      ctx.fillText(Math.round(maxVal/4*i/1000)+'k', 36, y+4);
+    }
+
+    activeMonths.forEach((m,i) => {
+      const x0 = 44 + i * groupW + groupW/2 - (3*barW+2*gap)/2;
+      const vals = [m.revenue, m.costs, m.profit];
+      vals.forEach((v,j) => {
+        const barH = Math.max(0, Math.round(Math.abs(v)/maxVal*(H-10)));
+        const x = x0 + j*(barW+gap);
+        const y = v >= 0 ? H-10-barH : H-10;
+        ctx.fillStyle = colors[j];
+        ctx.beginPath();
+        ctx.roundRect ? ctx.roundRect(x, y, barW, barH, [3,3,0,0]) : ctx.rect(x, y, barW, barH);
+        ctx.fill();
+      });
+      // Label
+      ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
+      ctx.fillText(labels[i], 44 + i*groupW + groupW/2, H+14);
+    });
+
+    // Donut
+    const donutCtx = document.getElementById('donutChart');
+    const legend = document.getElementById('donutLegend');
+    if (!donutCtx || !destData.length) return;
+    donutCtx.width = 180; donutCtx.height = 180;
+    const dc = donutCtx.getContext('2d');
+    const cx=90, cy=90, r=75, innerR=45;
+    const total = destData.reduce((s,[,v])=>s+v,0);
+    let angle = -Math.PI/2;
+    destData.forEach(([name,val],i) => {
+      const slice = (val/total)*Math.PI*2;
+      dc.beginPath();
+      dc.moveTo(cx,cy);
+      dc.arc(cx,cy,r,angle,angle+slice);
+      dc.closePath();
+      dc.fillStyle = donutColors[i % donutColors.length];
+      dc.fill();
+      angle += slice;
+    });
+    // Inner circle (hole)
+    dc.beginPath(); dc.arc(cx,cy,innerR,0,Math.PI*2);
+    dc.fillStyle = '#fff'; dc.fill();
+    // Center text
+    dc.fillStyle = '#1a3a5c'; dc.font = 'bold 13px sans-serif'; dc.textAlign = 'center';
+    dc.fillText(Math.round(total/1000)+'k', cx, cy+5);
+
+    // Legend
+    if (legend) legend.innerHTML = destData.map(([name,val],i) => `
+      <div style="display:flex;align-items:center;gap:7px;font-size:11px">
+        <span style="width:10px;height:10px;border-radius:2px;background:${donutColors[i]};flex-shrink:0;display:inline-block"></span>
+        <span style="flex:1;color:var(--navy);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(name)}">${esc(name)}</span>
+        <span style="font-weight:600;color:var(--success)">${Math.round(val/1000)}k</span>
+      </div>`).join('');
+  }, 100);
 }
 
 function filterStatus(val) {
