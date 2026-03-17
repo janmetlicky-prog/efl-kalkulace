@@ -858,20 +858,33 @@
   <div class="modal" style="max-width:420px">
     <h2>⚙️ Nastavení</h2>
 
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncPull();closeColleagueSettings()">
-        🔄 Stáhnout nové klienty z formuláře
-      </button>
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncFromGitHub();closeColleagueSettings()">
+    <!-- GitHub token -->
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">GitHub Token</label>
+      <input type="password" id="colleagueGhToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveColleagueToken()">💾 Uložit token</button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+
+    <!-- Akce -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('github')">
         ⬇️ Načíst aktuální data z GitHub
       </button>
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('clients')">
+        🔄 Stáhnout nové klienty z formuláře
+      </button>
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('payments')">
+        💳 Stáhnout platební data
+      </button>
     </div>
 
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--sand);border-radius:8px" id="colleagueSettingsStatus">
-      &nbsp;
-    </div>
+    <!-- Status -->
+    <div id="colleagueSettingsStatus" style="font-size:12px;min-height:20px;padding:8px 12px;border-radius:8px;background:var(--sand);color:var(--text-muted)">&nbsp;</div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" style="margin-top:16px">
       <button class="btn btn-secondary" onclick="closeColleagueSettings()">Zavřít</button>
     </div>
   </div>
@@ -3288,11 +3301,13 @@ async function syncPayments() {
       console.log('[syncPayments] data:', trip.name, Array.isArray(data) ? data.length + ' záznamů' : data);
       if (!Array.isArray(data) || !data.length) continue;
       // Smluvní cena — z prvního záznamu (stejná pro celou cestu)
-      const firstWithPrice = data.find(r => r.tripPrice);
-      if (firstWithPrice && firstWithPrice.tripPrice) {
-        const raw = String(firstWithPrice.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
+      // Smluvní cena — z prvního záznamu (číslo nebo string)
+      const firstWithPrice = data.find(r => r.tripPrice != null && r.tripPrice !== '');
+      if (firstWithPrice) {
+        const raw = String(firstWithPrice.tripPrice).replace(/\s/g,'').replace(/[Kč]/g,'').replace(',','.').replace(/[^\d.]/g,'');
         const parsed = parseFloat(raw);
-        if (parsed > 0) { trip.price = parsed; console.log('[syncPayments] tripPrice:', trip.name, parsed); }
+        console.log('[syncPayments] tripPrice raw:', firstWithPrice.tripPrice, '→', parsed, 'for', trip.name);
+        if (parsed > 0) trip.price = parsed;
       }
 
       data.forEach(pd => {
@@ -4059,16 +4074,52 @@ function openSyncModal() {
 }
 
 function openColleagueSettings() {
+  // Načti token do pole
+  const inp = document.getElementById('colleagueGhToken');
+  if (inp) inp.value = ghToken();
   document.getElementById('colleagueSettingsStatus').innerHTML = '&nbsp;';
   document.getElementById('colleagueSettingsModal').classList.remove('hidden');
 }
 function closeColleagueSettings() {
   document.getElementById('colleagueSettingsModal').classList.add('hidden');
 }
-
-// Override syncPull and syncFromGitHub to show status in colleague modal too
-const _origSyncPull = syncPull;
-const _origSyncFromGitHub = syncFromGitHub;
+function saveColleagueToken() {
+  const val = document.getElementById('colleagueGhToken').value.trim();
+  if (!val) { setColleagueStatus('⚠️ Zadejte token', 'warn'); return; }
+  localStorage.setItem('efl_gh_token', val);
+  setColleagueStatus('✅ Token uložen', 'ok');
+}
+function setColleagueStatus(msg, type) {
+  const el = document.getElementById('colleagueSettingsStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'ok' ? 'var(--success)' : type === 'warn' ? '#e09c3a' : type === 'err' ? 'var(--danger)' : 'var(--text-muted)';
+  el.style.background = type === 'ok' ? '#f0fdf4' : type === 'warn' ? '#fffbe6' : type === 'err' ? '#fff1f1' : 'var(--sand)';
+}
+async function colleagueAction(action) {
+  setColleagueStatus('⟳ Pracuji...', '');
+  try {
+    if (action === 'github') {
+      const data = await ghLoad();
+      if (data) {
+        db = migrateData(data);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+        renderSidebar(); showView(currentView);
+        setColleagueStatus('✅ Data načtena z GitHub', 'ok');
+      } else {
+        setColleagueStatus('❌ Načtení selhalo — zkontrolujte token', 'err');
+      }
+    } else if (action === 'clients') {
+      await syncPull();
+      setColleagueStatus('✅ Klienti staženi z formuláře', 'ok');
+    } else if (action === 'payments') {
+      await syncPayments();
+      setColleagueStatus('✅ Platební data stažena', 'ok');
+    }
+  } catch(e) {
+    setColleagueStatus('❌ Chyba: ' + e.message, 'err');
+  }
+}
 
 // Spusť GitHub init při startu
 initFromGitHub();
