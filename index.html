@@ -3295,8 +3295,13 @@ async function syncPayments() {
       data.forEach(pd => {
         if (!pd.email && !pd.name) return;
         const p = trip.participants.find(p =>
+          // Email má přednost — přesná shoda
           (pd.email && p.email && p.email.toLowerCase() === pd.email.toLowerCase()) ||
-          (pd.name && p.name && p.name.toLowerCase().includes(pd.name.toLowerCase().split(' ')[0].toLowerCase()))
+          // Jméno — přesná shoda celého jména (ne jen první slovo)
+          (pd.name && p.name && p.name.toLowerCase() === pd.name.toLowerCase()) ||
+          // Fallback — příjmení (druhé slovo) musí sedět
+          (pd.name && p.name && pd.name.split(' ').length > 1 &&
+           p.name.toLowerCase().includes(pd.name.split(' ')[1].toLowerCase()))
         );
         if (!p) { console.log('[syncPayments] účastník nenalezen:', pd.name, pd.email); return; }
         if (pd.payment1Date) p.payment1Date = pd.payment1Date;
