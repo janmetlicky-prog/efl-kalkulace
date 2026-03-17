@@ -3233,12 +3233,7 @@ function saveParticipantModal(approve) {
   const p = trip.participants[pModalIdx];
   if (!p) return;
 
-  // Zapamatuj si stav před uložením
-  const wasPending = !!p.pendingReview;
-  const origName  = p.name;
-  const origEmail = p.email;
-
-  // Ulož do appky
+  // Ulož do trip.participants
   p.name        = document.getElementById('pName').value.trim();
   p.phone       = document.getElementById('pPhone').value.trim();
   p.email       = document.getElementById('pEmail').value.trim();
@@ -3247,97 +3242,14 @@ function saveParticipantModal(approve) {
   p.city        = document.getElementById('pCity').value.trim();
   p.passport    = document.getElementById('pPassport').value.trim();
   p.notes       = document.getElementById('pNotes').value.trim();
-  p._passportManual = true; // označení že passport byl ručně nastaven
   if (approve) p.pendingReview = false;
 
   save(db);
 
-  // Propis do Klientů — hledej podle PŮVODNÍHO jména/emailu
-  if (!db.manualClients) db.manualClients = [];
-  let mc = db.manualClients.find(c =>
-    c.name.toLowerCase() === origName.toLowerCase() ||
-    (origEmail && c.email && c.email.toLowerCase() === origEmail.toLowerCase()) ||
-    c.name.toLowerCase() === p.name.toLowerCase()
-  );
-  console.log('[Klienti] hledám:', origName, '→ nalezen:', mc ? mc.name : 'NE');
-  if (!mc) {
-    mc = { id: 'p_' + uid(), name: p.name, email: p.email||'', phone: p.phone||'',
-           birthDate: p.birthDate||'', city: p.city||'', nationality: p.nationality||'',
-           passport: p.passport||'', note: '' };
-    db.manualClients.push(mc);
-    console.log('[Klienti] vytvořen nový:', mc.name, 'passport:', mc.passport);
-  } else {
-    mc.name        = p.name;
-    mc.phone       = p.phone       || mc.phone;
-    mc.email       = p.email       || mc.email;
-    mc.birthDate   = p.birthDate   || mc.birthDate;
-    mc.nationality = p.nationality || mc.nationality;
-    mc.city        = p.city        || mc.city;
-    // passport: vezmi nově zadaný, nebo zachovej stávající pokud nový je prázdný
-    mc.passport    = p.passport    || mc.passport || '';
-    console.log('[Klienti] aktualizován:', mc.name, 'passport:', mc.passport);
-  }
-
-  // Sync zpět do VŠECH trip.participants se stejným jménem/emailem
-  const mcName  = mc.name.toLowerCase();
-  const mcEmail = (mc.email || '').toLowerCase();
-  db.trips.forEach(t => {
-    (t.participants || []).forEach(pp => {
-      const sameName  = pp.name && pp.name.toLowerCase() === mcName;
-      const sameEmail = mcEmail && pp.email && pp.email.toLowerCase() === mcEmail;
-      if (sameName || sameEmail) {
-        if (mc.phone)       pp.phone       = mc.phone;
-        if (mc.email)       pp.email       = mc.email;
-        if (mc.birthDate)   pp.birthDate   = mc.birthDate;
-        if (mc.nationality) pp.nationality = mc.nationality;
-        if (mc.city)        pp.city        = mc.city;
-        // passport vždy přepiš — i prázdným stringem (aby byl konzistentní)
-        pp.passport = mc.passport || '';
-      }
-    });
-  });
-  console.log('[Klienti] synced passport do všech trips:', mc.passport);
-  save(db);
-
   const statusEl = document.getElementById('pSyncStatus');
-
-  // Propis do Sheets jen pokud byl ve stavu "čeká na kontrolu"
-  if (wasPending) {
-    statusEl.textContent = '⏳ Ukládám do Google Sheets...';
-    fetch(PARTICIPANT_POST_URL, {
-      method: 'POST',
-      body: JSON.stringify({
-        name:        p.name,
-        phone:       p.phone,
-        birthDate:   p.birthDate,
-        nationality: p.nationality,
-        city:        p.city,
-        passport:    p.passport,
-        matchByName: true  // hledej podle jména, ne emailu (kvůli rodinám)
-      })
-    })
-    .then(r => r.json())
-    .then(json => {
-      if (json.ok) {
-        statusEl.style.color = '#026d72';
-        statusEl.textContent = '✓ Uloženo do Google Sheets (' + (json.updated || 1) + ' záznam/ů)';
-      } else {
-        statusEl.style.color = '#e53935';
-        statusEl.textContent = '⚠ Sheets: ' + (json.error || 'Chyba');
-      }
-      setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 1200);
-    })
-    .catch(() => {
-      statusEl.style.color = '#e53935';
-      statusEl.textContent = '⚠ Sheets nedostupné — uloženo jen lokálně';
-      setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 1500);
-    });
-  } else {
-    // Jen lokální změna — zavři modal
-    statusEl.style.color = '#026d72';
-    statusEl.textContent = '✓ Uloženo lokálně';
-    setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 600);
-  }
+  statusEl.style.color = '#026d72';
+  statusEl.textContent = '✓ Uloženo';
+  setTimeout(() => { closeParticipantModal(); renderTripDetail(); }, 600);
 }
 
 function approveParticipant() {
