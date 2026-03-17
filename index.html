@@ -1965,7 +1965,7 @@ function renderDestinations() {
         <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">📍 Destinace & ubytování</div>
         <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${db.destinations.length} center v databázi${items.length !== db.destinations.length ? ` · ${items.length} odpovídá filtru` : ''}</div>
       </div>
-      <button class="btn btn-primary admin-only" onclick="openNewDestModal()">+ Přidat centrum</button>
+      <button class="btn btn-primary" onclick="openNewDestModal()">+ Přidat centrum</button>
     </div>
 
     <!-- FILTRY -->
@@ -2043,7 +2043,7 @@ function renderDestCard(d) {
           </div>
           <div style="display:flex;gap:4px;flex-shrink:0">
             <span style="font-size:18px" title="${d.ownExperience ? 'Máme vlastní zkušenost' : 'Bez vlastní zkušenosti'}">${d.ownExperience ? '✅' : '❌'}</span>
-            <button class="btn-icon admin-only" onclick="openEditDestModal('${d.id}')" title="Upravit">✏️</button>
+            <button class="btn-icon" onclick="openEditDestModal('${d.id}')" title="Upravit">✏️</button>
             <button class="btn-icon admin-only" onclick="deleteDest('${d.id}')" title="Smazat">✕</button>
           </div>
         </div>
