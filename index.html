@@ -170,6 +170,48 @@
   /* MAIN */
   #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 
+  /* ── Topbar nav sekce ── */
+  .topbar-nav { display: flex; gap: 4px; align-items: center; }
+  .topbar-nav-btn {
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 14px; border-radius: 8px; border: none;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    background: transparent; color: var(--text-muted);
+    transition: all .15s; white-space: nowrap;
+    font-family: inherit;
+  }
+  .topbar-nav-btn:hover { background: var(--sand); color: var(--navy); }
+  .topbar-nav-btn.active {
+    background: var(--teal); color: #fff;
+    box-shadow: 0 2px 8px rgba(3,152,158,.25);
+  }
+  .topbar-divider { width: 1px; height: 24px; background: var(--border); margin: 0 4px; }
+  /* Gear menu */
+  .gear-wrap { position: relative; }
+  .gear-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border);
+    background: #fff; cursor: pointer; color: var(--text-muted);
+    transition: all .15s; font-size: 16px;
+  }
+  .gear-btn:hover { background: var(--sand); color: var(--navy); border-color: var(--teal); }
+  .gear-menu {
+    position: absolute; right: 0; top: calc(100% + 6px);
+    background: #fff; border: 1px solid var(--border); border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.12); min-width: 180px;
+    padding: 6px; z-index: 999; display: none;
+  }
+  .gear-menu.open { display: block; }
+  .gear-menu-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 9px 12px; border-radius: 8px; cursor: pointer;
+    font-size: 13px; font-weight: 500; color: var(--navy);
+    transition: background .12s; border: none; background: none;
+    width: 100%; text-align: left; font-family: inherit;
+  }
+  .gear-menu-item:hover { background: var(--sand); }
+  .gear-menu-sep { height: 1px; background: var(--border); margin: 4px 0; }
+
   .topbar {
     background: #fff; border-bottom: 2px solid var(--sand-dark);
     padding: 0 28px; height: 62px;
@@ -489,6 +531,16 @@
 
   <div class="sidebar-section">Rok</div>
   <div class="year-tabs" id="yearTabs"></div>
+  <div style="padding: 0 12px 8px">
+    <button id="btnOverviewSidebar" onclick="showView('overview')"
+      style="width:100%;padding:7px 12px;background:rgba(255,255,255,.1);color:rgba(255,255,255,.75);
+             border:1px solid rgba(255,255,255,.15);border-radius:8px;font-size:12px;cursor:pointer;
+             text-align:left;display:flex;align-items:center;gap:7px;transition:all .15s;font-family:inherit;font-weight:500"
+      onmouseover="this.style.background='rgba(255,255,255,.18)'"
+      onmouseout="this.style.background='rgba(255,255,255,.1)'">
+      📊 Přehled roku
+    </button>
+  </div>
 
   <div class="sidebar-section">Zájezdy</div>
   <div class="trip-list" id="tripList"></div>
@@ -506,16 +558,21 @@
 <!-- MAIN -->
 <div id="main">
   <div class="topbar">
-    <div class="topbar-title" id="topbarTitle">Přehled roku</div>
-    <div class="topbar-actions">
-      <button class="btn btn-secondary admin-only" onclick="showView('overview')" id="btnOverview">📊 Přehled roku</button>
-      <button class="btn btn-secondary" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
-      <button class="btn btn-secondary admin-only" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
-      <button class="btn btn-secondary" onclick="window.print()">🖨️ Tisk</button>
-      <button class="btn btn-secondary" id="btnColleagueSync" onclick="syncPull()" title="Stáhnout nové klienty z formuláře" style="display:none">🔄 Aktualizovat klienty</button>
-      <button class="btn btn-secondary admin-only" onclick="exportData()">💾 Záloha</button>
-      <button class="btn btn-secondary admin-only" onclick="importData()">📂 Import</button>
-      <button class="btn btn-secondary admin-only" onclick="openSyncModal()" id="btnSync" title="Google Sheets sync">☁️ Sync</button>
+    <div class="topbar-nav">
+      <button class="topbar-nav-btn admin-only" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
+      <button class="topbar-nav-btn admin-only" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
+      <button class="topbar-nav-btn admin-only" onclick="showView('destinations')" id="btnDestinations">📍 Destinace</button>
+      <button class="topbar-nav-btn" id="btnColleagueSync" onclick="syncPull()" style="display:none">🔄 Aktualizovat klienty</button>
+    </div>
+    <div class="gear-wrap" id="gearWrap">
+      <button class="gear-btn admin-only" onclick="toggleGearMenu()" title="Nastavení & nástroje">⚙️</button>
+      <div class="gear-menu" id="gearMenu">
+        <button class="gear-menu-item" onclick="window.print();closeGearMenu()">🖨️ Tisk</button>
+        <div class="gear-menu-sep"></div>
+        <button class="gear-menu-item admin-only" onclick="exportData();closeGearMenu()">💾 Záloha</button>
+        <button class="gear-menu-item admin-only" onclick="importData();closeGearMenu()">📂 Import</button>
+        <button class="gear-menu-item admin-only" onclick="openSyncModal();closeGearMenu()" id="btnSync">☁️ Sync</button>
+      </div>
     </div>
   </div>
   <div class="content" id="content"></div>
@@ -639,6 +696,98 @@
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeTripModal()">Zrušit</button>
       <button class="btn btn-primary" onclick="saveTripModal()">Uložit zájezd</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- MODAL: Destinace -->
+<div class="modal-overlay hidden" id="destModal">
+  <div class="modal" style="max-width:620px;max-height:90vh;overflow-y:auto">
+    <h2>📍 Retreat centrum</h2>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div style="grid-column:1/-1">
+        <label class="form-label">Název centra *</label>
+        <input type="text" id="dName" class="form-input" placeholder="Název hotelu / centra">
+      </div>
+      <div>
+        <label class="form-label">Země</label>
+        <input type="text" id="dCountry" class="form-input" placeholder="Itálie, Španělsko...">
+      </div>
+      <div>
+        <label class="form-label">Region / Město</label>
+        <input type="text" id="dRegion" class="form-input" placeholder="Ischia, Mallorca...">
+      </div>
+      <div>
+        <label class="form-label">Web</label>
+        <input type="url" id="dWeb" class="form-input" placeholder="https://...">
+      </div>
+      <div>
+        <label class="form-label">Email / Telefon</label>
+        <input type="text" id="dEmail" class="form-input" placeholder="info@...">
+      </div>
+      <div>
+        <label class="form-label">Kontaktní osoba</label>
+        <input type="text" id="dContact" class="form-input" placeholder="Jméno">
+      </div>
+      <div>
+        <label class="form-label">Vzdálenost od letiště</label>
+        <input type="text" id="dDistanceAirport" class="form-input" placeholder="30 min autem">
+      </div>
+      <div>
+        <label class="form-label">Parkování</label>
+        <input type="text" id="dParking" class="form-input" placeholder="Zdarma / placené">
+      </div>
+      <div>
+        <label class="form-label">Max. počet účastníků</label>
+        <input type="number" id="dMaxPersons" class="form-input" placeholder="20">
+      </div>
+      <div>
+        <label class="form-label">Typy pokojů</label>
+        <input type="text" id="dRoomTypes" class="form-input" placeholder="Single, double, suite...">
+      </div>
+      <div>
+        <label class="form-label">Stravování</label>
+        <input type="text" id="dFood" class="form-input" placeholder="Polopenze, plná penze...">
+      </div>
+      <div>
+        <label class="form-label">Typ stravy</label>
+        <input type="text" id="dFoodType" class="form-input" placeholder="Vegetariánská, vegánská...">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Klíčová slova / vibe</label>
+        <input type="text" id="dKeywords" class="form-input" placeholder="příroda, luxus, jóga, moře, wellness... (odděluj čárkami)">
+      </div>
+      <div>
+        <label class="form-label">Orientační cena</label>
+        <input type="text" id="dPrice" class="form-input" placeholder="od 80 EUR/noc/os">
+      </div>
+      <div>
+        <label class="form-label">Min. délka pobytu</label>
+        <input type="text" id="dMinStay" class="form-input" placeholder="7 nocí">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Storno podmínky</label>
+        <input type="text" id="dStorno" class="form-input" placeholder="30 dní před...">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Naše poznámky & zkušenosti</label>
+        <textarea id="dNotes" class="form-input" rows="3" placeholder="Co se nám líbilo, co méně, tipy..."></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="dOwnKitchen">
+        <label for="dOwnKitchen" style="font-size:13px;cursor:pointer">Vlastní kuchyň k dispozici</label>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="dOwnExperience">
+        <label for="dOwnExperience" style="font-size:13px;cursor:pointer">✅ Máme vlastní zkušenost z retreatu</label>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:8px">
+      <button class="btn btn-secondary" onclick="closeDestModal()">Zrušit</button>
+      <button class="btn btn-primary" onclick="saveDestModal()">Uložit centrum</button>
     </div>
   </div>
 </div>
@@ -1011,6 +1160,28 @@ function fmtN(n) { return n ? Math.round(n).toLocaleString('cs-CZ') : '0'; }
 // ═══════════════════════════════════════════════
 // SIDEBAR
 // ═══════════════════════════════════════════════
+function toggleGearMenu() {
+  const menu = document.getElementById('gearMenu');
+  menu.classList.toggle('open');
+}
+function closeGearMenu() {
+  document.getElementById('gearMenu').classList.remove('open');
+}
+// Close gear menu on outside click
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('gearWrap');
+  if (wrap && !wrap.contains(e.target)) closeGearMenu();
+});
+
+function updateNavActive(view) {
+  document.querySelectorAll('.topbar-nav-btn').forEach(b => b.classList.remove('active'));
+  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations' };
+  if (map[view]) {
+    const el = document.getElementById(map[view]);
+    if (el) el.classList.add('active');
+  }
+}
+
 function renderSidebar() {
   const years = [2025, 2026, 2027];
   document.getElementById('yearTabs').innerHTML = years.map(y =>
@@ -1069,24 +1240,26 @@ function showView(view, tripId) {
   currentView = view;
   if (tripId) currentTripId = tripId;
   renderSidebar();
+  updateNavActive(view);
 
   if (view === 'overview') {
     currentTripId = null;
     renderSidebar();
-    document.getElementById('topbarTitle').textContent = `Přehled roku ${currentYear}`;
     renderOverview();
   } else if (view === 'trip') {
     renderTripDetail();
   } else if (view === 'clients') {
     currentTripId = null;
     renderSidebar();
-    document.getElementById('topbarTitle').textContent = 'Databáze klientů';
     renderClients();
   } else if (view === 'instructors') {
     currentTripId = null;
     renderSidebar();
-    document.getElementById('topbarTitle').textContent = 'Lektoři & partneři';
     renderInstructors();
+  } else if (view === 'destinations') {
+    currentTripId = null;
+    renderSidebar();
+    renderDestinations();
   }
 }
 
@@ -1447,6 +1620,255 @@ function filterClientsOnly(filterVal) {
 
 function esc(s) {
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+
+// ─── DESTINATIONS ───
+if (!db.destinations) db.destinations = [];
+
+function renderDestinations() {
+  const filter = (window._destFilter || {});
+  let items = db.destinations;
+
+  // Filtrování
+  if (filter.country) items = items.filter(d => d.country === filter.country);
+  if (filter.capacity) items = items.filter(d => d.maxPersons >= parseInt(filter.capacity));
+  if (filter.food) items = items.filter(d => (d.food||'').toLowerCase().includes(filter.food.toLowerCase()));
+  if (filter.vibe) items = items.filter(d => (d.keywords||'').toLowerCase().includes(filter.vibe.toLowerCase()));
+  if (filter.experience) items = items.filter(d => filter.experience === 'yes' ? d.ownExperience : !d.ownExperience);
+  if (filter.search) {
+    const s = filter.search.toLowerCase();
+    items = items.filter(d =>
+      (d.name||'').toLowerCase().includes(s) ||
+      (d.country||'').toLowerCase().includes(s) ||
+      (d.region||'').toLowerCase().includes(s) ||
+      (d.keywords||'').toLowerCase().includes(s)
+    );
+  }
+
+  // Unikátní země pro filtr
+  const countries = [...new Set(db.destinations.map(d => d.country).filter(Boolean))].sort();
+  const vibes = [...new Set(db.destinations.flatMap(d => (d.keywords||'').split(',').map(k => k.trim())).filter(Boolean))].sort();
+
+  document.getElementById('content').innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">📍 Destinace & ubytování</div>
+        <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${db.destinations.length} center v databázi${items.length !== db.destinations.length ? ` · ${items.length} odpovídá filtru` : ''}</div>
+      </div>
+      <button class="btn btn-primary admin-only" onclick="openNewDestModal()">+ Přidat centrum</button>
+    </div>
+
+    <!-- FILTRY -->
+    <div style="background:#fff;border:1px solid var(--border);border-radius:14px;padding:16px 20px;margin-bottom:20px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+      <div style="flex:1;min-width:160px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Hledat</label>
+        <input type="text" placeholder="Název, destinace, vibe..." value="${esc(filter.search||'')}"
+          oninput="setDestFilter('search',this.value)"
+          style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box">
+      </div>
+      <div style="min-width:130px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Země</label>
+        <select onchange="setDestFilter('country',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+          <option value="">Všechny</option>
+          ${countries.map(c => `<option value="${esc(c)}" ${filter.country===c?'selected':''}>${esc(c)}</option>`).join('')}
+        </select>
+      </div>
+      <div style="min-width:110px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Min. osob</label>
+        <select onchange="setDestFilter('capacity',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+          <option value="">Libovolně</option>
+          <option value="8" ${filter.capacity==='8'?'selected':''}>8+</option>
+          <option value="10" ${filter.capacity==='10'?'selected':''}>10+</option>
+          <option value="15" ${filter.capacity==='15'?'selected':''}>15+</option>
+          <option value="20" ${filter.capacity==='20'?'selected':''}>20+</option>
+        </select>
+      </div>
+      <div style="min-width:130px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Stravování</label>
+        <select onchange="setDestFilter('food',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+          <option value="">Vše</option>
+          <option value="plná penze" ${filter.food==='plná penze'?'selected':''}>Plná penze</option>
+          <option value="polopenze" ${filter.food==='polopenze'?'selected':''}>Polopenze</option>
+          <option value="vlastní kuchyň" ${filter.food==='vlastní kuchyň'?'selected':''}>Vlastní kuchyň</option>
+        </select>
+      </div>
+      <div style="min-width:110px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Zkušenost</label>
+        <select onchange="setDestFilter('experience',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+          <option value="">Vše</option>
+          <option value="yes" ${filter.experience==='yes'?'selected':''}>✅ Máme</option>
+          <option value="no" ${filter.experience==='no'?'selected':''}>❌ Nemáme</option>
+        </select>
+      </div>
+      ${Object.values(filter).some(v=>v) ? `<button onclick="clearDestFilters()" style="padding:7px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;cursor:pointer;background:#fff;color:var(--text-muted);font-family:inherit">✕ Zrušit filtry</button>` : ''}
+    </div>
+
+    <!-- KARTY -->
+    ${items.length === 0 ? `
+      <div style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+        <div style="font-size:48px;margin-bottom:12px">📍</div>
+        <div style="font-size:18px;font-weight:600;margin-bottom:8px">${db.destinations.length === 0 ? 'Zatím žádná centra' : 'Žádné výsledky'}</div>
+        <div style="font-size:13px">${db.destinations.length === 0 ? 'Přidejte první retreat centrum.' : 'Zkuste upravit filtry.'}</div>
+      </div>
+    ` : `
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:16px">
+        ${items.map(d => renderDestCard(d)).join('')}
+      </div>
+    `}
+  `;
+}
+
+function renderDestCard(d) {
+  const vibes = (d.keywords||'').split(',').map(k=>k.trim()).filter(Boolean);
+  return `
+    <div style="background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .2s;display:flex;flex-direction:column"
+         onmouseover="this.style.boxShadow='0 4px 24px rgba(3,152,158,.12)'"
+         onmouseout="this.style.boxShadow='none'">
+      <!-- Header -->
+      <div style="padding:18px 20px 14px;border-bottom:1px solid var(--sand)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:3px">${esc(d.name)}</div>
+            <div style="font-size:13px;color:var(--text-muted)">📍 ${esc(d.country)}${d.region ? ' · ' + esc(d.region) : ''}</div>
+          </div>
+          <div style="display:flex;gap:4px;flex-shrink:0">
+            <span style="font-size:18px" title="${d.ownExperience ? 'Máme vlastní zkušenost' : 'Bez vlastní zkušenosti'}">${d.ownExperience ? '✅' : '❌'}</span>
+            <button class="btn-icon admin-only" onclick="openEditDestModal('${d.id}')" title="Upravit">✏️</button>
+            <button class="btn-icon admin-only" onclick="deleteDest('${d.id}')" title="Smazat">✕</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:14px 20px;flex:1;display:flex;flex-direction:column;gap:10px">
+        <!-- Kapacita + stravování -->
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          ${d.maxPersons ? `<div style="font-size:12px"><span style="color:var(--text-muted)">👥 Max.</span> <strong>${d.maxPersons} osob</strong></div>` : ''}
+          ${d.roomTypes ? `<div style="font-size:12px"><span style="color:var(--text-muted)">🛏</span> ${esc(d.roomTypes)}</div>` : ''}
+          ${d.food ? `<div style="font-size:12px"><span style="color:var(--text-muted)">🍽</span> ${esc(d.food)}</div>` : ''}
+          ${d.ownKitchen ? `<div style="font-size:12px">🥘 Vlastní kuchyň</div>` : ''}
+        </div>
+
+        <!-- Dostupnost -->
+        ${d.distanceAirport ? `<div style="font-size:12px;color:var(--text-muted)">✈️ ${esc(d.distanceAirport)}</div>` : ''}
+
+        <!-- Cena -->
+        ${d.price ? `<div style="font-size:13px;font-weight:600;color:var(--teal)">💶 ${esc(d.price)}</div>` : ''}
+
+        <!-- Poznámka -->
+        ${d.notes ? `<div style="font-size:12px;color:var(--text-muted);font-style:italic;border-top:1px solid var(--sand);padding-top:8px">${esc(d.notes)}</div>` : ''}
+
+        <!-- Vibe tagy -->
+        ${vibes.length ? `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:auto;padding-top:8px">
+          ${vibes.map(v => `<span style="font-size:11px;padding:2px 8px;background:var(--sand);border-radius:12px;color:var(--navy)">${esc(v)}</span>`).join('')}
+        </div>` : ''}
+      </div>
+
+      <!-- Footer links -->
+      ${(d.web || d.email) ? `
+        <div style="padding:10px 20px;border-top:1px solid var(--sand);display:flex;gap:12px">
+          ${d.web ? `<a href="${esc(d.web)}" target="_blank" style="font-size:12px;color:var(--teal);text-decoration:none;font-weight:600">🌐 Web</a>` : ''}
+          ${d.email ? `<a href="mailto:${esc(d.email)}" style="font-size:12px;color:var(--teal);text-decoration:none;font-weight:600">✉️ Kontakt</a>` : ''}
+        </div>
+      ` : ''}
+    </div>`;
+}
+
+function setDestFilter(key, val) {
+  if (!window._destFilter) window._destFilter = {};
+  window._destFilter[key] = val;
+  renderDestinations();
+}
+
+function clearDestFilters() {
+  window._destFilter = {};
+  renderDestinations();
+}
+
+// Modal pro přidání/editaci destinace
+let editingDestId = null;
+
+function openNewDestModal() {
+  editingDestId = null;
+  populateDestModal({});
+  document.getElementById('destModal').classList.remove('hidden');
+}
+
+function openEditDestModal(id) {
+  const d = (db.destinations||[]).find(x => x.id === id);
+  if (!d) return;
+  editingDestId = id;
+  populateDestModal(d);
+  document.getElementById('destModal').classList.remove('hidden');
+}
+
+function populateDestModal(d) {
+  document.getElementById('dName').value = d.name||'';
+  document.getElementById('dCountry').value = d.country||'';
+  document.getElementById('dRegion').value = d.region||'';
+  document.getElementById('dWeb').value = d.web||'';
+  document.getElementById('dEmail').value = d.email||'';
+  document.getElementById('dContact').value = d.contact||'';
+  document.getElementById('dDistanceAirport').value = d.distanceAirport||'';
+  document.getElementById('dParking').value = d.parking||'';
+  document.getElementById('dMaxPersons').value = d.maxPersons||'';
+  document.getElementById('dRoomTypes').value = d.roomTypes||'';
+  document.getElementById('dFood').value = d.food||'';
+  document.getElementById('dOwnKitchen').checked = !!d.ownKitchen;
+  document.getElementById('dFoodType').value = d.foodType||'';
+  document.getElementById('dKeywords').value = d.keywords||'';
+  document.getElementById('dPrice').value = d.price||'';
+  document.getElementById('dMinStay').value = d.minStay||'';
+  document.getElementById('dStorno').value = d.storno||'';
+  document.getElementById('dOwnExperience').checked = !!d.ownExperience;
+  document.getElementById('dNotes').value = d.notes||'';
+}
+
+function closeDestModal() {
+  document.getElementById('destModal').classList.add('hidden');
+}
+
+function saveDestModal() {
+  if (!db.destinations) db.destinations = [];
+  const d = {
+    name:             document.getElementById('dName').value.trim(),
+    country:          document.getElementById('dCountry').value.trim(),
+    region:           document.getElementById('dRegion').value.trim(),
+    web:              document.getElementById('dWeb').value.trim(),
+    email:            document.getElementById('dEmail').value.trim(),
+    contact:          document.getElementById('dContact').value.trim(),
+    distanceAirport:  document.getElementById('dDistanceAirport').value.trim(),
+    parking:          document.getElementById('dParking').value.trim(),
+    maxPersons:       parseInt(document.getElementById('dMaxPersons').value)||0,
+    roomTypes:        document.getElementById('dRoomTypes').value.trim(),
+    food:             document.getElementById('dFood').value.trim(),
+    ownKitchen:       document.getElementById('dOwnKitchen').checked,
+    foodType:         document.getElementById('dFoodType').value.trim(),
+    keywords:         document.getElementById('dKeywords').value.trim(),
+    price:            document.getElementById('dPrice').value.trim(),
+    minStay:          document.getElementById('dMinStay').value.trim(),
+    storno:           document.getElementById('dStorno').value.trim(),
+    ownExperience:    document.getElementById('dOwnExperience').checked,
+    notes:            document.getElementById('dNotes').value.trim(),
+  };
+  if (!d.name) { alert('Zadejte název centra.'); return; }
+  if (editingDestId) {
+    const idx = db.destinations.findIndex(x => x.id === editingDestId);
+    if (idx >= 0) db.destinations[idx] = { ...db.destinations[idx], ...d };
+  } else {
+    db.destinations.push({ id: uid(), ...d });
+  }
+  save(db);
+  closeDestModal();
+  renderDestinations();
+}
+
+function deleteDest(id) {
+  if (!confirm('Smazat toto centrum?')) return;
+  db.destinations = db.destinations.filter(x => x.id !== id);
+  save(db);
+  renderDestinations();
 }
 
 // ─── INSTRUCTORS ───
