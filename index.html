@@ -3287,12 +3287,16 @@ async function syncPayments() {
       const data = await res.json();
       console.log('[syncPayments] data:', trip.name, Array.isArray(data) ? data.length + ' záznamů' : data);
       if (!Array.isArray(data) || !data.length) continue;
-      // Smluvní cena — z prvního záznamu (stejná pro celou cestu)
-      const firstWithPrice = data.find(r => r.tripPrice);
-      if (firstWithPrice && firstWithPrice.tripPrice) {
-        const raw = String(firstWithPrice.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
+      // Smluvní cena — buňka I28:J28 (sloučená), přichází jako číslo nebo string
+      const firstWithPrice = data.find(r => r.tripPrice != null && r.tripPrice !== '' && r.tripPrice !== 0);
+      if (firstWithPrice) {
+        const raw = String(firstWithPrice.tripPrice).replace(/\s/g,'').replace(/Kč/g,'').replace(',','.').replace(/[^\d.]/g,'');
         const parsed = parseFloat(raw);
-        if (parsed > 0) { trip.price = parsed; console.log('[syncPayments] tripPrice:', trip.name, parsed); }
+        console.log('[syncPayments] tripPrice raw:', JSON.stringify(firstWithPrice.tripPrice), '→', parsed, 'for', trip.name);
+        if (parsed > 0) trip.price = parsed;
+        else console.warn('[syncPayments] tripPrice neparsován:', firstWithPrice.tripPrice);
+      } else {
+        console.log('[syncPayments] tripPrice nenalezen — first record:', JSON.stringify(data[0]));
       }
 
       data.forEach(pd => {
@@ -3346,14 +3350,24 @@ function checkSyncUrl(url) {
 }
 
 function showSyncLog(msg) {
+  // Sync modal log
   const el = document.getElementById('syncLog');
   if (el) el.textContent = msg;
-  // Zobraz i v sidebar status
+
+  // Sidebar status
   const ghStatus = document.getElementById('ghSyncStatus');
-  if (ghStatus && msg) {
+  if (ghStatus) {
     ghStatus.textContent = msg;
-    ghStatus.style.color = msg.startsWith('✓') ? '#2ecc71' : msg.startsWith('⚠') || msg.startsWith('✕') ? '#e05252' : '#CDAA3A';
-    if (msg.startsWith('✓')) setTimeout(() => { if (ghStatus) ghStatus.textContent = ''; }, 4000);
+    const isOk  = msg.startsWith('✓');
+    const isErr = msg.startsWith('⚠') || msg.startsWith('✕') || msg.startsWith('❌');
+    ghStatus.style.color = isOk ? '#2ecc71' : isErr ? '#e05252' : '#CDAA3A';
+    if (isOk || isErr) {
+      clearTimeout(window._syncLogTimer);
+      window._syncLogTimer = setTimeout(() => {
+        if (ghStatus) ghStatus.textContent = '';
+        if (el) el.textContent = '';
+      }, 5000);
+    }
   }
 }
 
