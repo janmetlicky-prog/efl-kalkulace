@@ -1475,6 +1475,7 @@ function renderOverview() {
       const x0 = 44 + i * groupW + groupW/2 - (3*barW+2*gap)/2;
       const vals = [m.revenue, m.costs, m.profit];
       vals.forEach((v,j) => {
+        if (v === 0) return;
         const barH = Math.max(0, Math.round(Math.abs(v)/maxVal*(H-10)));
         const x = x0 + j*(barW+gap);
         const y = v >= 0 ? H-10-barH : H-10;
@@ -1482,6 +1483,14 @@ function renderOverview() {
         ctx.beginPath();
         ctx.roundRect ? ctx.roundRect(x, y, barW, barH, [3,3,0,0]) : ctx.rect(x, y, barW, barH);
         ctx.fill();
+        // Hodnota nad/pod sloupcem
+        const label = Math.abs(v) >= 1000000
+          ? (Math.round(v/100000)/10) + 'M'
+          : Math.round(Math.abs(v)/1000) + 'k';
+        ctx.fillStyle = v < 0 ? '#e05252' : colors[j];
+        ctx.font = 'bold 9px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(label, x + barW/2, v >= 0 ? y - 3 : y + barH + 10);
       });
       // Label
       ctx.fillStyle = '#666'; ctx.font = '10px sans-serif'; ctx.textAlign = 'center';
