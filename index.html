@@ -547,6 +547,7 @@
 
   <div class="sidebar-footer">
     <div style="font-size:10px;color:rgba(255,255,255,.25);text-align:center;margin-bottom:10px;letter-spacing:.5px;font-style:italic">Cestuj a poznávej sebe i svět</div>
+    <div id="ghSyncStatus" style="font-size:11px;text-align:center;margin-bottom:6px;color:rgba(255,255,255,.4);min-height:16px"></div>
     <button id="btnColleagueSyncSidebar" onclick="syncPull()" style="display:none;width:100%;padding:10px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-size:13px;cursor:pointer;margin-bottom:8px">🔄 Aktualizovat klienty</button>
     <button class="btn-new-trip admin-only" onclick="openNewTripModal()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -833,6 +834,21 @@
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
       <button class="btn btn-primary" onclick="syncPush()">⬆️ Nahrát data do Sheets</button>
       <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px">🔐 GitHub sync (sdílená data)</div>
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+          Zadejte Personal Access Token pro automatické sdílení dat mezi uživateli.<br>
+          GitHub → Settings → Developer settings → Personal access tokens → Classic → repo scope.
+        </div>
+        <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+          style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary btn-sm" onclick="saveGhToken()">💾 Uložit token</button>
+          <button class="btn btn-secondary btn-sm" onclick="testGhToken()">🔍 Otestovat</button>
+          <button class="btn btn-secondary btn-sm" onclick="syncFromGitHub()">⬇️ Načíst z GitHub</button>
+        </div>
+        <div id="ghTokenStatus" style="font-size:12px;margin-top:8px;color:var(--text-muted)"></div>
+      </div>
       <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
       <button class="btn btn-secondary btn-sm" onclick="saveSyncUrl()">💾 Uložit URL</button>
     </div>
@@ -958,6 +974,72 @@
 const STORAGE_KEY = 'zajezdy_v1';
 const MONTHS = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červenec','Srpen','Září','Říjen','Listopad','Prosinec'];
 
+// ── GitHub Storage ──────────────────────────────────────────────
+const GH_REPO    = 'janmetlicky-prog/efl-kalkulace';
+const GH_FILE    = 'data/db.json';
+const GH_BRANCH  = 'main';
+
+function ghToken()  { return localStorage.getItem('efl_gh_token') || ''; }
+function ghSetSha(sha) { localStorage.setItem('efl_gh_sha', sha); }
+function ghGetSha()    { return localStorage.getItem('efl_gh_sha') || ''; }
+
+async function ghLoad() {
+  const token = ghToken();
+  if (!token) return null;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    if (!res.ok) return null;
+    const json = await res.json();
+    ghSetSha(json.sha);
+    const decoded = JSON.parse(atob(json.content.replace(/\n/g,'')));
+    return decoded;
+  } catch(e) { console.warn('GitHub load failed:', e.message); return null; }
+}
+
+async function ghSave(data) {
+  const token = ghToken();
+  if (!token) return false;
+  try {
+    const body = {
+      message: 'EFL data update ' + new Date().toISOString().slice(0,16),
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))),
+      branch: GH_BRANCH,
+    };
+    const sha = ghGetSha();
+    if (sha) body.sha = sha;
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
+      { method: 'PUT', headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body) }
+    );
+    if (!res.ok) {
+      const err = await res.json();
+      // SHA conflict — refresh sha and retry once
+      if (res.status === 409 || (err.message && err.message.includes('sha'))) {
+        const fresh = await fetch(
+          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+          { headers: { Authorization: `token ${token}` } }
+        );
+        if (fresh.ok) { const fj = await fresh.json(); ghSetSha(fj.sha); body.sha = fj.sha; }
+        const retry = await fetch(
+          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
+          { method: 'PUT', headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body) }
+        );
+        if (retry.ok) { const rj = await retry.json(); ghSetSha(rj.content.sha); return true; }
+      }
+      console.warn('GitHub save failed:', err.message);
+      return false;
+    }
+    const j = await res.json();
+    if (j.content?.sha) ghSetSha(j.content.sha);
+    return true;
+  } catch(e) { console.warn('GitHub save error:', e.message); return false; }
+}
+
 function load() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || { trips: [] }; }
   catch { return { trips: [] }; }
@@ -996,13 +1078,46 @@ function migrateData(data) {
   });
   return data;
 }
-function save(data) { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+function save(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Async zápis na GitHub — nezablokuje UI
+  if (ghToken()) {
+    ghSave(data).then(ok => {
+      if (!ok) showGhStatus('⚠️ GitHub sync selhal', 'warn');
+      else showGhStatus('', '');
+    });
+  }
+}
+
+function showGhStatus(msg, type) {
+  let el = document.getElementById('ghSyncStatus');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = type === 'warn' ? '#e05252' : type === 'ok' ? '#2ecc71' : 'rgba(255,255,255,.4)';
+}
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 let db = migrateData(load());
 let currentView = 'overview';
 let currentTripId = null;
 let currentYear = 2026;
+
+// Při startu — načti z GitHub pokud je token
+async function initFromGitHub() {
+  if (!ghToken()) return;
+  showGhStatus('⟳ Načítám data z GitHub...', '');
+  const ghData = await ghLoad();
+  if (ghData) {
+    db = migrateData(ghData);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    renderSidebar();
+    showView(currentView);
+    showGhStatus('✓ Data načtena z GitHub', 'ok');
+    setTimeout(() => showGhStatus('', ''), 3000);
+  } else {
+    showGhStatus('', '');
+  }
+}
 let editingTripId = null;
 
 // ═══════════════════════════════════════════════
@@ -3867,6 +3982,70 @@ function saveParticipantModal(approve) {
 function approveParticipant() {
   saveParticipantModal(true);
 }
+
+// ── GitHub token management ─────────────────────────────────────
+function saveGhToken() {
+  const val = document.getElementById('ghTokenInput').value.trim();
+  if (!val) { alert('Zadejte token.'); return; }
+  localStorage.setItem('efl_gh_token', val);
+  document.getElementById('ghTokenStatus').textContent = '✓ Token uložen';
+  document.getElementById('ghTokenStatus').style.color = 'var(--success)';
+}
+
+async function testGhToken() {
+  const statusEl = document.getElementById('ghTokenStatus');
+  statusEl.textContent = '⟳ Testuji...';
+  statusEl.style.color = 'var(--text-muted)';
+  const token = document.getElementById('ghTokenInput').value.trim() || ghToken();
+  if (!token) { statusEl.textContent = '⚠ Žádný token'; return; }
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}`,
+      { headers: { Authorization: `token ${token}` } }
+    );
+    if (res.ok) {
+      statusEl.textContent = '✅ Token funguje — soubor nalezen';
+      statusEl.style.color = 'var(--success)';
+    } else if (res.status === 404) {
+      statusEl.textContent = '⚠ Token OK ale soubor db.json ještě neexistuje — vytvoří se při prvním uložení';
+      statusEl.style.color = '#e09c3a';
+    } else {
+      statusEl.textContent = '❌ Token nefunguje (status ' + res.status + ')';
+      statusEl.style.color = 'var(--danger)';
+    }
+  } catch(e) {
+    statusEl.textContent = '❌ Chyba: ' + e.message;
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+async function syncFromGitHub() {
+  const statusEl = document.getElementById('ghTokenStatus');
+  statusEl.textContent = '⟳ Načítám...';
+  const data = await ghLoad();
+  if (data) {
+    db = migrateData(data);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+    renderSidebar();
+    showView(currentView);
+    statusEl.textContent = '✅ Data načtena z GitHub';
+    statusEl.style.color = 'var(--success)';
+  } else {
+    statusEl.textContent = '❌ Načtení selhalo — zkontrolujte token';
+    statusEl.style.color = 'var(--danger)';
+  }
+}
+
+// Načti GitHub token do inputu při otevření modalu
+function openSyncModal() {
+  const inp = document.getElementById('ghTokenInput');
+  if (inp) inp.value = ghToken();
+  document.getElementById('syncModal').classList.remove('hidden');
+  checkSyncUrl(getSyncUrl());
+}
+
+// Spusť GitHub init při startu
+initFromGitHub();
 
 </script>
 </body>
