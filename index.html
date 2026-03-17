@@ -489,6 +489,7 @@
   body.colleague-mode .btn-new-trip { display: none !important; }
   body.colleague-mode #btnSync, body.colleague-mode #btnBackup, body.colleague-mode #btnImport { display: none !important; }
   body.colleague-mode .btn-export-csv { display: none !important; }
+  body.colleague-mode .colleague-only { display: flex !important; }
   body.colleague-mode [onclick*="exportClientsCSV"] { display: none !important; }
   body.colleague-mode .overview-stats { display: none !important; }
   body.colleague-mode #barChartWrap { display: none !important; }
@@ -573,6 +574,7 @@
     </div>
     <div class="gear-wrap" id="gearWrap">
       <button class="gear-btn admin-only" onclick="toggleGearMenu()" title="Nastavení & nástroje">⚙️</button>
+      <button class="gear-btn colleague-only" onclick="openColleagueSettings()" title="Nastavení" style="display:none">⚙️</button>
       <div class="gear-menu" id="gearMenu">
         <button class="gear-menu-item" onclick="window.print();closeGearMenu()">🖨️ Tisk</button>
         <div class="gear-menu-sep"></div>
@@ -803,81 +805,74 @@
 
 <!-- MODAL: Google Sheets Sync -->
 <div class="modal-overlay hidden" id="syncModal">
-  <div class="modal" style="max-width:560px">
-    <h2>☁️ Google Sheets Sync</h2>
+  <div class="modal" style="max-width:520px">
+    <h2>⚙️ Nastavení & Sync</h2>
 
-    <div id="syncStatusBar" class="sync-status off">
-      <div class="sync-dot dot-off" id="syncDot"></div>
-      <span id="syncStatusText">Sync není nakonfigurován</span>
+    <!-- Google Sheets -->
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+      📊 Google Sheets
     </div>
 
     <div class="form-group" style="margin-bottom:10px">
-      <label>Apps Script URL <span style="font-size:10px;color:var(--text-muted)">(pro nahrávání dat)</span></label>
-      <input type="url" id="syncUrl" placeholder="https://script.google.com/macros/s/..." oninput="checkSyncUrl(this.value)"
-        style="font-size:12px;">
-      <div class="url-status missing" id="urlStatus">Vložte URL z Google Apps Script</div>
-    </div>
-
-    <div class="form-group" style="margin-bottom:14px">
-      <label>Google Sheets CSV URL <span style="font-size:10px;color:var(--text-muted)">(pro stahování klientů)</span></label>
+      <label>CSV URL <span style="font-size:10px;color:var(--text-muted)">(stahování klientů z formuláře)</span></label>
       <input type="url" id="sheetCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=..."
         style="font-size:12px;" oninput="localStorage.setItem('efl_sheet_csv_url',this.value)">
-      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">
-        Sheets → Soubor → Sdílet → Publikovat na web → List "App_Sync" → CSV → zkopíruj URL
-      </div>
     </div>
 
     <div class="form-group" style="margin-bottom:14px">
-      <label>Smluvní data — Web App URL <span style="font-size:10px;color:var(--text-muted)">(pro platební data účastníků)</span></label>
+      <label>Smluvní data URL <span style="font-size:10px;color:var(--text-muted)">(platební data účastníků)</span></label>
       <input type="url" id="paymentSyncUrl" placeholder="https://script.google.com/macros/s/..."
         style="font-size:12px;" oninput="localStorage.setItem('efl_payment_sync_url',this.value)">
-      <div style="font-size:10px;color:var(--text-muted);margin-top:3px">
-        URL z nasazeného Apps Script (doGet funkce)
-      </div>
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="syncPush()">⬆️ Nahrát data do Sheets</button>
       <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
-        <div style="font-weight:700;font-size:14px;margin-bottom:4px">🔐 GitHub sync (sdílená data)</div>
-        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
-          Zadejte Personal Access Token pro automatické sdílení dat mezi uživateli.<br>
-          GitHub → Settings → Developer settings → Personal access tokens → Classic → repo scope.
-        </div>
-        <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-          style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
-        <div style="display:flex;gap:8px">
-          <button class="btn btn-primary btn-sm" onclick="saveGhToken()">💾 Uložit token</button>
-          <button class="btn btn-secondary btn-sm" onclick="testGhToken()">🔍 Otestovat</button>
-          <button class="btn btn-secondary btn-sm" onclick="syncFromGitHub()">⬇️ Načíst z GitHub</button>
-        </div>
-        <div id="ghTokenStatus" style="font-size:12px;margin-top:8px;color:var(--text-muted)"></div>
-      </div>
       <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
-      <button class="btn btn-secondary btn-sm" onclick="saveSyncUrl()">💾 Uložit URL</button>
     </div>
 
-    <div style="background:var(--sand);border-radius:10px;padding:16px;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:10px">📋 Jak nastavit — 4 kroky:</div>
-      <ol style="font-size:12px;color:var(--text);line-height:1.9;padding-left:18px">
-        <li>Otevři <strong><a href="https://sheets.google.com" target="_blank" style="color:var(--teal)">Google Sheets</a></strong> → vytvoř nový prázdný Sheet → pojmenuj ho <strong>EFL Kalkulace</strong></li>
-        <li>V menu klikni <strong>Rozšíření → Apps Script</strong></li>
-        <li>Smaž veškerý obsah a vlož kód ze sekce níže → klikni <strong>Uložit</strong> (💾)</li>
-        <li>Klikni <strong>Nasadit → Nové nasazení</strong> → typ: <em>Webová aplikace</em> → Přístup: <em>Kdokoli</em> → Nasadit → zkopíruj URL a vlož sem nahoru</li>
-      </ol>
+    <!-- GitHub sync -->
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+      🔐 GitHub sync (sdílená data)
     </div>
-
-    <div style="margin-bottom:8px;display:flex;align-items:center;justify-content:space-between">
-      <div style="font-size:12px;font-weight:600;color:var(--navy)">Apps Script kód:</div>
-      <button class="btn btn-secondary btn-sm" onclick="copyScript()">📋 Kopírovat kód</button>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      Personal Access Token pro sdílení dat mezi uživateli.
     </div>
-    <textarea id="scriptCode" readonly
-      style="width:100%;height:140px;font-family:monospace;font-size:11px;padding:10px;border:1.5px solid var(--border);border-radius:8px;background:#f8f8f8;resize:none;color:#333;outline:none"></textarea>
+    <input type="password" id="ghTokenInput" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+      style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+    <div style="display:flex;gap:8px;margin-bottom:6px">
+      <button class="btn btn-primary btn-sm" onclick="saveGhToken()">💾 Uložit token</button>
+      <button class="btn btn-secondary btn-sm" onclick="testGhToken()">🔍 Otestovat</button>
+      <button class="btn btn-secondary btn-sm" onclick="syncFromGitHub()">⬇️ Načíst z GitHub</button>
+    </div>
+    <div id="ghTokenStatus" style="font-size:12px;margin-top:4px;color:var(--text-muted);margin-bottom:16px"></div>
 
     <div class="modal-footer">
       <div id="syncLog" style="font-size:11px;color:var(--text-muted);flex:1;text-align:left"></div>
       <button class="btn btn-secondary" onclick="closeSyncModal()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Nastavení kolegyně -->
+<div class="modal-overlay hidden" id="colleagueSettingsModal">
+  <div class="modal" style="max-width:420px">
+    <h2>⚙️ Nastavení</h2>
+
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncPull();closeColleagueSettings()">
+        🔄 Stáhnout nové klienty z formuláře
+      </button>
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncFromGitHub();closeColleagueSettings()">
+        ⬇️ Načíst aktuální data z GitHub
+      </button>
+    </div>
+
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--sand);border-radius:8px" id="colleagueSettingsStatus">
+      &nbsp;
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeColleagueSettings()">Zavřít</button>
     </div>
   </div>
 </div>
@@ -3292,14 +3287,19 @@ async function syncPayments() {
       const data = await res.json();
       console.log('[syncPayments] data:', trip.name, Array.isArray(data) ? data.length + ' záznamů' : data);
       if (!Array.isArray(data) || !data.length) continue;
+      // Smluvní cena — z prvního záznamu (stejná pro celou cestu)
+      const firstWithPrice = data.find(r => r.tripPrice);
+      if (firstWithPrice && firstWithPrice.tripPrice) {
+        const raw = String(firstWithPrice.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
+        const parsed = parseFloat(raw);
+        if (parsed > 0) { trip.price = parsed; console.log('[syncPayments] tripPrice:', trip.name, parsed); }
+      }
+
       data.forEach(pd => {
         if (!pd.email && !pd.name) return;
         const p = trip.participants.find(p =>
-          // Email má přednost — přesná shoda
           (pd.email && p.email && p.email.toLowerCase() === pd.email.toLowerCase()) ||
-          // Jméno — přesná shoda celého jména (ne jen první slovo)
           (pd.name && p.name && p.name.toLowerCase() === pd.name.toLowerCase()) ||
-          // Fallback — příjmení (druhé slovo) musí sedět
           (pd.name && p.name && pd.name.split(' ').length > 1 &&
            p.name.toLowerCase().includes(pd.name.split(' ')[1].toLowerCase()))
         );
@@ -3308,12 +3308,6 @@ async function syncPayments() {
         if (pd.payment1Amount) p.payment1Amount = pd.payment1Amount;
         if (pd.payment2Date) p.payment2Date = pd.payment2Date;
         if (pd.payment2Amount) p.payment2Amount = pd.payment2Amount;
-        // Smluvní cena cesty — parsuj i formát "24 200,00 Kč"
-        if (pd.tripPrice) {
-          const raw = String(pd.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
-          const parsed = parseFloat(raw);
-          if (parsed > 0) trip.price = parsed;
-        }
         console.log('[syncPayments] updated:', p.name, pd.payment1Date, pd.payment1Amount);
         updated++;
       });
@@ -4063,6 +4057,18 @@ function openSyncModal() {
   document.getElementById('syncModal').classList.remove('hidden');
   checkSyncUrl(getSyncUrl());
 }
+
+function openColleagueSettings() {
+  document.getElementById('colleagueSettingsStatus').innerHTML = '&nbsp;';
+  document.getElementById('colleagueSettingsModal').classList.remove('hidden');
+}
+function closeColleagueSettings() {
+  document.getElementById('colleagueSettingsModal').classList.add('hidden');
+}
+
+// Override syncPull and syncFromGitHub to show status in colleague modal too
+const _origSyncPull = syncPull;
+const _origSyncFromGitHub = syncFromGitHub;
 
 // Spusť GitHub init při startu
 initFromGitHub();
