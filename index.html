@@ -2568,6 +2568,12 @@ async function syncPayments() {
         if (pd.payment1Amount) p.payment1Amount = pd.payment1Amount;
         if (pd.payment2Date) p.payment2Date = pd.payment2Date;
         if (pd.payment2Amount) p.payment2Amount = pd.payment2Amount;
+        // Smluvní cena cesty — parsuj i formát "24 200,00 Kč"
+        if (pd.tripPrice) {
+          const raw = String(pd.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
+          const parsed = parseFloat(raw);
+          if (parsed > 0) trip.price = parsed;
+        }
         updated++;
       });
     } catch(e) { errors++; }
