@@ -858,33 +858,20 @@
   <div class="modal" style="max-width:420px">
     <h2>⚙️ Nastavení</h2>
 
-    <!-- GitHub token -->
-    <div style="margin-bottom:16px">
-      <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">GitHub Token</label>
-      <input type="password" id="colleagueGhToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
-      <button class="btn btn-primary btn-sm" onclick="saveColleagueToken()">💾 Uložit token</button>
-    </div>
-
-    <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
-
-    <!-- Akce -->
-    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('github')">
-        ⬇️ Načíst aktuální data z GitHub
-      </button>
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('clients')">
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncPull();closeColleagueSettings()">
         🔄 Stáhnout nové klienty z formuláře
       </button>
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('payments')">
-        💳 Stáhnout platební data
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncFromGitHub();closeColleagueSettings()">
+        ⬇️ Načíst aktuální data z GitHub
       </button>
     </div>
 
-    <!-- Status -->
-    <div id="colleagueSettingsStatus" style="font-size:12px;min-height:20px;padding:8px 12px;border-radius:8px;background:var(--sand);color:var(--text-muted)">&nbsp;</div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--sand);border-radius:8px" id="colleagueSettingsStatus">
+      &nbsp;
+    </div>
 
-    <div class="modal-footer" style="margin-top:16px">
+    <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeColleagueSettings()">Zavřít</button>
     </div>
   </div>
@@ -3301,13 +3288,11 @@ async function syncPayments() {
       console.log('[syncPayments] data:', trip.name, Array.isArray(data) ? data.length + ' záznamů' : data);
       if (!Array.isArray(data) || !data.length) continue;
       // Smluvní cena — z prvního záznamu (stejná pro celou cestu)
-      // Smluvní cena — z prvního záznamu (číslo nebo string)
-      const firstWithPrice = data.find(r => r.tripPrice != null && r.tripPrice !== '');
-      if (firstWithPrice) {
-        const raw = String(firstWithPrice.tripPrice).replace(/\s/g,'').replace(/[Kč]/g,'').replace(',','.').replace(/[^\d.]/g,'');
+      const firstWithPrice = data.find(r => r.tripPrice);
+      if (firstWithPrice && firstWithPrice.tripPrice) {
+        const raw = String(firstWithPrice.tripPrice).replace(/[^\d,\.]/g, '').replace(',', '.');
         const parsed = parseFloat(raw);
-        console.log('[syncPayments] tripPrice raw:', firstWithPrice.tripPrice, '→', parsed, 'for', trip.name);
-        if (parsed > 0) trip.price = parsed;
+        if (parsed > 0) { trip.price = parsed; console.log('[syncPayments] tripPrice:', trip.name, parsed); }
       }
 
       data.forEach(pd => {
@@ -3338,38 +3323,54 @@ function closeSyncModal() { document.getElementById('syncModal').classList.add('
 document.getElementById('syncModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeSyncModal(); });
 
 function checkSyncUrl(url) {
-  const el = document.getElementById('urlStatus');
+  const el  = document.getElementById('urlStatus');
   const dot = document.getElementById('syncDot');
   const bar = document.getElementById('syncStatusBar');
   const txt = document.getElementById('syncStatusText');
   if (url && url.includes('script.google.com')) {
-    el.className = 'url-status ok'; el.textContent = '✓ URL vypadá správně';
-    bar.className = 'sync-status ok'; dot.className = 'sync-dot dot-ok';
-    txt.textContent = 'Sync nakonfigurován — připraven';
+    if (el) { el.className = 'url-status ok'; el.textContent = '✓ URL vypadá správně'; }
+    if (bar) bar.className = 'sync-status ok';
+    if (dot) dot.className = 'sync-dot dot-ok';
+    if (txt) txt.textContent = 'Sync nakonfigurován — připraven';
   } else if (url) {
-    el.className = 'url-status'; el.style.color = 'var(--danger)'; el.textContent = '⚠ URL nevypadá jako Apps Script adresa';
-    bar.className = 'sync-status err'; dot.className = 'sync-dot dot-err';
-    txt.textContent = 'Neplatná URL';
+    if (el) { el.className = 'url-status'; el.style.color = 'var(--danger)'; el.textContent = '⚠ URL nevypadá jako Apps Script adresa'; }
+    if (bar) bar.className = 'sync-status err';
+    if (dot) dot.className = 'sync-dot dot-err';
+    if (txt) txt.textContent = 'Neplatná URL';
   } else {
-    el.className = 'url-status missing'; el.textContent = 'Vložte URL z Google Apps Script';
-    bar.className = 'sync-status off'; dot.className = 'sync-dot dot-off';
-    txt.textContent = 'Sync není nakonfigurován';
+    if (el) { el.className = 'url-status missing'; el.textContent = 'Vložte URL z Google Apps Script'; }
+    if (bar) bar.className = 'sync-status off';
+    if (dot) dot.className = 'sync-dot dot-off';
+    if (txt) txt.textContent = 'Sync není nakonfigurován';
   }
 }
 
 function showSyncLog(msg) {
-  document.getElementById('syncLog').textContent = msg;
+  const el = document.getElementById('syncLog');
+  if (el) el.textContent = msg;
+  // Zobraz i v sidebar status
+  const ghStatus = document.getElementById('ghSyncStatus');
+  if (ghStatus && msg) {
+    ghStatus.textContent = msg;
+    ghStatus.style.color = msg.startsWith('✓') ? '#2ecc71' : msg.startsWith('⚠') || msg.startsWith('✕') ? '#e05252' : '#CDAA3A';
+    if (msg.startsWith('✓')) setTimeout(() => { if (ghStatus) ghStatus.textContent = ''; }, 4000);
+  }
 }
 
 function setSyncing(yes) {
   const dot = document.getElementById('syncDot');
   const txt = document.getElementById('syncStatusText');
   const bar = document.getElementById('syncStatusBar');
+  // Sidebar progress indicator
+  const ghStatus = document.getElementById('ghSyncStatus');
   if (yes) {
-    dot.className = 'sync-dot dot-spin'; bar.className = 'sync-status syncing';
-    txt.textContent = 'Probíhá sync...';
+    if (dot) dot.className = 'sync-dot dot-spin';
+    if (bar) bar.className = 'sync-status syncing';
+    if (txt) txt.textContent = 'Probíhá sync...';
+    if (ghStatus) { ghStatus.textContent = '⟳ Stahuji...'; ghStatus.style.color = '#CDAA3A'; }
   } else {
     checkSyncUrl(getSyncUrl());
+    if (ghStatus) { ghStatus.textContent = ''; }
   }
 }
 
@@ -4074,52 +4075,16 @@ function openSyncModal() {
 }
 
 function openColleagueSettings() {
-  // Načti token do pole
-  const inp = document.getElementById('colleagueGhToken');
-  if (inp) inp.value = ghToken();
   document.getElementById('colleagueSettingsStatus').innerHTML = '&nbsp;';
   document.getElementById('colleagueSettingsModal').classList.remove('hidden');
 }
 function closeColleagueSettings() {
   document.getElementById('colleagueSettingsModal').classList.add('hidden');
 }
-function saveColleagueToken() {
-  const val = document.getElementById('colleagueGhToken').value.trim();
-  if (!val) { setColleagueStatus('⚠️ Zadejte token', 'warn'); return; }
-  localStorage.setItem('efl_gh_token', val);
-  setColleagueStatus('✅ Token uložen', 'ok');
-}
-function setColleagueStatus(msg, type) {
-  const el = document.getElementById('colleagueSettingsStatus');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = type === 'ok' ? 'var(--success)' : type === 'warn' ? '#e09c3a' : type === 'err' ? 'var(--danger)' : 'var(--text-muted)';
-  el.style.background = type === 'ok' ? '#f0fdf4' : type === 'warn' ? '#fffbe6' : type === 'err' ? '#fff1f1' : 'var(--sand)';
-}
-async function colleagueAction(action) {
-  setColleagueStatus('⟳ Pracuji...', '');
-  try {
-    if (action === 'github') {
-      const data = await ghLoad();
-      if (data) {
-        db = migrateData(data);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-        renderSidebar(); showView(currentView);
-        setColleagueStatus('✅ Data načtena z GitHub', 'ok');
-      } else {
-        setColleagueStatus('❌ Načtení selhalo — zkontrolujte token', 'err');
-      }
-    } else if (action === 'clients') {
-      await syncPull();
-      setColleagueStatus('✅ Klienti staženi z formuláře', 'ok');
-    } else if (action === 'payments') {
-      await syncPayments();
-      setColleagueStatus('✅ Platební data stažena', 'ok');
-    }
-  } catch(e) {
-    setColleagueStatus('❌ Chyba: ' + e.message, 'err');
-  }
-}
+
+// Override syncPull and syncFromGitHub to show status in colleague modal too
+const _origSyncPull = syncPull;
+const _origSyncFromGitHub = syncFromGitHub;
 
 // Spusť GitHub init při startu
 initFromGitHub();
