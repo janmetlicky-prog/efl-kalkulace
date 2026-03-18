@@ -581,6 +581,8 @@
         <button class="gear-menu-item admin-only" onclick="exportData();closeGearMenu()">💾 Záloha</button>
         <button class="gear-menu-item admin-only" onclick="importData();closeGearMenu()">📂 Import</button>
         <button class="gear-menu-item admin-only" onclick="openSyncModal();closeGearMenu()" id="btnSync">☁️ Sync</button>
+        <div class="gear-menu-sep"></div>
+        <button class="gear-menu-item admin-only" onclick="openCleanupModal();closeGearMenu()">🧹 Vyčistit databázi</button>
       </div>
     </div>
   </div>
@@ -898,6 +900,23 @@
 
     <div class="modal-footer" style="margin-top:16px">
       <button class="btn btn-secondary" onclick="closeColleagueSettings()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Cleanup databáze -->
+<div class="modal-overlay hidden" id="cleanupModal">
+  <div class="modal" style="max-width:520px;max-height:90vh;overflow-y:auto">
+    <h2>🧹 Vyčistit databázi</h2>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
+      Automatická detekce testovacích záznamů, prázdných jmen a duplicit — v databázi klientů i v cestách.
+    </p>
+    <div id="cleanupList" style="margin-bottom:16px">
+      <div style="text-align:center;padding:16px;color:var(--text-muted)">⟳ Načítám...</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeCleanupModal()">Zavřít</button>
+      <button class="btn btn-primary" id="cleanupConfirmBtn" onclick="executeCleanup()" style="background:#e74c3c;border-color:#e74c3c">🗑️ Smazat vybrané</button>
     </div>
   </div>
 </div>
@@ -4174,6 +4193,174 @@ async function colleagueAction(action) {
 
 function closeColleagueSettings() {
   document.getElementById('colleagueSettingsModal').classList.add('hidden');
+}
+
+// ═══════════════════════════════════════════════
+// CLEANUP MODAL
+// ═══════════════════════════════════════════════
+
+function openCleanupModal() {
+  const results = detectCleanupCandidates();
+  renderCleanupModal(results);
+  document.getElementById('cleanupModal').classList.remove('hidden');
+}
+
+function closeCleanupModal() {
+  document.getElementById('cleanupModal').classList.add('hidden');
+}
+
+function detectCleanupCandidates() {
+  const TEST_PATTERNS = /^(test|xxx|yyy|zzz|asdf|qwer|foo|bar|aaa|bbb|abc|\d+|[-_.]+)$/i;
+  const TEST_CONTAINS = /(test|testovac|zkouš|pokus|dummy|fake|sample)/i;
+
+  function isSuspicious(n) {
+    if (!n || !n.trim()) return 'Prázdné jméno';
+    const t = n.trim();
+    if (TEST_PATTERNS.test(t)) return 'Testovací záznam';
+    if (TEST_CONTAINS.test(t)) return 'Obsahuje "test"';
+    // Jméno = příjmení (např. "Jan Jan", "Nováková Nováková")
+    const parts = t.split(/\s+/);
+    if (parts.length >= 2 && parts[0].toLowerCase() === parts[parts.length - 1].toLowerCase()) return 'Jméno = příjmení';
+    // Jen jedno slovo bez mezer (pravděpodobně chybí příjmení) — pouze z manualClients
+    if (parts.length === 1 && t.length < 15) return 'Pouze jedno slovo';
+    // Samé nealfanumerické znaky
+    if (/^[^a-záčďéěíňóřšťúůýžA-ZÁČĎÉĚÍŇÓŘŠŤÚŮÝŽ0-9]+$/.test(t)) return 'Neplatné znaky';
+    return null;
+  }
+
+  const candidates = [];
+
+  // 1. Testovací záznamy v manualClients
+  (db.manualClients || []).forEach(mc => {
+    const reason = isSuspicious(mc.name);
+    if (reason) {
+      candidates.push({ type: 'manual', id: mc.id, name: (mc.name || '').trim() || '(prázdné)', reason, checked: true });
+    }
+  });
+
+  // 2. Testovací záznamy v trip.participants
+  db.trips.forEach(trip => {
+    (trip.participants || []).forEach((p, idx) => {
+      const reason = isSuspicious(p.name);
+      if (reason) {
+        candidates.push({ type: 'participant', tripId: trip.id, idx, name: (p.name || '').trim() || '(prázdné)', tripName: trip.name + ' ' + trip.year, reason, checked: true });
+      }
+    });
+  });
+
+  // 3. Duplicity v manualClients (stejné jméno lowercase)
+  const manualNames = {};
+  (db.manualClients || []).forEach(mc => {
+    if (!mc.name) return;
+    const key = mc.name.trim().toLowerCase();
+    if (!manualNames[key]) manualNames[key] = [];
+    manualNames[key].push(mc);
+  });
+  Object.values(manualNames).forEach(group => {
+    if (group.length > 1) {
+      // Nech první, navrhni smazat ostatní
+      group.slice(1).forEach(mc => {
+        if (!candidates.find(c => c.type === 'manual' && c.id === mc.id)) {
+          candidates.push({ type: 'manual', id: mc.id, name: mc.name.trim(), reason: 'Duplicita (ponech první výskyt)', checked: true });
+        }
+      });
+    }
+  });
+
+  return candidates;
+}
+
+function renderCleanupModal(candidates) {
+  const container = document.getElementById('cleanupList');
+  if (candidates.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text-muted)">
+      <div style="font-size:32px;margin-bottom:8px">✅</div>
+      <div style="font-weight:600">Databáze je čistá</div>
+      <div style="font-size:12px;margin-top:4px">Žádné testovací záznamy ani duplicity nenalezeny.</div>
+    </div>`;
+    document.getElementById('cleanupConfirmBtn').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('cleanupConfirmBtn').style.display = '';
+
+  const rows = candidates.map((c, i) => {
+    const source = c.type === 'manual'
+      ? '<span style="font-size:10px;background:#e8f4fd;color:#1a6fa8;padding:2px 7px;border-radius:8px">databáze klientů</span>'
+      : `<span style="font-size:10px;background:#fef3e2;color:#8a5a00;padding:2px 7px;border-radius:8px">cesta: ${esc(c.tripName)}</span>`;
+    return `
+      <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:#fff;cursor:pointer">
+        <input type="checkbox" data-idx="${i}" ${c.checked ? 'checked' : ''} style="margin-top:2px;accent-color:var(--teal)">
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:13px">${esc(c.name)}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px">${c.reason} · ${source}</div>
+        </div>
+      </label>`;
+  }).join('');
+
+  container.innerHTML = `
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      Nalezeno <strong>${candidates.length} záznamů</strong> ke kontrole. Zaškrtni co chceš smazat.
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:12px">
+      <button class="btn btn-secondary btn-sm" onclick="cleanupSelectAll(true)">Vybrat vše</button>
+      <button class="btn btn-secondary btn-sm" onclick="cleanupSelectAll(false)">Odznačit vše</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">${rows}</div>`;
+
+  // Ulož candidates do window pro pozdější použití
+  window._cleanupCandidates = candidates;
+}
+
+function cleanupSelectAll(val) {
+  document.querySelectorAll('#cleanupList input[type=checkbox]').forEach(cb => cb.checked = val);
+}
+
+function executeCleanup() {
+  const candidates = window._cleanupCandidates || [];
+  const checkboxes = document.querySelectorAll('#cleanupList input[type=checkbox]');
+  const toDelete = candidates.filter((c, i) => checkboxes[i] && checkboxes[i].checked);
+
+  if (toDelete.length === 0) { alert('Nic není vybráno.'); return; }
+
+  let deletedManual = 0;
+  let deletedParticipants = 0;
+
+  // Smaž z manualClients
+  const manualIds = new Set(toDelete.filter(c => c.type === 'manual').map(c => c.id));
+  if (manualIds.size > 0) {
+    const before = (db.manualClients || []).length;
+    db.manualClients = (db.manualClients || []).filter(mc => !manualIds.has(mc.id));
+    deletedManual = before - db.manualClients.length;
+  }
+
+  // Smaž z trip.participants — zpracuj od nejvyššího idx aby se nesunuly indexy
+  const participantDeletes = toDelete.filter(c => c.type === 'participant');
+  // Seskup dle tripId
+  const byTrip = {};
+  participantDeletes.forEach(c => {
+    if (!byTrip[c.tripId]) byTrip[c.tripId] = [];
+    byTrip[c.tripId].push(c.idx);
+  });
+  Object.entries(byTrip).forEach(([tripId, idxs]) => {
+    const trip = db.trips.find(t => t.id === tripId);
+    if (!trip) return;
+    // Seřaď od nejvyššího aby splice neshazoval indexy
+    idxs.sort((a,b) => b - a).forEach(idx => {
+      trip.participants.splice(idx, 1);
+      deletedParticipants++;
+    });
+    trip.totalPersons = (trip.participants || []).length;
+  });
+
+  save(db);
+  closeCleanupModal();
+
+  const msg = `✅ Smazáno: ${deletedManual} z databáze klientů, ${deletedParticipants} z cest.`;
+  alert(msg);
+
+  // Refresh pokud jsme na klientech
+  if (document.getElementById('clientSearchInput')) renderClients('');
 }
 
 // Override syncPull and syncFromGitHub to show status in colleague modal too
