@@ -831,6 +831,12 @@
         style="font-size:12px;" oninput="localStorage.setItem('efl_payment_sync_url',this.value)">
     </div>
 
+    <div class="form-group" style="margin-bottom:14px">
+      <label>iDoklad URL <span style="font-size:10px;color:var(--text-muted)">(kontrola plateb podle VS)</span></label>
+      <input type="url" id="idokladSyncUrl" placeholder="https://script.google.com/macros/s/..."
+        style="font-size:12px;" oninput="localStorage.setItem('efl_idoklad_url',this.value)">
+    </div>
+
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
       <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
       <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
@@ -2766,7 +2772,10 @@ function renderTripDetail() {
     <div class="card">
       <div class="card-header">
         <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).filter(p=>!p.isCancelled).length} aktivních / ${(trip.participants||[]).length} celkem)</span></div>
-        <button class="btn btn-secondary btn-sm admin-only" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="btn btn-secondary btn-sm admin-only" onclick="checkIdokladPayments('${trip.id}')" title="Zkontrolovat platby v iDokladu podle VS" style="background:#f0fafa;border-color:#03989E;color:#03989E">🔍 iDoklad</button>
+          <button class="btn btn-secondary btn-sm admin-only" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
+        </div>
       </div>
       <div style="overflow-x:auto">
         <table class="participants-table">
@@ -3286,8 +3295,92 @@ function exportClientsCSV() {
 }
 
 // ═══════════════════════════════════════════════
-// GOOGLE SHEETS SYNC
+// iDOKLAD — kontrola plateb podle VS
 // ═══════════════════════════════════════════════
+async function checkIdokladPayments(tripId) {
+  const url = (localStorage.getItem('efl_idoklad_url') || '').trim();
+  if (!url) {
+    alert('Nastavte iDoklad URL v sekci Sync (⚙️ → Sync → iDoklad URL).');
+    return;
+  }
+
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+
+  // Sbírej VS účastníků kteří nejsou storno a mají VS
+  const participants = (trip.participants || []).filter(p => !p.isCancelled && p.vs);
+  if (participants.length === 0) {
+    alert('Žádní účastníci nemají variabilní symbol (VS). Nejprve stáhni platební data ze Sheets.');
+    return;
+  }
+
+  const vsArr = participants.map(p => String(p.vs).trim()).filter(Boolean);
+  const statusEl = document.getElementById('syncLog');
+  if (statusEl) { statusEl.textContent = '⟳ Dotazuji iDoklad...'; }
+
+  try {
+    const fetchUrl = url + '?action=checkPayments&vs=' + encodeURIComponent(vsArr.join(','));
+    const res = await fetch(fetchUrl);
+    const json = await res.json();
+
+    if (!json.ok) throw new Error(json.error || 'Neznámá chyba');
+
+    const data = json.data; // { vs: { paid, partial, paidAmount, totalAmount, ... } }
+    let updated = 0;
+    let notFound = 0;
+
+    participants.forEach(p => {
+      const vs = String(p.vs).trim();
+      const info = data[vs];
+      if (!info) { notFound++; return; }
+
+      // Najdi účastníka v trip.participants
+      const idx = trip.participants.indexOf(p);
+      if (idx === -1) return;
+
+      let changed = false;
+
+      // Zaplaceno celé → zaškrtni kompletní platbu
+      if (info.paid && !trip.participants[idx].fullPayment) {
+        trip.participants[idx].fullPayment = true;
+        trip.participants[idx].firstPayment = true;
+        changed = true;
+      }
+      // Částečně zaplaceno → zaškrtni 1. platbu
+      if (info.partial && !trip.participants[idx].firstPayment) {
+        trip.participants[idx].firstPayment = true;
+        changed = true;
+      }
+      // Přidej info o zaplacené částce do notes pokud chybí
+      if (changed && info.paidAmount > 0) {
+        const note = `iDoklad: ${info.paidAmount.toLocaleString('cs')} Kč`;
+        if (!(trip.participants[idx].notes || '').includes('iDoklad')) {
+          trip.participants[idx].notes = ((trip.participants[idx].notes || '') + ' ' + note).trim();
+        }
+      }
+      if (changed) updated++;
+    });
+
+    save(db);
+    renderTripDetail();
+
+    const msg = `✅ iDoklad: aktualizováno ${updated} účastníků` +
+      (notFound > 0 ? `, ${notFound} VS nenalezeno v iDokladu` : '');
+    if (statusEl) {
+      statusEl.textContent = msg;
+      statusEl.style.color = updated > 0 ? 'var(--success,#2ecc71)' : 'var(--text-muted)';
+      setTimeout(() => { statusEl.textContent = ''; }, 6000);
+    }
+    alert(msg);
+
+  } catch(e) {
+    const errMsg = '❌ Chyba iDoklad: ' + e.message;
+    if (statusEl) { statusEl.textContent = errMsg; statusEl.style.color = 'var(--danger)'; }
+    alert(errMsg);
+  }
+}
+
+
 const SYNC_URL_KEY = 'efl_sync_url';
 const APPS_SCRIPT_CODE = `// =================== APPS SCRIPT KÓD (vlož do Google Apps Script) ===================
 const SHEET_NAME = 'EFL_Data';
@@ -4139,6 +4232,12 @@ async function syncFromGitHub() {
 function openSyncModal() {
   const inp = document.getElementById('ghTokenInput');
   if (inp) inp.value = ghToken();
+  const csvInp = document.getElementById('sheetCsvUrl');
+  if (csvInp) csvInp.value = localStorage.getItem('efl_sheet_csv_url') || '';
+  const payInp = document.getElementById('paymentSyncUrl');
+  if (payInp) payInp.value = localStorage.getItem('efl_payment_sync_url') || '';
+  const idokladInp = document.getElementById('idokladSyncUrl');
+  if (idokladInp) idokladInp.value = localStorage.getItem('efl_idoklad_url') || '';
   document.getElementById('syncModal').classList.remove('hidden');
   checkSyncUrl(getSyncUrl());
 }
