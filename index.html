@@ -3465,7 +3465,8 @@ async function syncPayments() {
         if (pd.payment1Amount) p.payment1Amount = pd.payment1Amount;
         if (pd.payment2Date) p.payment2Date = pd.payment2Date;
         if (pd.payment2Amount) p.payment2Amount = pd.payment2Amount;
-        console.log('[syncPayments] updated:', p.name, pd.payment1Date, pd.payment1Amount);
+        if (pd.vs) p.vs = String(pd.vs).trim();
+        console.log('[syncPayments] updated:', p.name, pd.payment1Date, pd.payment1Amount, 'VS:', pd.vs);
         updated++;
       });
     } catch(e) { console.error('[syncPayments] error:', e.message); errors++; }
