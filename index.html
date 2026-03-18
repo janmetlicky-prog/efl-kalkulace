@@ -554,7 +554,7 @@
   <div class="sidebar-footer">
     <div style="font-size:10px;color:rgba(255,255,255,.25);text-align:center;margin-bottom:10px;letter-spacing:.5px;font-style:italic">Cestuj a poznávej sebe i svět</div>
     <div id="ghSyncStatus" style="font-size:11px;text-align:center;margin-bottom:6px;color:rgba(255,255,255,.4);min-height:16px"></div>
-    <button id="btnColleagueSyncSidebar" onclick="syncPull()" style="display:none;width:100%;padding:10px;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.2);border-radius:8px;font-size:13px;cursor:pointer;margin-bottom:8px">🔄 Aktualizovat klienty</button>
+
     <button class="btn-new-trip admin-only" onclick="openNewTripModal()">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       Nový zájezd
@@ -570,7 +570,7 @@
       <button class="topbar-nav-btn" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
       <button class="topbar-nav-btn" onclick="showView('destinations')" id="btnDestinations">📍 Destinace</button>
-      <button class="topbar-nav-btn" id="btnColleagueSync" onclick="syncPull()" style="display:none">🔄 Aktualizovat klienty</button>
+
     </div>
     <div class="gear-wrap" id="gearWrap">
       <button class="gear-btn admin-only" onclick="toggleGearMenu()" title="Nastavení & nástroje">⚙️</button>
@@ -862,20 +862,33 @@
   <div class="modal" style="max-width:420px">
     <h2>⚙️ Nastavení</h2>
 
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncPull();closeColleagueSettings()">
-        🔄 Stáhnout nové klienty z formuláře
-      </button>
-      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="syncFromGitHub();closeColleagueSettings()">
+    <!-- GitHub token -->
+    <div style="margin-bottom:16px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">GitHub Token</label>
+      <input type="password" id="colleagueGhToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveColleagueToken()">💾 Uložit token</button>
+    </div>
+
+    <div style="height:1px;background:var(--border);margin-bottom:16px"></div>
+
+    <!-- Akce -->
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('github')">
         ⬇️ Načíst aktuální data z GitHub
       </button>
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('clients')">
+        🔄 Stáhnout nové klienty z formuláře
+      </button>
+      <button class="btn btn-secondary" style="justify-content:flex-start;gap:10px;padding:12px 16px" onclick="colleagueAction('payments')">
+        💳 Stáhnout platební data
+      </button>
     </div>
 
-    <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--sand);border-radius:8px" id="colleagueSettingsStatus">
-      &nbsp;
-    </div>
+    <!-- Status -->
+    <div id="colleagueSettingsStatus" style="font-size:12px;min-height:20px;padding:8px 12px;border-radius:8px;background:var(--sand);color:var(--text-muted)">&nbsp;</div>
 
-    <div class="modal-footer">
+    <div class="modal-footer" style="margin-top:16px">
       <button class="btn btn-secondary" onclick="closeColleagueSettings()">Zavřít</button>
     </div>
   </div>
@@ -3833,11 +3846,6 @@ function applyColleagueMode() {
   const newTripBtn = document.querySelector('.btn-new-trip');
   if (newTripBtn) newTripBtn.style.display = 'none';
 
-  // Zobraz Aktualizovat klienty tlačítka pro kolegyni
-  const sidebarBtn = document.getElementById('btnColleagueSyncSidebar');
-  if (sidebarBtn) sidebarBtn.style.display = 'block';
-  const topbarBtn = document.getElementById('btnColleagueSync');
-  if (topbarBtn) topbarBtn.style.display = '';
 }
 
 // ═══════════════════════════════════════════════
