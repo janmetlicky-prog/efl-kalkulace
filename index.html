@@ -3340,15 +3340,18 @@ async function checkIdokladPayments(tripId) {
 
       let changed = false;
 
-      // Zaplaceno celé → zaškrtni kompletní platbu
-      if (info.paid && !trip.participants[idx].fullPayment) {
-        trip.participants[idx].fullPayment = true;
+      const paid = info.paidAmount || 0;
+      const threshold1 = parseFloat(p.payment1Amount) || 0;
+      const threshold2 = (parseFloat(p.payment1Amount) || 0) + (parseFloat(p.payment2Amount) || 0);
+
+      // 1. platba — zaplaceno >= částka 1. platby
+      if (!trip.participants[idx].firstPayment && threshold1 > 0 && paid >= threshold1) {
         trip.participants[idx].firstPayment = true;
         changed = true;
       }
-      // Částečně zaplaceno → zaškrtni 1. platbu
-      if (info.partial && !trip.participants[idx].firstPayment) {
-        trip.participants[idx].firstPayment = true;
+      // Kompletní — pouze pokud je doplatek vyplněný a zaplaceno >= celková částka
+      if (!trip.participants[idx].fullPayment && threshold2 > threshold1 && paid >= threshold2) {
+        trip.participants[idx].fullPayment = true;
         changed = true;
       }
       // Přidej info o zaplacené částce do notes pokud chybí
