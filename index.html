@@ -4180,6 +4180,13 @@ function approveParticipant() {
 }
 
 // ── GitHub token management ─────────────────────────────────────
+function saveColleagueToken() {
+  const val = document.getElementById('colleagueGhToken').value.trim();
+  if (!val) { alert('Zadejte token.'); return; }
+  localStorage.setItem('efl_gh_token', val);
+  setColleagueStatus('✓ Token uložen — nyní načti data z GitHub', 'ok');
+}
+
 function saveGhToken() {
   const val = document.getElementById('ghTokenInput').value.trim();
   if (!val) { alert('Zadejte token.'); return; }
