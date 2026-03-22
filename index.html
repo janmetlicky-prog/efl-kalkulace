@@ -1359,7 +1359,7 @@ function renderSidebar() {
     `<div class="year-tab ${y === currentYear ? 'active' : ''}" onclick="setYear(${y})">${y}</div>`
   ).join('');
 
-  const trips = db.trips.filter(t => t.year === currentYear)
+  const trips = db.trips.filter(t => t.year === currentYear && (isColleague() ? t.status !== 'kalkulace' : true))
     .sort((a, b) => {
     const statusOrder = { ongoing: 0, active: 1, done: 2, storno: 3, kalkulace: 4 };
     const sa = statusOrder[a.status] ?? 1;
@@ -3962,11 +3962,6 @@ function initApp() {
   injectImportedClients();
   applyAutoStatuses();
 
-  // Kolegyně nevidí kalkulace v sidebaru
-  if (isColleague()) {
-    db.trips = db.trips.filter(t => t.status !== 'kalkulace');
-  }
-
   renderSidebar();
   if (isColleague()) {
     showView('clients');
@@ -4180,13 +4175,6 @@ function approveParticipant() {
 }
 
 // ── GitHub token management ─────────────────────────────────────
-function saveColleagueToken() {
-  const val = document.getElementById('colleagueGhToken').value.trim();
-  if (!val) { alert('Zadejte token.'); return; }
-  localStorage.setItem('efl_gh_token', val);
-  setColleagueStatus('✓ Token uložen — nyní načti data z GitHub', 'ok');
-}
-
 function saveGhToken() {
   const val = document.getElementById('ghTokenInput').value.trim();
   if (!val) { alert('Zadejte token.'); return; }
