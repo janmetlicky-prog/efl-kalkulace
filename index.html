@@ -875,7 +875,11 @@
       <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">GitHub Token</label>
       <input type="password" id="colleagueGhToken" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
         style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
-      <button class="btn btn-primary btn-sm" onclick="saveColleagueToken()">💾 Uložit token</button>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button class="btn btn-primary btn-sm" onclick="saveColleagueToken()">💾 Uložit token</button>
+        <button class="btn btn-secondary btn-sm" onclick="testColleagueToken()">🔍 Otestuj token</button>
+      </div>
+      <div id="colleagueTokenStatus" style="font-size:11px;min-height:16px;margin-top:4px;color:var(--text-muted)"></div>
     </div>
 
     <!-- CSV URL -->
@@ -4175,6 +4179,43 @@ function approveParticipant() {
 }
 
 // ── GitHub token management ─────────────────────────────────────
+function saveColleagueToken() {
+  const val = document.getElementById('colleagueGhToken').value.trim();
+  if (!val) { alert('Zadejte token.'); return; }
+  localStorage.setItem('efl_gh_token', val);
+  const el = document.getElementById('colleagueTokenStatus');
+  if (el) { el.textContent = '✓ Token uložen'; el.style.color = 'var(--success)'; }
+}
+
+async function testColleagueToken() {
+  const el = document.getElementById('colleagueTokenStatus');
+  if (el) { el.textContent = '⟳ Testuji...'; el.style.color = 'var(--text-muted)'; }
+  const token = document.getElementById('colleagueGhToken').value.trim() || ghToken();
+  if (!token) {
+    if (el) { el.textContent = '⚠ Žádný token — nejprve zadejte a uložte token'; el.style.color = '#e09c3a'; }
+    return;
+  }
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' } }
+    );
+    if (res.ok) {
+      if (el) { el.textContent = '✅ Token funguje — připojení OK'; el.style.color = 'var(--success)'; }
+    } else if (res.status === 401) {
+      if (el) { el.textContent = '❌ Token neplatný nebo expirovaný (401)'; el.style.color = 'var(--danger)'; }
+    } else if (res.status === 403) {
+      if (el) { el.textContent = '❌ Token nemá přístup k repozitáři (403)'; el.style.color = 'var(--danger)'; }
+    } else if (res.status === 404) {
+      if (el) { el.textContent = '⚠ Token OK ale soubor nenalezen (404)'; el.style.color = '#e09c3a'; }
+    } else {
+      if (el) { el.textContent = '❌ Chyba ' + res.status; el.style.color = 'var(--danger)'; }
+    }
+  } catch(e) {
+    if (el) { el.textContent = '❌ Síťová chyba: ' + e.message; el.style.color = 'var(--danger)'; }
+  }
+}
+
 function saveGhToken() {
   const val = document.getElementById('ghTokenInput').value.trim();
   if (!val) { alert('Zadejte token.'); return; }
@@ -4247,6 +4288,9 @@ function openColleagueSettings() {
   const csvInp = document.getElementById('colleagueCsvUrl');
   if (csvInp) csvInp.value = localStorage.getItem('efl_sheet_csv_url') || '';
   document.getElementById('colleagueSettingsStatus').innerHTML = '&nbsp;';
+  const tokenStatus = document.getElementById('colleagueTokenStatus');
+  if (tokenStatus) tokenStatus.textContent = ghToken() ? '✓ Token je uložen' : '⚠ Token není uložen';
+  if (tokenStatus) tokenStatus.style.color = ghToken() ? 'var(--success)' : '#e09c3a';
   document.getElementById('colleagueSettingsModal').classList.remove('hidden');
 }
 
