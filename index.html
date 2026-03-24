@@ -3715,16 +3715,17 @@ async function syncPull() {
     
     if (!db.manualClients) db.manualClients = [];
     let added = 0;
-    
+    let tripAssigned = 0;
+
     formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
-      
+
       // Najdi existujícího klienta POUZE podle jména
       // (email nestačí — rodina může mít stejný email ale různá jména)
       let client = db.manualClients.find(c =>
         c.name.toLowerCase() === fc.name.toLowerCase()
       );
-      
+
       if (!client) {
         // Nový klient — přidej do databáze
         client = {
@@ -3745,7 +3746,7 @@ async function syncPull() {
         if (!client.nationality && fc.nationality) client.nationality = fc.nationality;
         if (!client.passport    && fc.passport)    client.passport    = fc.passport;
       }
-      
+
       // Přiřaď ke cestě — vždy, i pro existující klienty
       if (fc.tripName) {
         const trip = db.trips.find(t => t.name && tripNameMatch(t.name, fc.tripName));
@@ -3765,17 +3766,21 @@ async function syncPull() {
               insuranceSent:false, isSingle:false, pendingReview:true
             });
             trip.totalPersons = trip.participants.length;
+            tripAssigned++;
           }
         }
       }
     });
-    
-    if (added > 0) {
+
+    if (added > 0 || tripAssigned > 0) {
       save(db);
       renderSidebar();
       if (currentView === 'clients') renderClients();
     }
-    showSyncLog('✓ Přidáno ' + added + ' nových klientů — ' + new Date().toLocaleTimeString('cs-CZ'));
+    let syncMsg = '\u2713 P\u0159id\u00e1no ' + added + ' nov\u00fdch klient\u016f';
+    if (tripAssigned > 0) syncMsg += ', ' + tripAssigned + ' p\u0159i\u0159azeno k cest\u00e1m';
+    syncMsg += ' \u2014 ' + new Date().toLocaleTimeString('cs-CZ');
+    showSyncLog(syncMsg);
   } catch(e) {
     showSyncLog('✕ Chyba: ' + e.message);
   }
