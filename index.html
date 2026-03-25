@@ -2346,69 +2346,88 @@ function renderInstructors() {
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
         </div>
       </div>
-
-      <div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
-        ${filtered.map(ins => {
-          const stats = tripStats[ins.id];
-          const statusCol = getStatusColor(ins.status || '');
-          return `
-          <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px;transition:box-shadow .2s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-              <div>
-                <div style="font-size:16px;font-weight:700;color:var(--navy)">${esc(ins.name)}</div>
-                ${ins.city ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">📍 ${esc(ins.city)}</div>` : ''}
-              </div>
-              <div style="display:flex;gap:6px;align-items:center">
-                ${ins.status ? `<span style="font-size:10px;font-weight:600;color:${statusCol};background:${statusCol}18;padding:3px 8px;border-radius:20px;white-space:nowrap">${esc(ins.status.substring(0,30))}${ins.status.length>30?'…':''}</span>` : ''}
-                <button onclick="openInstructorModal('${ins.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:16px;padding:2px 4px" title="Upravit">✏️</button>
-                <button onclick="deleteInstructor('${ins.id}')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px 4px;line-height:1" title="Smazat" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='#ccc'">✕</button>
-              </div>
-            </div>
-
-            ${ins.phone || ins.email ? `
-            <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
-              ${ins.phone ? `<a href="tel:${ins.phone}" style="font-size:12px;color:var(--teal);text-decoration:none">📞 ${esc(ins.phone)}</a>` : ''}
-              ${ins.email ? `<a href="mailto:${ins.email}" style="font-size:12px;color:var(--teal);text-decoration:none">✉️ ${esc(ins.email)}</a>` : ''}
-            </div>` : ''}
-
-            ${stats ? `
-            <div style="background:#f0f9f9;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:16px">
-              <div style="text-align:center">
-                <div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.count}</div>
-                <div style="font-size:10px;color:var(--text-muted)">cest</div>
-              </div>
-              <div style="text-align:center">
-                <div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.totalPersons}</div>
-                <div style="font-size:10px;color:var(--text-muted)">účastníků</div>
-              </div>
-              <div style="flex:1">
-                ${stats.trips.slice(0,3).map(t => `<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ${esc(t.name)} (${t.year})</div>`).join('')}
-                ${stats.trips.length > 3 ? `<div style="font-size:11px;color:var(--teal)">+ ${stats.trips.length-3} dalších</div>` : ''}
-              </div>
-            </div>` : ''}
-
-            ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;position:relative;cursor:pointer"
-  data-full="${esc(ins.about)}"
-  onmouseenter="showInstrTooltip(this, this.dataset.full)"
-  onmouseleave="hideInstrTooltip(this)">
-  <div style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div>
-</div>` : ''}
-
-            ${ins.demand ? `
-            <div style="margin-bottom:6px">
-              <span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span>
-              <div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" onmouseenter="showInstrTooltip(this, this.dataset.full)" data-full="${esc(ins.demand)}" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div>
-            </div>` : ''}
-
-            ${ins.process ? `
-            <div>
-              <span style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px">Proces</span>
-              <div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" onmouseenter="showInstrTooltip(this, this.dataset.full)" data-full="${esc(ins.process)}" onmouseleave="hideInstrTooltip(this)">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div>
-            </div>` : ''}
-          </div>`;
-        }).join('')}
-      </div>
+      <div id="instrGridContainer"></div>
     </div>`;
+  renderInstrGrid(filter);
+}
+
+function renderInstrGrid(filter) {
+  const container = document.getElementById('instrGridContainer');
+  if (!container) return;
+
+  const instructors = getInstructors();
+  const q = (filter || '').toLowerCase().trim();
+
+  // Statistiky ze zájezdů
+  const tripStats = {};
+  db.trips.forEach(trip => {
+    const lname = (trip.instructor || '').toLowerCase().trim();
+    if (!lname) return;
+    const actualPersons = (trip.participants || []).length;
+    instructors.forEach(ins => {
+      const iname = ins.name.toLowerCase();
+      const lParts = lname.split(/\s+/); const iParts = iname.split(/\s+/);
+      const lLast = lParts[lParts.length-1]; const iLast = iParts[iParts.length-1];
+      const match = lLast === iLast ||
+        (lLast.length>4 && iLast.startsWith(lLast.substring(0,lLast.length-1))) ||
+        (iLast.length>4 && lLast.startsWith(iLast.substring(0,iLast.length-1))) ||
+        lname===iname || (lname.length>5 && iname.includes(lname)) || (iname.length>5 && lname.includes(iname));
+      if (!match) return;
+      if (!tripStats[ins.id]) tripStats[ins.id] = { count:0, totalPersons:0, trips:[] };
+      tripStats[ins.id].count++;
+      tripStats[ins.id].totalPersons += actualPersons;
+      tripStats[ins.id].trips.push({ name:trip.name, year:trip.year, persons:actualPersons });
+    });
+  });
+
+  const statusColor = { 'PRODEJ':'#03989E', 'rezervace':'#03989E', 'Čekám':'#b8860b', 'STORNO':'#e53935', 'Neposlané':'#999' };
+  const getStatusColor = (s) => { for (const [k,v] of Object.entries(statusColor)) { if (s && s.includes(k)) return v; } return '#666'; };
+
+  const filtered = instructors.filter(ins =>
+    !q || ins.name.toLowerCase().includes(q) ||
+    (ins.city||'').toLowerCase().includes(q) ||
+    (ins.status||'').toLowerCase().includes(q)
+  );
+
+  if (!filtered.length) {
+    container.innerHTML = `<div class="empty-state"><div class="es-icon">🎓</div><h3>Žádní lektoři</h3><p>Uprav filtr nebo přidej nového lektora.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = `<div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
+    ${filtered.map(ins => {
+      const stats = tripStats[ins.id];
+      const statusCol = getStatusColor(ins.status || '');
+      return `
+      <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:20px;transition:box-shadow .2s" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div>
+            <div style="font-size:16px;font-weight:700;color:var(--navy)">${esc(ins.name)}</div>
+            ${ins.city ? `<div style="font-size:12px;color:var(--text-muted);margin-top:2px">📍 ${esc(ins.city)}</div>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            ${ins.status ? `<span style="font-size:10px;font-weight:600;color:${statusCol};background:${statusCol}18;padding:3px 8px;border-radius:20px;white-space:nowrap">${esc(ins.status.substring(0,30))}${ins.status.length>30?'…':''}</span>` : ''}
+            <button onclick="openInstructorModal('${ins.id}')" style="background:none;border:none;cursor:pointer;color:var(--text-muted);font-size:16px;padding:2px 4px" title="Upravit">✏️</button>
+            <button onclick="deleteInstructor('${ins.id}')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px 4px;line-height:1" title="Smazat" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='#ccc'">✕</button>
+          </div>
+        </div>
+        ${ins.phone || ins.email ? `
+        <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+          ${ins.phone ? `<a href="tel:${ins.phone}" style="font-size:12px;color:var(--teal);text-decoration:none">📞 ${esc(ins.phone)}</a>` : ''}
+          ${ins.email ? `<a href="mailto:${ins.email}" style="font-size:12px;color:var(--teal);text-decoration:none">✉️ ${esc(ins.email)}</a>` : ''}
+        </div>` : ''}
+        ${stats ? `
+        <div style="background:#f0f9f9;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:16px">
+          <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.count}</div><div style="font-size:10px;color:var(--text-muted)">cest</div></div>
+          <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.totalPersons}</div><div style="font-size:10px;color:var(--text-muted)">účastníků</div></div>
+          <div style="flex:1">${stats.trips.slice(0,3).map(t=>`<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ${esc(t.name)} (${t.year})</div>`).join('')}${stats.trips.length>3?`<div style="font-size:11px;color:var(--teal)">+ ${stats.trips.length-3} dalších</div>`:''}</div>
+        </div>` : ''}
+        ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;position:relative;cursor:pointer" data-full="${esc(ins.about)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)"><div style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div></div>` : ''}
+        ${ins.demand ? `<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span><div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" data-full="${esc(ins.demand)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div></div>` : ''}
+        ${ins.process ? `<div><span style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px">Proces</span><div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" data-full="${esc(ins.process)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div></div>` : ''}
+      </div>`;
+    }).join('')}
+  </div>`;
 }
 
 let editingInstructorId = null;
@@ -2449,26 +2468,14 @@ function hideInstrTooltip(el) {
 }
 
 function filterInstructorsOnly(val) {
-  const grid = document.getElementById('instrGrid');
-  if (!grid) { renderInstructors(); return; }
-  const q = (val || '').toLowerCase().trim();
-  Array.from(grid.children).forEach(card => {
-    card.style.display = (!q || card.textContent.toLowerCase().includes(q)) ? '' : 'none';
-  });
+  renderInstrGrid(val);
 }
 
 function renderInstructorsKeepSearch() {
-  // Re-render ale zachová hodnotu a focus search inputu
-  const inp = document.getElementById('instrSearch');
-  const val = inp ? inp.value : '';
-  const hadFocus = inp && document.activeElement === inp;
+  const val = (document.getElementById('instrSearch') || {}).value || '';
   renderInstructors();
-  const inp2 = document.getElementById('instrSearch');
-  if (inp2) {
-    inp2.value = val;
-    if (hadFocus) { inp2.focus(); }
-    filterInstructorsOnly(val);
-  }
+  const inp = document.getElementById('instrSearch');
+  if (inp) inp.value = val;
 }
 
 function showInstrSuggest(val) {
@@ -3688,7 +3695,7 @@ async function syncPull() {
     
     const formClients = lines.slice(1).map(line => {
       const cols = parseCSVLine(line);
-      const name = nameCol >= 0 ? (cols[nameCol]||'').replace(/"/g,'').trim() : '';
+      const name = nameCol >= 0 ? (cols[nameCol]||'').replace(/"/g,'').trim().replace(/\s+/g,' ') : '';
       if (!name || name.length < 3) return null;
       
       let email = '';
@@ -3733,11 +3740,13 @@ async function syncPull() {
 
     formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
+      // Normalizuj jméno — odstraň trailing/leading mezery a vícenásobné mezery
+      fc.name = fc.name.trim().replace(/\s+/g, ' ');
 
       // Najdi existujícího klienta POUZE podle jména
       // (email nestačí — rodina může mít stejný email ale různá jména)
       let client = db.manualClients.find(c =>
-        c.name.toLowerCase() === fc.name.toLowerCase()
+        c.name.trim().replace(/\s+/g,' ').toLowerCase() === fc.name.toLowerCase()
       );
 
       if (!client) {
@@ -3767,7 +3776,7 @@ async function syncPull() {
         if (trip) {
           if (!trip.participants) trip.participants = [];
           const inTrip = trip.participants.some(p =>
-            p.name.toLowerCase() === fc.name.toLowerCase()
+            p.name.trim().replace(/\s+/g,' ').toLowerCase() === fc.name.toLowerCase()
           );
           if (!inTrip) {
             trip.participants.push({
@@ -3812,9 +3821,9 @@ function mergeData(local, remote) {
     else {
       // Merge participants — sloučíme účastníky podle jména
       const rTrip = tripMap[t.id];
-      const existingNames = new Set((rTrip.participants||[]).map(p => p.name.toLowerCase()));
+      const existingNames = new Set((rTrip.participants||[]).map(p => p.name.trim().replace(/\s+/g,' ').toLowerCase()));
       (t.participants||[]).forEach(p => {
-        if (!existingNames.has(p.name.toLowerCase())) {
+        if (!existingNames.has(p.name.trim().replace(/\s+/g,' ').toLowerCase())) {
           rTrip.participants = rTrip.participants || [];
           rTrip.participants.push(p);
         }
@@ -3832,9 +3841,10 @@ function mergeData(local, remote) {
 
   // Merge manualClients — sloučíme podle jména/emailu
   const clientMap = {};
-  (remote.manualClients || []).forEach(c => { clientMap[c.name.toLowerCase()] = c; });
+  const normName = n => (n||'').trim().replace(/\s+/g,' ').toLowerCase();
+  (remote.manualClients || []).forEach(c => { clientMap[normName(c.name)] = c; });
   (local.manualClients  || []).forEach(c => {
-    const key = c.name.toLowerCase();
+    const key = normName(c.name);
     if (!clientMap[key]) clientMap[key] = c;
     else {
       // Doplníme chybějící pole
