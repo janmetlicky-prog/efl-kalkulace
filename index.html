@@ -2354,11 +2354,8 @@ function renderInstructors() {
 function renderInstrGrid(filter) {
   const container = document.getElementById('instrGridContainer');
   if (!container) return;
-
   const instructors = getInstructors();
   const q = (filter || '').toLowerCase().trim();
-
-  // Statistiky ze zájezdů
   const tripStats = {};
   db.trips.forEach(trip => {
     const lname = (trip.instructor || '').toLowerCase().trim();
@@ -2376,24 +2373,18 @@ function renderInstrGrid(filter) {
       if (!tripStats[ins.id]) tripStats[ins.id] = { count:0, totalPersons:0, trips:[] };
       tripStats[ins.id].count++;
       tripStats[ins.id].totalPersons += actualPersons;
-      tripStats[ins.id].trips.push({ name:trip.name, year:trip.year, persons:actualPersons });
+      tripStats[ins.id].trips.push({ name:trip.name, year:trip.year });
     });
   });
-
-  const statusColor = { 'PRODEJ':'#03989E', 'rezervace':'#03989E', 'Čekám':'#b8860b', 'STORNO':'#e53935', 'Neposlané':'#999' };
-  const getStatusColor = (s) => { for (const [k,v] of Object.entries(statusColor)) { if (s && s.includes(k)) return v; } return '#666'; };
-
+  const statusColor = { 'PRODEJ':'#03989E','rezervace':'#03989E','Čekám':'#b8860b','STORNO':'#e53935','Neposlané':'#999' };
+  const getStatusColor = s => { for (const [k,v] of Object.entries(statusColor)) { if (s&&s.includes(k)) return v; } return '#666'; };
   const filtered = instructors.filter(ins =>
-    !q || ins.name.toLowerCase().includes(q) ||
-    (ins.city||'').toLowerCase().includes(q) ||
-    (ins.status||'').toLowerCase().includes(q)
+    !q || ins.name.toLowerCase().includes(q) || (ins.city||'').toLowerCase().includes(q) || (ins.status||'').toLowerCase().includes(q)
   );
-
   if (!filtered.length) {
-    container.innerHTML = `<div class="empty-state"><div class="es-icon">🎓</div><h3>Žádní lektoři</h3><p>Uprav filtr nebo přidej nového lektora.</p></div>`;
+    container.innerHTML = `<div class="empty-state"><div class="es-icon">🎓</div><h3>Žádní lektoři</h3></div>`;
     return;
   }
-
   container.innerHTML = `<div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
     ${filtered.map(ins => {
       const stats = tripStats[ins.id];
@@ -2411,18 +2402,16 @@ function renderInstrGrid(filter) {
             <button onclick="deleteInstructor('${ins.id}')" style="background:none;border:none;cursor:pointer;color:#ccc;font-size:14px;padding:2px 4px;line-height:1" title="Smazat" onmouseover="this.style.color='var(--danger)'" onmouseout="this.style.color='#ccc'">✕</button>
           </div>
         </div>
-        ${ins.phone || ins.email ? `
-        <div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
+        ${ins.phone||ins.email ? `<div style="display:flex;gap:12px;margin-bottom:10px;flex-wrap:wrap">
           ${ins.phone ? `<a href="tel:${ins.phone}" style="font-size:12px;color:var(--teal);text-decoration:none">📞 ${esc(ins.phone)}</a>` : ''}
           ${ins.email ? `<a href="mailto:${ins.email}" style="font-size:12px;color:var(--teal);text-decoration:none">✉️ ${esc(ins.email)}</a>` : ''}
         </div>` : ''}
-        ${stats ? `
-        <div style="background:#f0f9f9;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:16px">
+        ${stats ? `<div style="background:#f0f9f9;border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;gap:16px">
           <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.count}</div><div style="font-size:10px;color:var(--text-muted)">cest</div></div>
           <div style="text-align:center"><div style="font-size:18px;font-weight:700;color:var(--teal)">${stats.totalPersons}</div><div style="font-size:10px;color:var(--text-muted)">účastníků</div></div>
           <div style="flex:1">${stats.trips.slice(0,3).map(t=>`<div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">• ${esc(t.name)} (${t.year})</div>`).join('')}${stats.trips.length>3?`<div style="font-size:11px;color:var(--teal)">+ ${stats.trips.length-3} dalších</div>`:''}</div>
         </div>` : ''}
-        ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;position:relative;cursor:pointer" data-full="${esc(ins.about)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)"><div style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div></div>` : ''}
+        ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px;cursor:pointer" data-full="${esc(ins.about)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)"><div style="display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div></div>` : ''}
         ${ins.demand ? `<div style="margin-bottom:6px"><span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span><div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" data-full="${esc(ins.demand)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,100))}${ins.demand.length>100?'…':''}</div></div>` : ''}
         ${ins.process ? `<div><span style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px">Proces</span><div style="font-size:12px;color:var(--navy);margin-top:2px;cursor:pointer" data-full="${esc(ins.process)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.process.substring(0,100))}${ins.process.length>100?'…':''}</div></div>` : ''}
       </div>`;
@@ -2916,24 +2905,16 @@ function autofillParticipantFromClient(tripId, idx, name) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.participants[idx]) return;
   const p = trip.participants[idx];
-
-  // Už má data — nepřepisuj
   if (p.phone || p.email || p.birthDate) return;
-
-  // Hledej v manualClients podle jména
-  const normName = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
-  const q = normName(name);
-  const client = (db.manualClients||[]).find(c => normName(c.name) === q);
+  const normN = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+  const client = (db.manualClients||[]).find(c => normN(c.name) === normN(name));
   if (!client) return;
-
-  // Předvyplň chybějící pole
-  if (!p.phone     && client.phone)     p.phone     = client.phone;
-  if (!p.email     && client.email)     p.email     = client.email;
-  if (!p.birthDate && client.birthDate) p.birthDate = client.birthDate;
-  if (!p.city      && client.city)      p.city      = client.city;
-  if (!p.passport  && client.passport)  p.passport  = client.passport;
+  if (!p.phone     && client.phone)       p.phone     = client.phone;
+  if (!p.email     && client.email)       p.email     = client.email;
+  if (!p.birthDate && client.birthDate)   p.birthDate = client.birthDate;
+  if (!p.city      && client.city)        p.city      = client.city;
+  if (!p.passport  && client.passport)    p.passport  = client.passport;
   if (!p.nationality && client.nationality) p.nationality = client.nationality;
-
   save(db);
   renderTripDetail();
 }
@@ -3626,49 +3607,38 @@ async function syncPush() {
 // Pomocná funkce pro matching názvu cesty — přesný nebo Levenshtein 80%+
 function tripNameMatch(tripName, formTripName) {
   if (!tripName || !formTripName) return false;
-  const norm = s => s.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
+  const norm = s => s.toLowerCase().trim()
+    .replace(/[-–—]/g, '-')
+    .replace(/\s+/g, ' ')
+    .replace(/\./g, '.');
   const a = norm(tripName);
   const b = norm(formTripName);
+  // Přesná shoda — vždy OK
   if (a === b) return true;
-
-  // Pokud je název cesty v aplikaci krátký (interní název jako "AZORY fams"),
-  // zkus jestli formulářový název obsahuje klíčová slova z názvu cesty
-  // Rozdělíme na slova a zkontrolujeme kolik % slov cesty je obsaženo ve formuláři
-  const aWords = a.split(/\s+/).filter(w => w.length > 3);
-  const bWords = b.split(/\s+/).filter(w => w.length > 3);
-  if (aWords.length > 0) {
-    const matchCount = aWords.filter(w => b.includes(w)).length;
-    if (matchCount / aWords.length >= 0.75) return true;
-  }
-  if (bWords.length > 0) {
-    const matchCount = bWords.filter(w => a.includes(w)).length;
-    if (matchCount / bWords.length >= 0.75) return true;
-  }
-
-  // Similarity: Levenshtein — jen pro podobně dlouhé řetězce
-  function similarity(s1, s2) {
-    const longer = s1.length > s2.length ? s1 : s2;
-    const shorter = s1.length > s2.length ? s2 : s1;
-    if (longer.length === 0) return 1.0;
-    // Přeskoč pokud je jeden více než 3x delší — Levenshtein pak nebude spolehlivý
-    if (longer.length > shorter.length * 3) return 0;
-    const costs = [];
-    for (let i = 0; i <= longer.length; i++) {
-      let lastVal = i;
-      for (let j = 0; j <= shorter.length; j++) {
-        if (i === 0) { costs[j] = j; }
-        else if (j > 0) {
-          let newVal = costs[j - 1];
-          if (longer[i-1] !== shorter[j-1]) newVal = Math.min(Math.min(newVal, lastVal), costs[j]) + 1;
-          costs[j - 1] = lastVal;
-          lastVal = newVal;
-        }
+  // Pokud jeden obsahuje druhý jako prefix (min 20 znaků) — OK
+  if (a.length >= 20 && b.startsWith(a)) return true;
+  if (b.length >= 20 && a.startsWith(b)) return true;
+  // Levenshtein — pouze pro velmi podobné řetězce (threshold 0.95)
+  // Přeskoč pokud délky jsou příliš rozdílné
+  const longer = a.length > b.length ? a : b;
+  const shorter = a.length > b.length ? b : a;
+  if (longer.length === 0) return true;
+  if (longer.length > shorter.length * 1.3) return false;
+  const costs = [];
+  for (let i = 0; i <= longer.length; i++) {
+    let lastVal = i;
+    for (let j = 0; j <= shorter.length; j++) {
+      if (i === 0) { costs[j] = j; }
+      else if (j > 0) {
+        let newVal = costs[j - 1];
+        if (longer[i-1] !== shorter[j-1]) newVal = Math.min(Math.min(newVal, lastVal), costs[j]) + 1;
+        costs[j - 1] = lastVal;
+        lastVal = newVal;
       }
-      if (i > 0) costs[shorter.length] = lastVal;
     }
-    return (longer.length - costs[shorter.length]) / longer.length;
+    if (i > 0) costs[shorter.length] = lastVal;
   }
-  return similarity(a, b) >= 0.80;
+  return (longer.length - costs[shorter.length]) / longer.length >= 0.95;
 }
 
 async function syncPull() {
@@ -3784,14 +3754,12 @@ async function syncPull() {
 
     formClients.forEach(fc => {
       if (!fc.name || fc.name.length < 3) return;
-      // Normalizuj jméno — odstraň trailing/leading mezery a vícenásobné mezery
       fc.name = fc.name.trim().replace(/\s+/g, ' ');
 
       // Najdi existujícího klienta POUZE podle jména
       // (email nestačí — rodina může mít stejný email ale různá jména)
-      let client = db.manualClients.find(c =>
-        c.name.trim().replace(/\s+/g,' ').toLowerCase() === fc.name.toLowerCase()
-      );
+      const normN = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+      let client = db.manualClients.find(c => normN(c.name) === normN(fc.name));
 
       if (!client) {
         // Nový klient — přidej do databáze
@@ -3834,17 +3802,8 @@ async function syncPull() {
             });
             trip.totalPersons = trip.participants.length;
             tripAssigned++;
-            console.log('[Sync] ✅ Přiřazen:', fc.name, '→', trip.name);
-          } else {
-            console.log('[Sync] ⚠️ Už v cestě:', fc.name, '→', trip.name);
           }
-        } else {
-          // Loguj detailně proč matching selhal
-          console.warn('[Sync] ❌ Cesta nenalezena pro:', fc.name, '| tripName z formuláře:', JSON.stringify(fc.tripName));
-          console.warn('[Sync] Dostupné cesty:', db.trips.map(t => JSON.stringify(t.name)).join(', '));
         }
-      } else {
-        console.log('[Sync] ℹ️ Bez cesty (tripName prázdný):', fc.name);
       }
     });
 
