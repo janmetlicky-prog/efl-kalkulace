@@ -2397,6 +2397,7 @@ function renderInstructors() {
               style="padding:7px 12px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${instrView==='pipeline'?'var(--teal)':'#fff'};color:${instrView==='pipeline'?'#fff':'var(--text-muted)'}">⟶ Pipeline</button>
           </div>
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
+          <button class="btn btn-secondary" onclick="syncPullInstructors()" title="Stáhnout nové lektory z Google Forms dotazníku">⬇️ Sync formulář</button>
         </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
@@ -2630,6 +2631,128 @@ function deleteInstructor(id) {
   db.instructors = (db.instructors || []).filter(i => i.id !== id);
   save(db);
   renderInstructorsKeepSearch();
+}
+
+const INSTR_CSV_URL = 'https://docs.google.com/spreadsheets/d/1VDDDvdRzyLTJ83ScTKAMPHhVxQzlE6AyuO_CPl00ErI/export?format=csv&gid=0';
+
+async function syncPullInstructors() {
+  const btn = document.querySelector('[onclick="syncPullInstructors()"]');
+  if (btn) { btn.textContent = '⏳ Stahuji...'; btn.disabled = true; }
+
+  try {
+    const res = await fetch(INSTR_CSV_URL);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const text = await res.text();
+
+    function parseCSVLine(line) {
+      const result = []; let current = ''; let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { if (inQuotes && line[i+1] === '"') { current += '"'; i++; } else inQuotes = !inQuotes; }
+        else if (ch === ',' && !inQuotes) { result.push(current.trim()); current = ''; }
+        else { current += ch; }
+      }
+      result.push(current.trim());
+      return result;
+    }
+
+    const lines = text.split('\n').filter(l => l.trim());
+    if (lines.length < 2) { alert('Žádná data v dotazníku.'); return; }
+
+    const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g,'').trim().toLowerCase());
+    const hc = kws => { for (const kw of kws) { const i = headers.findIndex(h => h.includes(kw)); if (i >= 0) return i; } return -1; };
+
+    const colName    = hc(['jméno a příjmení','jméno']);
+    const colEmail   = hc(['e-mail','email']);
+    const colPhone   = hc(['telefon']);
+    const colWeb     = hc(['web nebo sociální','web']);
+    const colType    = hc(['obor nebo hlavní zaměření','obor']);
+    const colDest    = hc(['preferovanou destinaci','destinaci']);
+    const colEnv     = hc(['typ prostředí']);
+    const colCount   = hc(['počet účastníků']);
+    const colDate    = hc(['termín pobytu']);
+    const colPrice   = hc(['cenové hladině']);
+    const colSupport = hc(['typ podpory']);
+    const colGuide   = hc(['vedení','podpory nebo vedení']);
+    const colRetChal = hc(['nejtěžší nebo co vám chybělo']);
+    const colExp     = hc(['zkušenost máte s prací']);
+    const colWhy     = hc(['vede k tomu pořádat']);
+    const colResult  = hc(['zážitek by si měli']);
+    const colExtra   = hc(['cokoliv dalšího']);
+
+    if (!db.instructors) db.instructors = [];
+    let added = 0; let updated = 0;
+    const normN = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+
+    lines.slice(1).forEach(line => {
+      const cols = parseCSVLine(line);
+      const name = colName >= 0 ? cols[colName].replace(/"/g,'').trim().replace(/\s+/g,' ') : '';
+      if (!name || name.length < 2) return;
+
+      const email     = colEmail  >= 0 ? cols[colEmail].replace(/"/g,'').trim() : '';
+      const phone     = colPhone  >= 0 ? cols[colPhone].replace(/"/g,'').trim() : '';
+      const sourceUrl = colWeb    >= 0 ? cols[colWeb].replace(/"/g,'').trim() : '';
+      const type      = colType   >= 0 ? cols[colType].replace(/"/g,'').trim().substring(0,60) : '';
+
+      // Demand — sloučení destinace, prostředí, počet, termín, cena
+      const demandParts = [
+        colDest  >= 0 && cols[colDest]  ? 'Destinace: ' + cols[colDest].replace(/"/g,'').trim() : '',
+        colEnv   >= 0 && cols[colEnv]   ? 'Prostředí: ' + cols[colEnv].replace(/"/g,'').trim() : '',
+        colCount >= 0 && cols[colCount] ? 'Počet: '     + cols[colCount].replace(/"/g,'').trim() : '',
+        colDate  >= 0 && cols[colDate]  ? 'Termín: '    + cols[colDate].replace(/"/g,'').trim() : '',
+        colPrice >= 0 && cols[colPrice] ? 'Cena: '      + cols[colPrice].replace(/"/g,'').trim() : '',
+      ].filter(Boolean).join(' | ');
+
+      // About — zkušenosti, motivace, výsledek
+      const aboutParts = [
+        colExp    >= 0 && cols[colExp]    ? 'Zkušenosti: '  + cols[colExp].replace(/"/g,'').trim() : '',
+        colWhy    >= 0 && cols[colWhy]    ? 'Motivace: '    + cols[colWhy].replace(/"/g,'').trim() : '',
+        colResult >= 0 && cols[colResult] ? 'Cíl: '         + cols[colResult].replace(/"/g,'').trim() : '',
+        colExtra  >= 0 && cols[colExtra]  ? 'Poznámka: '    + cols[colExtra].replace(/"/g,'').trim() : '',
+      ].filter(Boolean).join('\n');
+
+      // Process — podpora, vedení, co bylo těžké
+      const processParts = [
+        colSupport >= 0 && cols[colSupport] ? 'Hledá podporu: ' + cols[colSupport].replace(/"/g,'').trim() : '',
+        colGuide   >= 0 && cols[colGuide]   ? 'Vedení: '        + cols[colGuide].replace(/"/g,'').trim() : '',
+        colRetChal >= 0 && cols[colRetChal] ? 'Výzvy: '         + cols[colRetChal].replace(/"/g,'').trim() : '',
+      ].filter(Boolean).join('\n');
+
+      // Existující lektor?
+      const existing = db.instructors.find(i => normN(i.name) === normN(name));
+      if (existing) {
+        // Doplň chybějící pole
+        if (!existing.email     && email)     existing.email     = email;
+        if (!existing.phone     && phone)     existing.phone     = phone;
+        if (!existing.sourceUrl && sourceUrl) existing.sourceUrl = sourceUrl;
+        if (!existing.type      && type)      existing.type      = type;
+        if (!existing.demand    && demandParts) existing.demand  = demandParts;
+        if (!existing.about     && aboutParts)  existing.about   = aboutParts;
+        if (!existing.process   && processParts) existing.process = processParts;
+        updated++;
+      } else {
+        db.instructors.push({
+          id: 'ins_' + uid(),
+          name, email, phone, sourceUrl, type,
+          city: '', status: '', about: aboutParts,
+          demand: demandParts, process: processParts,
+          pipeline: 'Reagoval', source: 'Dotazník',
+          lastContact: new Date().toLocaleDateString('cs-CZ'),
+          nextAction: 'Naplánovat konzultaci s Adelou',
+        });
+        added++;
+      }
+    });
+
+    save(db);
+    renderInstructorsKeepSearch();
+    alert(`✅ Hotovo: ${added} nových lektorů přidáno, ${updated} aktualizováno.`);
+
+  } catch(e) {
+    alert('❌ Chyba: ' + e.message);
+  } finally {
+    if (btn) { btn.textContent = '⬇️ Sync formulář'; btn.disabled = false; }
+  }
 }
 
 function quickPipelineAdvance(id) {
