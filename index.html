@@ -2583,7 +2583,7 @@ function renderTripDetail() {
 
   const participantsHtml = (trip.participants || []).map((p, idx) => `
     <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : p.pendingReview ? 'participant-pending' : ''}">
-      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px;border:none;background:transparent;outline:none;padding:6px 4px;font-size:inherit;color:inherit;cursor:default${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}" onfocus="this.style.cursor='text';this.style.background='#f0f7f7';this.style.borderRadius='6px'" onblur="this.style.cursor='default';this.style.background='transparent'">`}</td>
+      <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px;border:none;background:transparent;outline:none;padding:6px 4px;font-size:inherit;color:inherit;cursor:default${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}" onfocus="this.style.cursor='text';this.style.background='#f0f7f7';this.style.borderRadius='6px'" onblur="this.style.cursor='default';this.style.background='transparent';autofillParticipantFromClient('${trip.id}',${idx},this.value)">`}</td>
       <td style="position:relative">
         <div style="position:relative">
           <input type="text" value="${(p.notes||'').replace(/"/g,'&quot;')}"
@@ -2909,6 +2909,33 @@ function addParticipant(tripId) {
   if (!trip.participants) trip.participants = [];
   trip.participants.push({ id: uid(), name: '', birthDate: '', phone: '', email: '', contractSent: false, contractSigned: false, flightBought: false, firstPayment: false, fullPayment: false, insurance: false, insuranceSent: false, isSingle: false });
   save(db); renderTripDetail();
+}
+
+function autofillParticipantFromClient(tripId, idx, name) {
+  if (!name || name.trim().length < 2) return;
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  const p = trip.participants[idx];
+
+  // Už má data — nepřepisuj
+  if (p.phone || p.email || p.birthDate) return;
+
+  // Hledej v manualClients podle jména
+  const normName = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+  const q = normName(name);
+  const client = (db.manualClients||[]).find(c => normName(c.name) === q);
+  if (!client) return;
+
+  // Předvyplň chybějící pole
+  if (!p.phone     && client.phone)     p.phone     = client.phone;
+  if (!p.email     && client.email)     p.email     = client.email;
+  if (!p.birthDate && client.birthDate) p.birthDate = client.birthDate;
+  if (!p.city      && client.city)      p.city      = client.city;
+  if (!p.passport  && client.passport)  p.passport  = client.passport;
+  if (!p.nationality && client.nationality) p.nationality = client.nationality;
+
+  save(db);
+  renderTripDetail();
 }
 
 function updateParticipant(tripId, idx, field, val) {
@@ -3599,15 +3626,32 @@ async function syncPush() {
 // Pomocná funkce pro matching názvu cesty — přesný nebo Levenshtein 80%+
 function tripNameMatch(tripName, formTripName) {
   if (!tripName || !formTripName) return false;
-  const a = tripName.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
-  const b = formTripName.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
+  const norm = s => s.toLowerCase().trim().replace(/[-–—]/g, '-').replace(/\s+/g, ' ');
+  const a = norm(tripName);
+  const b = norm(formTripName);
   if (a === b) return true;
-  // Similarity: počet shodných znaků / délka delšího řetězce
+
+  // Pokud je název cesty v aplikaci krátký (interní název jako "AZORY fams"),
+  // zkus jestli formulářový název obsahuje klíčová slova z názvu cesty
+  // Rozdělíme na slova a zkontrolujeme kolik % slov cesty je obsaženo ve formuláři
+  const aWords = a.split(/\s+/).filter(w => w.length > 3);
+  const bWords = b.split(/\s+/).filter(w => w.length > 3);
+  if (aWords.length > 0) {
+    const matchCount = aWords.filter(w => b.includes(w)).length;
+    if (matchCount / aWords.length >= 0.75) return true;
+  }
+  if (bWords.length > 0) {
+    const matchCount = bWords.filter(w => a.includes(w)).length;
+    if (matchCount / bWords.length >= 0.75) return true;
+  }
+
+  // Similarity: Levenshtein — jen pro podobně dlouhé řetězce
   function similarity(s1, s2) {
     const longer = s1.length > s2.length ? s1 : s2;
     const shorter = s1.length > s2.length ? s2 : s1;
     if (longer.length === 0) return 1.0;
-    // Levenshtein distance
+    // Přeskoč pokud je jeden více než 3x delší — Levenshtein pak nebude spolehlivý
+    if (longer.length > shorter.length * 3) return 0;
     const costs = [];
     for (let i = 0; i <= longer.length; i++) {
       let lastVal = i;
@@ -3790,8 +3834,17 @@ async function syncPull() {
             });
             trip.totalPersons = trip.participants.length;
             tripAssigned++;
+            console.log('[Sync] ✅ Přiřazen:', fc.name, '→', trip.name);
+          } else {
+            console.log('[Sync] ⚠️ Už v cestě:', fc.name, '→', trip.name);
           }
+        } else {
+          // Loguj detailně proč matching selhal
+          console.warn('[Sync] ❌ Cesta nenalezena pro:', fc.name, '| tripName z formuláře:', JSON.stringify(fc.tripName));
+          console.warn('[Sync] Dostupné cesty:', db.trips.map(t => JSON.stringify(t.name)).join(', '));
         }
+      } else {
+        console.log('[Sync] ℹ️ Bez cesty (tripName prázdný):', fc.name);
       }
     });
 
