@@ -2402,17 +2402,17 @@ function renderInstructors() {
       </div>
       <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
         ${PIPELINE_STAGES.map(s => `
-          <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:${s.bg};border:1.5px solid ${s.color}33;border-radius:20px;cursor:pointer" onclick="document.getElementById('instrSearch').value='${s.key}';filterInstructorsOnly('${s.key}')">
+          <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;background:${s.bg};border:1.5px solid ${s.color}33;border-radius:20px;cursor:pointer" onclick="filterInstrByPipeline('${s.key}')">
             <span style="font-size:12px;font-weight:700;color:${s.color}">${pipelineCounts[s.key]||0}</span>
             <span style="font-size:11px;color:${s.color};white-space:nowrap">${s.label}</span>
           </div>`).join('')}
       </div>
       <div id="instrGridContainer"></div>
     </div>`;
-  renderInstrGrid(filter);
+  renderInstrGrid(filter, null);
 }
 
-function renderInstrGrid(filter) {
+function renderInstrGrid(filter, pipelineFilter) {
   const container = document.getElementById('instrGridContainer');
   if (!container) return;
   const instructors = getInstructors();
@@ -2439,9 +2439,10 @@ function renderInstrGrid(filter) {
   });
   const statusColor = { 'PRODEJ':'#03989E','rezervace':'#03989E','Čekám':'#b8860b','STORNO':'#e53935','Neposlané':'#999' };
   const getStatusColor = s => { for (const [k,v] of Object.entries(statusColor)) { if (s&&s.includes(k)) return v; } return '#666'; };
-  const filtered = instructors.filter(ins =>
-    !q || ins.name.toLowerCase().includes(q) || (ins.city||'').toLowerCase().includes(q) || (ins.status||'').toLowerCase().includes(q)
-  );
+  const filtered = instructors.filter(ins => {
+    if (pipelineFilter) return (ins.pipeline||'Nalezen') === pipelineFilter;
+    return !q || ins.name.toLowerCase().includes(q) || (ins.city||'').toLowerCase().includes(q) || (ins.status||'').toLowerCase().includes(q) || (ins.pipeline||'').toLowerCase().includes(q);
+  });
   if (!filtered.length) {
     container.innerHTML = `<div class="empty-state"><div class="es-icon">🎓</div><h3>Žádní lektoři</h3></div>`;
     return;
@@ -2541,7 +2542,14 @@ function hideInstrTooltip(el) {
 }
 
 function filterInstructorsOnly(val) {
-  renderInstrGrid(val);
+  renderInstrGrid(val, null);
+}
+
+function filterInstrByPipeline(pipelineKey) {
+  // Nastav search na prázdno a filtruj podle pipeline
+  const inp = document.getElementById('instrSearch');
+  if (inp) inp.value = '';
+  renderInstrGrid('', pipelineKey);
 }
 
 function renderInstructorsKeepSearch() {
