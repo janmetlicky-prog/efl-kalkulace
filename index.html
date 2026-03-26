@@ -1029,7 +1029,7 @@
           <option value="Osloven">📧 Osloven</option>
           <option value="Reagoval">💬 Reagoval</option>
           <option value="Dotazník">📋 Dotazník odeslán</option>
-          <option value="Calendly">📅 Calendly — čeká na schůzku</option>
+          <option value="Calendly">📅 Call — čeká na schůzku</option>
           <option value="Meeting">🎯 Meeting proběhl</option>
           <option value="Aktivní">✅ Aktivní spolupráce</option>
           <option value="Archiv">📦 Archiv</option>
@@ -2359,7 +2359,7 @@ const PIPELINE_STAGES = [
   { key: 'Osloven',   label: '📧 Osloven',   color: '#2563eb', bg: '#eff6ff' },
   { key: 'Reagoval',  label: '💬 Reagoval',  color: '#7c3aed', bg: '#f5f3ff' },
   { key: 'Dotazník',  label: '📋 Dotazník',  color: '#d97706', bg: '#fffbeb' },
-  { key: 'Calendly',  label: '📅 Calendly',  color: '#0891b2', bg: '#ecfeff' },
+  { key: 'Calendly',  label: '📅 Call',  color: '#0891b2', bg: '#ecfeff' },
   { key: 'Meeting',   label: '🎯 Meeting',   color: '#059669', bg: '#ecfdf5' },
   { key: 'Aktivní',   label: '✅ Aktivní',   color: '#03989e', bg: '#e0f4f5' },
   { key: 'Archiv',    label: '📦 Archiv',    color: '#9ca3af', bg: '#f9fafb' },
@@ -2452,6 +2452,7 @@ function renderInstrGrid(filter) {
       const stage = PIPELINE_STAGES.find(s => s.key === (ins.pipeline||'Nalezen')) || PIPELINE_STAGES[0];
       const subject = encodeURIComponent('Essence for Life — spolupráce na jógových retreatechú');
       const body = encodeURIComponent(OUTREACH_EMAIL_TEMPLATE);
+      const sl = ins.score != null ? (ins.score >= 75 ? { emoji:'🟢', color:'#059669', bg:'#ecfdf5' } : ins.score >= 45 ? { emoji:'🟡', color:'#d97706', bg:'#fffbeb' } : { emoji:'🔴', color:'#dc2626', bg:'#fef2f2' }) : null;
       return `
       <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:18px 20px;transition:box-shadow .2s;display:flex;flex-direction:column;gap:8px" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
@@ -2460,6 +2461,7 @@ function renderInstrGrid(filter) {
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px">
               ${ins.type ? `<span style="font-size:10px;font-weight:600;background:#e0f4f5;color:var(--teal);padding:2px 7px;border-radius:10px">${esc(ins.type)}</span>` : ''}
               ${ins.city ? `<span style="font-size:11px;color:var(--text-muted)">📍 ${esc(ins.city)}</span>` : ''}
+              ${sl ? `<span style="font-size:11px;font-weight:700;color:${sl.color};background:${sl.bg};padding:2px 8px;border-radius:10px;border:1px solid ${sl.color}33">${sl.emoji} ${ins.score}/100</span>` : ''}
             </div>
           </div>
           <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;margin-left:8px">
@@ -2487,7 +2489,7 @@ function renderInstrGrid(filter) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
           ${ins.email ? `<a href="mailto:${ins.email}?subject=${subject}&body=${body}" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#2563eb;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #bfdbfe">📧 Oslovit</a>` : ''}
           <button onclick="copyToClipboard('https://forms.gle/w8qoU9CKoyQAqhbSA','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
-          <button onclick="copyToClipboard('https://calendly.com/adela-efl','Calendly link zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Calendly</button>
+          <button onclick="copyToClipboard('https://cal.eu/essence-for-life/konzultace-s-adelou','Cal.com link zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>
           <button onclick="quickPipelineAdvance('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
         </div>
       </div>`;
@@ -2662,23 +2664,85 @@ async function syncPullInstructors() {
     const headers = parseCSVLine(lines[0]).map(h => h.replace(/"/g,'').trim().toLowerCase());
     const hc = kws => { for (const kw of kws) { const i = headers.findIndex(h => h.includes(kw)); if (i >= 0) return i; } return -1; };
 
-    const colName    = hc(['jméno a příjmení','jméno']);
-    const colEmail   = hc(['e-mail','email']);
-    const colPhone   = hc(['telefon']);
-    const colWeb     = hc(['web nebo sociální','web']);
-    const colType    = hc(['obor nebo hlavní zaměření','obor']);
-    const colDest    = hc(['preferovanou destinaci','destinaci']);
-    const colEnv     = hc(['typ prostředí']);
-    const colCount   = hc(['počet účastníků']);
-    const colDate    = hc(['termín pobytu']);
-    const colPrice   = hc(['cenové hladině']);
-    const colSupport = hc(['typ podpory']);
-    const colGuide   = hc(['vedení','podpory nebo vedení']);
-    const colRetChal = hc(['nejtěžší nebo co vám chybělo']);
-    const colExp     = hc(['zkušenost máte s prací']);
-    const colWhy     = hc(['vede k tomu pořádat']);
-    const colResult  = hc(['zážitek by si měli']);
-    const colExtra   = hc(['cokoliv dalšího']);
+    const colName     = hc(['jméno a příjmení','jméno']);
+    const colEmail    = hc(['e-mail','email']);
+    const colPhone    = hc(['telefon']);
+    const colWeb      = hc(['web nebo sociální','web']);
+    const colType     = hc(['obor nebo hlavní zaměření','obor']);
+    const colDest     = hc(['preferovanou destinaci','destinaci']);
+    const colEnv      = hc(['typ prostředí']);
+    const colCount    = hc(['počet účastníků']);
+    const colDate     = hc(['termín pobytu']);
+    const colPrice    = hc(['cenové hladině']);
+    const colSupport  = hc(['typ podpory']);
+    const colGuide    = hc(['vedení','podpory nebo vedení']);
+    const colRetChal  = hc(['nejtěžší nebo co vám chybělo']);
+    const colExp      = hc(['zkušenost máte s prací']);
+    const colWhy      = hc(['vede k tomu pořádat']);
+    const colResult   = hc(['zážitek by si měli']);
+    const colExtra    = hc(['cokoliv dalšího']);
+    const colReadiness= hc(['připravenost k organizaci','připravenost']);
+    const colHadRetrt = hc(['organizoval','organizoval/a jste už']);
+    const colBestWorst= hc(['bavilo nejvíc']);
+
+    // ── Scoring funkce ──────────────────────────────
+    function calcScore(cols) {
+      let score = 0;
+
+      // 1. Zkušenosti se skupinami (0–25 bodů)
+      const exp = colExp >= 0 ? (cols[colExp]||'').toLowerCase() : '';
+      if (exp.includes('10') || exp.includes('víc') || exp.includes('15') || exp.includes('20')) score += 25;
+      else if (exp.includes('5') || exp.includes('6') || exp.includes('7') || exp.includes('8') || exp.includes('9')) score += 18;
+      else if (exp.includes('3') || exp.includes('4')) score += 12;
+      else if (exp.includes('1') || exp.includes('2') || exp.includes('rok')) score += 6;
+      else if (exp.length > 5) score += 3;
+
+      // 2. Organizoval už retreat (0–15 bodů)
+      const hadRet = colHadRetrt >= 0 ? (cols[colHadRetrt]||'').toLowerCase() : '';
+      if (hadRet.includes('ano') || hadRet.includes('yes') || hadRet.includes('několikrát') || hadRet.includes('více')) score += 15;
+      else if (hadRet.includes('jednou') || hadRet.includes('1x') || hadRet.includes('jedno')) score += 8;
+
+      // 3. Připravenost — přímé hodnocení z dotazníku (0–20 bodů)
+      const readiness = colReadiness >= 0 ? (cols[colReadiness]||'').toLowerCase() : '';
+      if (readiness.includes('velmi') || readiness.includes('připraven') || readiness.includes('5') || readiness.includes('plně')) score += 20;
+      else if (readiness.includes('4') || readiness.includes('spíše ano') || readiness.includes('dobře')) score += 14;
+      else if (readiness.includes('3') || readiness.includes('středně') || readiness.includes('částečně')) score += 8;
+      else if (readiness.includes('2') || readiness.includes('málo') || readiness.includes('spíše ne')) score += 3;
+
+      // 4. Konkrétní destinace (0–10 bodů)
+      const dest = colDest >= 0 ? (cols[colDest]||'').trim() : '';
+      if (dest.length > 3 && !dest.toLowerCase().includes('nevím') && !dest.toLowerCase().includes('nemám')) score += 10;
+      else if (dest.length > 0) score += 4;
+
+      // 5. Konkrétní termín (0–10 bodů)
+      const date = colDate >= 0 ? (cols[colDate]||'').trim() : '';
+      if (date.length > 3 && !date.toLowerCase().includes('nevím') && !date.toLowerCase().includes('zatím')) score += 10;
+      else if (date.length > 0) score += 4;
+
+      // 6. Počet účastníků > 8 (0–10 bodů)
+      const cnt = colCount >= 0 ? (cols[colCount]||'') : '';
+      const cntNum = parseInt(cnt.replace(/[^0-9]/g,'')) || 0;
+      if (cntNum >= 12) score += 10;
+      else if (cntNum >= 8) score += 7;
+      else if (cntNum >= 5) score += 4;
+      else if (cntNum > 0) score += 2;
+
+      // 7. Cenová představa (0–5 bodů)
+      const price = colPrice >= 0 ? (cols[colPrice]||'').trim() : '';
+      if (price.length > 3 && !price.toLowerCase().includes('nevím') && !price.toLowerCase().includes('nemám')) score += 5;
+
+      // 8. Má web/profil (0–5 bodů)
+      const web = colWeb >= 0 ? (cols[colWeb]||'').trim() : '';
+      if (web.length > 5) score += 5;
+
+      return Math.min(score, 100);
+    }
+
+    function scoreLabel(score) {
+      if (score >= 75) return { emoji: '🟢', label: 'Vysoký potenciál', color: '#059669', bg: '#ecfdf5' };
+      if (score >= 45) return { emoji: '🟡', label: 'Střední potenciál', color: '#d97706', bg: '#fffbeb' };
+      return { emoji: '🔴', label: 'Začátečník', color: '#dc2626', bg: '#fef2f2' };
+    }
 
     if (!db.instructors) db.instructors = [];
     let added = 0; let updated = 0;
@@ -2693,8 +2757,9 @@ async function syncPullInstructors() {
       const phone     = colPhone  >= 0 ? cols[colPhone].replace(/"/g,'').trim() : '';
       const sourceUrl = colWeb    >= 0 ? cols[colWeb].replace(/"/g,'').trim() : '';
       const type      = colType   >= 0 ? cols[colType].replace(/"/g,'').trim().substring(0,60) : '';
+      const score     = calcScore(cols);
+      const sl        = scoreLabel(score);
 
-      // Demand — sloučení destinace, prostředí, počet, termín, cena
       const demandParts = [
         colDest  >= 0 && cols[colDest]  ? 'Destinace: ' + cols[colDest].replace(/"/g,'').trim() : '',
         colEnv   >= 0 && cols[colEnv]   ? 'Prostředí: ' + cols[colEnv].replace(/"/g,'').trim() : '',
@@ -2703,7 +2768,6 @@ async function syncPullInstructors() {
         colPrice >= 0 && cols[colPrice] ? 'Cena: '      + cols[colPrice].replace(/"/g,'').trim() : '',
       ].filter(Boolean).join(' | ');
 
-      // About — zkušenosti, motivace, výsledek
       const aboutParts = [
         colExp    >= 0 && cols[colExp]    ? 'Zkušenosti: '  + cols[colExp].replace(/"/g,'').trim() : '',
         colWhy    >= 0 && cols[colWhy]    ? 'Motivace: '    + cols[colWhy].replace(/"/g,'').trim() : '',
@@ -2711,38 +2775,42 @@ async function syncPullInstructors() {
         colExtra  >= 0 && cols[colExtra]  ? 'Poznámka: '    + cols[colExtra].replace(/"/g,'').trim() : '',
       ].filter(Boolean).join('\n');
 
-      // Process — podpora, vedení, co bylo těžké
       const processParts = [
         colSupport >= 0 && cols[colSupport] ? 'Hledá podporu: ' + cols[colSupport].replace(/"/g,'').trim() : '',
         colGuide   >= 0 && cols[colGuide]   ? 'Vedení: '        + cols[colGuide].replace(/"/g,'').trim() : '',
         colRetChal >= 0 && cols[colRetChal] ? 'Výzvy: '         + cols[colRetChal].replace(/"/g,'').trim() : '',
       ].filter(Boolean).join('\n');
 
-      // Existující lektor?
       const existing = db.instructors.find(i => normN(i.name) === normN(name));
       if (existing) {
-        // Doplň chybějící pole
-        if (!existing.email     && email)     existing.email     = email;
-        if (!existing.phone     && phone)     existing.phone     = phone;
-        if (!existing.sourceUrl && sourceUrl) existing.sourceUrl = sourceUrl;
-        if (!existing.type      && type)      existing.type      = type;
-        if (!existing.demand    && demandParts) existing.demand  = demandParts;
-        if (!existing.about     && aboutParts)  existing.about   = aboutParts;
-        if (!existing.process   && processParts) existing.process = processParts;
+        if (!existing.email     && email)       existing.email     = email;
+        if (!existing.phone     && phone)       existing.phone     = phone;
+        if (!existing.sourceUrl && sourceUrl)   existing.sourceUrl = sourceUrl;
+        if (!existing.type      && type)        existing.type      = type;
+        if (!existing.demand    && demandParts) existing.demand    = demandParts;
+        if (!existing.about     && aboutParts)  existing.about     = aboutParts;
+        if (!existing.process   && processParts) existing.process  = processParts;
+        // Vždy přepiš score
+        existing.score = score;
+        existing.scoreLabel = sl.label;
         updated++;
       } else {
         db.instructors.push({
           id: 'ins_' + uid(),
           name, email, phone, sourceUrl, type,
-          city: '', status: '', about: aboutParts,
+          city: '', status: sl.label, about: aboutParts,
           demand: demandParts, process: processParts,
           pipeline: 'Reagoval', source: 'Dotazník',
           lastContact: new Date().toLocaleDateString('cs-CZ'),
           nextAction: 'Naplánovat konzultaci s Adelou',
+          score, scoreLabel: sl.label,
         });
         added++;
       }
     });
+
+    // Seřaď lektory podle score sestupně
+    db.instructors.sort((a, b) => (b.score||0) - (a.score||0));
 
     save(db);
     renderInstructorsKeepSearch();
