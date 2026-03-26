@@ -2963,7 +2963,7 @@ async function runDiscovery() {
 
   const prompt = `Jsi asistent cestovní agentury Essence for Life. Tvůj úkol je najít lektory oboru "${type}" z regionu "${region}" pro možnou spolupráci na zahraničních retreatách.
 
-Prohledej web a najdi 8–10 skutečných lektorů. Pro každého zjisti veřejně dostupné informace.
+Prohledej web a najdi 5–6 skutečných lektorů. Pro každého zjisti veřejně dostupné informace.
 
 DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádné vysvětlení. Pouze surový JSON.
 
@@ -2990,8 +2990,8 @@ Pokud email není veřejný, použij prázdný string. Najdi skutečné, existuj
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 1500,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content: prompt }]
       })
