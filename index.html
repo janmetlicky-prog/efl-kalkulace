@@ -641,6 +641,54 @@
   </div>
 </div>
 
+<!-- MODAL: AI Discovery -->
+<div class="modal-overlay hidden" id="discoveryModal">
+  <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto">
+    <h2>🔍 Hledat lektory na internetu</h2>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Claude prohledá web a najde lektory podle tvých parametrů. Výsledky přidáš do CRM jedním kliknutím.</p>
+
+    <div class="form-grid" style="margin-bottom:16px">
+      <div class="form-group">
+        <label>Typ lektora / obor</label>
+        <select id="dscType">
+          <option value="jóga">Jóga</option>
+          <option value="fitness">Fitness</option>
+          <option value="chi kung">Chi kung</option>
+          <option value="pilates">Pilates</option>
+          <option value="meditace">Meditace</option>
+          <option value="tanec">Tanec</option>
+          <option value="wellness">Wellness</option>
+          <option value="jóga, fitness, wellness">Vše dohromady</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Region / jazyk</label>
+        <select id="dscRegion">
+          <option value="Česká republika">Česká republika</option>
+          <option value="Slovensko">Slovensko</option>
+          <option value="ČR a Slovensko">ČR a Slovensko</option>
+          <option value="střední Evropa">Střední Evropa</option>
+        </select>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Anthropic API klíč</label>
+        <input type="password" id="dscApiKey" placeholder="sk-ant-..." style="font-family:monospace"
+          oninput="localStorage.setItem('efl_anthropic_key',this.value)">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Klíč se uloží lokálně v prohlížeči. Najdeš ho na console.anthropic.com → API Keys.</div>
+      </div>
+    </div>
+
+    <button id="dscRunBtn" onclick="runDiscovery()" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:16px">🔍 Spustit hledání</button>
+
+    <div id="dscStatus" style="font-size:13px;color:var(--text-muted);min-height:20px;margin-bottom:12px"></div>
+    <div id="dscResults"></div>
+
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="closeDiscoveryModal()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /app -->
 
 <!-- MODAL: New/Edit Trip -->
@@ -2398,6 +2446,7 @@ function renderInstructors() {
           </div>
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
           <button class="btn btn-secondary" onclick="syncPullInstructors()" title="Stáhnout nové lektory z Google Forms dotazníku">⬇️ Sync formulář</button>
+          <button style="padding:8px 14px;border-radius:8px;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;background:linear-gradient(135deg,#026d72,#03989e);color:#fff;display:flex;align-items:center;gap:6px" onclick="openDiscoveryModal()">🔍 Hledat lektory</button>
         </div>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
@@ -2862,6 +2911,161 @@ async function syncPullInstructors() {
   } finally {
     if (btn) { btn.textContent = '⬇️ Sync formulář'; btn.disabled = false; }
   }
+}
+
+// ── AI Discovery ────────────────────────────────
+function openDiscoveryModal() {
+  const saved = localStorage.getItem('efl_anthropic_key') || '';
+  const inp = document.getElementById('dscApiKey');
+  if (inp) inp.value = saved;
+  document.getElementById('dscResults').innerHTML = '';
+  document.getElementById('dscStatus').textContent = '';
+  document.getElementById('discoveryModal').classList.remove('hidden');
+}
+
+function closeDiscoveryModal() {
+  document.getElementById('discoveryModal').classList.add('hidden');
+}
+
+async function runDiscovery() {
+  const apiKey = document.getElementById('dscApiKey').value.trim();
+  if (!apiKey) { alert('Zadej Anthropic API klíč.'); return; }
+  localStorage.setItem('efl_anthropic_key', apiKey);
+
+  const type   = document.getElementById('dscType').value;
+  const region = document.getElementById('dscRegion').value;
+
+  const btn = document.getElementById('dscRunBtn');
+  const status = document.getElementById('dscStatus');
+  const results = document.getElementById('dscResults');
+
+  btn.disabled = true; btn.textContent = '⏳ Hledám...';
+  status.textContent = 'Claude prohledává web — může to trvat 20–30 sekund...';
+  results.innerHTML = '';
+
+  const prompt = `Jsi asistent cestovní agentury Essence for Life (essenceforlife.cz), která organizuje zahraniční jógové a wellness retreaty.
+
+Tvůj úkol: najdi 8–12 lektorů oboru "${type}" z regionu "${region}", kteří by mohli mít zájem spolupracovat na zahraničním retreatu pro jejich klienty.
+
+Pro každého lektora najdi:
+- Celé jméno
+- Web nebo Instagram nebo Facebook profil (URL)
+- Email (pokud je veřejně dostupný, jinak prázdné)
+- Město/region
+- Stručný popis (1 věta — co dělají)
+
+Vrať odpověď POUZE jako JSON array, bez jakéhokoliv textu před nebo za. Formát:
+[
+  {
+    "name": "Jana Nováková",
+    "sourceUrl": "https://instagram.com/jana.yoga",
+    "email": "jana@email.cz",
+    "city": "Praha",
+    "type": "${type}",
+    "about": "Lektorka hatha jógy s 8 lety zkušeností, vede kurzy v Praze."
+  }
+]
+
+Hledej skutečné, existující lektory. Pokud email není veřejný, nech pole prázdné.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'interleaved-thinking-2025-05-14'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'HTTP ' + res.status);
+    }
+
+    const data = await res.json();
+
+    // Najdi text odpovědi
+    let text = '';
+    for (const block of (data.content || [])) {
+      if (block.type === 'text') text += block.text;
+    }
+
+    // Parsuj JSON
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+    if (!jsonMatch) throw new Error('Claude nevrátil správný formát. Zkus znovu.');
+    const leads = JSON.parse(jsonMatch[0]);
+
+    if (!leads.length) { status.textContent = 'Nenalezeni žádní lektoři. Zkus jiné parametry.'; return; }
+
+    status.textContent = `✅ Nalezeno ${leads.length} lektorů — vyber které přidat do CRM:`;
+
+    results.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:8px;max-height:400px;overflow-y:auto;padding-right:4px">
+        ${leads.map((l, i) => `
+          <div id="dsc_card_${i}" style="background:#f8fffe;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
+            <input type="checkbox" id="dsc_chk_${i}" checked style="margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex-shrink:0">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:600;font-size:14px;color:var(--navy)">${esc(l.name||'')}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px">
+                ${l.city ? `📍 ${esc(l.city)}` : ''}
+                ${l.email ? ` · ✉️ ${esc(l.email)}` : ''}
+              </div>
+              ${l.sourceUrl ? `<a href="${esc(l.sourceUrl)}" target="_blank" style="font-size:11px;color:var(--teal)">🔗 ${esc(l.sourceUrl.substring(0,60))}${l.sourceUrl.length>60?'…':''}</a>` : ''}
+              ${l.about ? `<div style="font-size:12px;color:var(--text-muted);margin-top:4px">${esc(l.about)}</div>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px">
+        <button class="btn btn-primary" onclick="addDiscoveryLeads(${JSON.stringify(leads).replace(/"/g,'&quot;')})">✅ Přidat vybrané do CRM</button>
+        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=dsc_chk_]').forEach(c=>c.checked=true)">Vybrat vše</button>
+        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=dsc_chk_]').forEach(c=>c.checked=false)">Odznačit vše</button>
+      </div>`;
+
+  } catch(e) {
+    status.textContent = '❌ Chyba: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🔍 Spustit hledání';
+  }
+}
+
+function addDiscoveryLeads(leads) {
+  const checkboxes = document.querySelectorAll('[id^=dsc_chk_]');
+  const selected = leads.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+  if (!selected.length) { alert('Nic není vybráno.'); return; }
+
+  if (!db.instructors) db.instructors = [];
+  const normN = s => (s||'').trim().replace(/\s+/g,' ').toLowerCase();
+  let added = 0;
+
+  selected.forEach(l => {
+    if (!l.name || l.name.length < 2) return;
+    const exists = db.instructors.find(i => normN(i.name) === normN(l.name));
+    if (exists) return;
+    db.instructors.push({
+      id: 'ins_' + uid(),
+      name: l.name, email: l.email||'', phone: '',
+      city: l.city||'', type: l.type||'',
+      sourceUrl: l.sourceUrl||'', about: l.about||'',
+      demand: '', process: '', status: '',
+      pipeline: 'Nalezen', source: 'AI Discovery',
+      lastContact: '', nextAction: 'Oslovit',
+      score: null,
+    });
+    added++;
+  });
+
+  save(db);
+  closeDiscoveryModal();
+  renderInstructorsKeepSearch();
+  alert(`✅ Přidáno ${added} nových lektorů do CRM.`);
 }
 
 function quickPipelineAdvance(id) {
