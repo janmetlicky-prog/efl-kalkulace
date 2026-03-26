@@ -2391,9 +2391,9 @@ function renderInstructors() {
             style="padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:190px;outline:none;transition:border .2s"
             onfocus="this.style.borderColor='var(--teal)'" onblur="this.style.borderColor='var(--border)'">
           <div style="display:flex;border:1.5px solid var(--border);border-radius:8px;overflow:hidden">
-            <button onclick="instrView='cards';renderInstructors()" id="btnViewCards"
+            <button onclick="setInstrView('cards')" id="btnViewCards"
               style="padding:7px 12px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${instrView==='cards'?'var(--teal)':'#fff'};color:${instrView==='cards'?'#fff':'var(--text-muted)'}">⊞ Karty</button>
-            <button onclick="instrView='pipeline';renderInstructors()" id="btnViewPipeline"
+            <button onclick="setInstrView('pipeline')" id="btnViewPipeline"
               style="padding:7px 12px;border:none;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;background:${instrView==='pipeline'?'var(--teal)':'#fff'};color:${instrView==='pipeline'?'#fff':'var(--text-muted)'}">⟶ Pipeline</button>
           </div>
           <button class="btn btn-primary" onclick="openInstructorModal()">+ Přidat lektora</button>
@@ -2445,6 +2445,34 @@ function renderInstrGrid(filter, pipelineFilter) {
   });
   if (!filtered.length) {
     container.innerHTML = `<div class="empty-state"><div class="es-icon">🎓</div><h3>Žádní lektoři</h3></div>`;
+    return;
+  }
+
+  // Pipeline kanban view
+  if (instrView === 'pipeline') {
+    container.innerHTML = `<div style="display:flex;gap:12px;overflow-x:auto;padding-bottom:12px;align-items:flex-start">
+      ${PIPELINE_STAGES.filter(s => s.key !== 'Archiv').map(stage => {
+        const stageIns = filtered.filter(i => (i.pipeline||'Nalezen') === stage.key);
+        return `
+        <div style="min-width:220px;max-width:240px;flex-shrink:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:7px 12px;border-radius:8px 8px 0 0;background:${stage.bg};border:1.5px solid ${stage.color}33;border-bottom:none">
+            <span style="font-size:12px;font-weight:700;color:${stage.color}">${stage.label}</span>
+            <span style="font-size:11px;font-weight:600;background:${stage.color}22;color:${stage.color};padding:1px 7px;border-radius:10px">${stageIns.length}</span>
+          </div>
+          <div style="border:1.5px solid ${stage.color}33;border-top:none;border-radius:0 0 8px 8px;min-height:60px;padding:6px;display:flex;flex-direction:column;gap:6px">
+            ${stageIns.length ? stageIns.map(ins => {
+              const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706'} : {emoji:'🔴',color:'#dc2626'}) : null;
+              return `<div onclick="openInstructorModal('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+                <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}</div>
+                ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
+                ${sl ? `<div style="font-size:11px;color:${sl.color};margin-top:2px">${sl.emoji} ${ins.score}/100</div>` : ''}
+                ${ins.nextAction ? `<div style="font-size:10px;color:#b8860b;margin-top:3px;border-top:1px solid var(--border);padding-top:3px">→ ${esc(ins.nextAction.substring(0,40))}</div>` : ''}
+              </div>`;
+            }).join('') : `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0">Prázdné</div>`}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`;
     return;
   }
   container.innerHTML = `<div id="instrGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(380px,1fr));gap:16px">
@@ -2539,6 +2567,11 @@ function showInstrTooltip(el, text) {
 
 function hideInstrTooltip(el) {
   el.querySelectorAll('.note-tooltip').forEach(t => t.remove());
+}
+
+function setInstrView(view) {
+  instrView = view;
+  renderInstructors();
 }
 
 function filterInstructorsOnly(val) {
