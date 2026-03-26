@@ -329,22 +329,40 @@
   .cost-table .flight-mark { color: var(--terracotta); font-weight: 600; }
 
   .cost-totals {
-    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;
     margin-top: 14px;
   }
   .cost-total-box {
-    padding: 14px 16px; border-radius: 10px; text-align: center;
+    border-radius: 10px; overflow: hidden;
   }
-  .cost-total-box.ct-costs { background: var(--warning-bg); }
-  .cost-total-box.ct-revenue { background: var(--success-bg); }
-  .cost-total-box.ct-profit { background: rgba(30,58,74,.08); }
-  .cost-total-box.ct-profit-pp { background: rgba(45,74,62,.07); border: 1.5px solid rgba(201,169,110,.3); }
-  .cost-total-box .ct-label { font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
-  .cost-total-box .ct-value { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 700; }
+  .cost-total-box.ct-costs { background: var(--warning-bg); border: 1px solid rgba(154,101,32,.15); }
+  .cost-total-box.ct-revenue { background: var(--success-bg); border: 1px solid rgba(3,152,158,.15); }
+  .cost-total-box.ct-profit { background: rgba(45,74,62,.07); border: 1.5px solid rgba(201,169,110,.3); }
+  /* box header */
+  .cost-total-box .ct-box-header {
+    font-size: 10px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase;
+    text-align: center; padding: 6px 10px; margin-bottom: 0;
+  }
+  .ct-costs .ct-box-header { background: var(--warning); color: #fff; }
+  .ct-revenue .ct-box-header { background: var(--teal); color: #fff; }
+  .ct-profit .ct-box-header { background: #2e7d52; color: #fff; }
+  /* split halves */
+  .ct-split {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0;
+  }
+  .ct-half {
+    padding: 12px 14px; text-align: center;
+  }
+  .ct-half + .ct-half {
+    border-left: 1px dashed rgba(0,0,0,.1);
+  }
+  .ct-half .ct-label { font-size: 9px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+  .ct-half .ct-value { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 700; }
   .ct-costs .ct-value { color: var(--warning); }
   .ct-revenue .ct-value { color: var(--success); }
-  .ct-profit .ct-value { color: var(--navy); }
-  .ct-profit-pp .ct-value { color: var(--navy); }
+  .ct-profit .ct-value { color: #1a7a3a; }
+  .ct-half .ct-detail1 { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+  .ct-half .ct-detail2 { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
 
   /* PARTICIPANTS */
   .participants-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
@@ -3275,29 +3293,59 @@ function renderTripDetail() {
       </div>
 
       <div class="cost-totals admin-only" style="margin-top:16px">
+        <!-- NÁKLADY -->
         <div class="cost-total-box ct-costs">
-          <div class="ct-label">Náklady celkem</div>
-          <div class="ct-value">${fmt(calc.totalCosts)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${fmt(calc.costPP)}/os × ${calc.totalPersons} os.</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">kal. na min. ${calc.minPersons} os.: ${fmt(calc.totalCostForMin)}</div>
+          <div class="ct-box-header">Náklady</div>
+          <div class="ct-split">
+            <div class="ct-half">
+              <div class="ct-label">Celkem</div>
+              <div class="ct-value">${fmt(calc.totalCosts)}</div>
+              <div class="ct-detail1">${fmt(calc.costPP)}/os × ${calc.totalPersons} os.</div>
+              <div class="ct-detail2">min. ${calc.minPersons} os.: ${fmt(calc.totalCostForMin)}</div>
+            </div>
+            <div class="ct-half">
+              <div class="ct-label">Na osobu</div>
+              <div class="ct-value">${fmt(calc.costPP)}</div>
+              <div class="ct-detail1">bez letenky: ${fmt(calc.costWithoutFlightPP)}</div>
+              <div class="ct-detail2">&nbsp;</div>
+            </div>
+          </div>
         </div>
+        <!-- OBRAT -->
         <div class="cost-total-box ct-revenue">
-          <div class="ct-label">Obrat celkem</div>
-          <div class="ct-value">${fmt(calc.revenue)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">${fmt(calc.sellingPP)}/os × ${calc.totalPersons} os.</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">bez letenky: ${fmt(calc.packagePP)}/os</div>
+          <div class="ct-box-header">Obrat</div>
+          <div class="ct-split">
+            <div class="ct-half">
+              <div class="ct-label">Celkem</div>
+              <div class="ct-value">${fmt(calc.revenue)}</div>
+              <div class="ct-detail1">${fmt(calc.sellingPP)}/os × ${calc.totalPersons} os.</div>
+              <div class="ct-detail2">bez letenky: ${fmt(calc.packagePP)}/os</div>
+            </div>
+            <div class="ct-half">
+              <div class="ct-label">Na osobu</div>
+              <div class="ct-value">${fmt(calc.sellingPP)}</div>
+              <div class="ct-detail1">bal. bez let.: ${fmt(calc.packagePP)}</div>
+              <div class="ct-detail2">&nbsp;</div>
+            </div>
+          </div>
         </div>
+        <!-- ZISK -->
         <div class="cost-total-box ct-profit">
-          <div class="ct-label">Zisk celkem</div>
-          <div class="ct-value ${profitCls}">${fmt(calc.profit)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">naše provize: ${fmt(calc.essenceAmount)}</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">provize MP: ${fmt(calc.mpAmount)}</div>
-        </div>
-        <div class="cost-total-box ct-profit-pp">
-          <div class="ct-label">Zisk na osobu</div>
-          <div class="ct-value ${profitCls}">${fmt(calc.profitPP)}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:4px">zisk / ${calc.totalPersons} os.</div>
-          <div style="font-size:10px;color:var(--text-muted);margin-top:2px">provize MP/os: ${fmt(calc.mpPerPerson)}</div>
+          <div class="ct-box-header">Zisk</div>
+          <div class="ct-split">
+            <div class="ct-half">
+              <div class="ct-label">Celkem</div>
+              <div class="ct-value ${profitCls}">${fmt(calc.profit)}</div>
+              <div class="ct-detail1">naše provize: ${fmt(calc.essenceAmount)}</div>
+              <div class="ct-detail2">provize MP: ${fmt(calc.mpAmount)}</div>
+            </div>
+            <div class="ct-half">
+              <div class="ct-label">Na osobu</div>
+              <div class="ct-value ${profitCls}">${fmt(calc.profitPP)}</div>
+              <div class="ct-detail1">zisk / ${calc.totalPersons} os.</div>
+              <div class="ct-detail2">provize MP/os: ${fmt(calc.mpPerPerson)}</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
