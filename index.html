@@ -680,13 +680,34 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Region / jazyk</label>
+        <label>Kraj / region</label>
         <select id="dscRegion">
-          <option value="Česká republika">Česká republika</option>
-          <option value="Slovensko">Slovensko</option>
-          <option value="ČR a Slovensko">ČR a Slovensko</option>
-          <option value="střední Evropa">Střední Evropa</option>
+          <optgroup label="Česká republika">
+            <option value="Praha">Praha</option>
+            <option value="Středočeský kraj">Středočeský kraj</option>
+            <option value="Jihočeský kraj">Jihočeský kraj</option>
+            <option value="Plzeňský kraj">Plzeňský kraj</option>
+            <option value="Karlovarský kraj">Karlovarský kraj</option>
+            <option value="Ústecký kraj">Ústecký kraj</option>
+            <option value="Liberecký kraj">Liberecký kraj</option>
+            <option value="Královéhradecký kraj">Královéhradecký kraj</option>
+            <option value="Pardubický kraj">Pardubický kraj</option>
+            <option value="Vysočina">Vysočina</option>
+            <option value="Jihomoravský kraj">Jihomoravský kraj</option>
+            <option value="Zlínský kraj">Zlínský kraj</option>
+            <option value="Olomoucký kraj">Olomoucký kraj</option>
+            <option value="Moravskoslezský kraj">Moravskoslezský kraj</option>
+            <option value="celá Česká republika">Celá ČR</option>
+          </optgroup>
+          <optgroup label="Slovensko">
+            <option value="Bratislava">Bratislava</option>
+            <option value="celé Slovensko">Celé Slovensko</option>
+          </optgroup>
         </select>
+      </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>Upřesnění (volitelné)</label>
+        <input type="text" id="dscKeyword" placeholder="např. hatha jóga, vinyasa, pre/postnatální, senioři...">
       </div>
       <div class="form-group" style="grid-column:span 2">
         <label>Anthropic API klíč</label>
@@ -2950,8 +2971,10 @@ async function runDiscovery() {
   if (!apiKey) { alert('Zadej Anthropic API klíč.'); return; }
   localStorage.setItem('efl_anthropic_key', apiKey);
 
-  const type   = document.getElementById('dscType').value;
-  const region = document.getElementById('dscRegion').value;
+  const type    = document.getElementById('dscType').value;
+  const region  = document.getElementById('dscRegion').value;
+  const keyword = (document.getElementById('dscKeyword').value || '').trim();
+  const typeQuery = keyword ? `${type} (${keyword})` : type;
 
   const btn = document.getElementById('dscRunBtn');
   const status = document.getElementById('dscStatus');
@@ -2961,9 +2984,9 @@ async function runDiscovery() {
   status.textContent = 'Claude prohledává web — může to trvat 20–30 sekund...';
   results.innerHTML = '';
 
-  const prompt = `Jsi asistent cestovní agentury Essence for Life. Tvůj úkol je najít lektory oboru "${type}" z regionu "${region}" pro možnou spolupráci na zahraničních retreatách.
+  const prompt = `Jsi asistent cestovní agentury Essence for Life. Tvůj úkol je najít lektory oboru "${typeQuery}" z regionu "${region}" pro možnou spolupráci na zahraničních retreatách.
 
-Prohledej web a najdi 5–6 skutečných lektorů. Pro každého zjisti veřejně dostupné informace.
+Prohledej web a najdi 8–10 skutečných lektorů. Pro každého zjisti veřejně dostupné informace.
 
 DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádné vysvětlení. Pouze surový JSON.
 
