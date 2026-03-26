@@ -2961,18 +2961,12 @@ async function runDiscovery() {
   status.textContent = 'Claude prohledává web — může to trvat 20–30 sekund...';
   results.innerHTML = '';
 
-  const prompt = `Jsi asistent cestovní agentury Essence for Life (essenceforlife.cz), která organizuje zahraniční jógové a wellness retreaty.
+  const prompt = `Jsi asistent cestovní agentury Essence for Life. Tvůj úkol je najít lektory oboru "${type}" z regionu "${region}" pro možnou spolupráci na zahraničních retreatách.
 
-Tvůj úkol: najdi 8–12 lektorů oboru "${type}" z regionu "${region}", kteří by mohli mít zájem spolupracovat na zahraničním retreatu pro jejich klienty.
+Prohledej web a najdi 8–10 skutečných lektorů. Pro každého zjisti veřejně dostupné informace.
 
-Pro každého lektora najdi:
-- Celé jméno
-- Web nebo Instagram nebo Facebook profil (URL)
-- Email (pokud je veřejně dostupný, jinak prázdné)
-- Město/region
-- Stručný popis (1 věta — co dělají)
+DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádné vysvětlení. Pouze surový JSON.
 
-Vrať odpověď POUZE jako JSON array, bez jakéhokoliv textu před nebo za. Formát:
 [
   {
     "name": "Jana Nováková",
@@ -2980,11 +2974,11 @@ Vrať odpověď POUZE jako JSON array, bez jakéhokoliv textu před nebo za. For
     "email": "jana@email.cz",
     "city": "Praha",
     "type": "${type}",
-    "about": "Lektorka hatha jógy s 8 lety zkušeností, vede kurzy v Praze."
+    "about": "Lektorka hatha jógy s 8 lety zkušeností."
   }
 ]
 
-Hledej skutečné, existující lektory. Pokud email není veřejný, nech pole prázdné.`;
+Pokud email není veřejný, použij prázdný string. Najdi skutečné, existující lektory z ${region}.`;
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -3010,16 +3004,36 @@ Hledej skutečné, existující lektory. Pokud email není veřejný, nech pole 
 
     const data = await res.json();
 
-    // Najdi text odpovědi
+    // Najdi text odpovědi — projdi všechny bloky
     let text = '';
     for (const block of (data.content || [])) {
       if (block.type === 'text') text += block.text;
+      // tool_result bloky přeskoč
     }
 
-    // Parsuj JSON
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) throw new Error('Claude nevrátil správný formát. Zkus znovu.');
-    const leads = JSON.parse(jsonMatch[0]);
+    console.log('[Discovery] raw response:', text.substring(0, 500));
+
+    // Parsuj JSON — zkus různé formáty
+    let leads = null;
+    // 1. Přímý JSON array
+    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+    if (jsonMatch) {
+      try { leads = JSON.parse(jsonMatch[0]); } catch(e) {}
+    }
+    // 2. JSON v code blocku
+    if (!leads) {
+      const codeMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      if (codeMatch) { try { leads = JSON.parse(codeMatch[1]); } catch(e) {} }
+    }
+    // 3. Celý text jako JSON
+    if (!leads) {
+      try { leads = JSON.parse(text.trim()); } catch(e) {}
+    }
+
+    if (!leads || !Array.isArray(leads) || leads.length === 0) {
+      console.log('[Discovery] full response:', text);
+      throw new Error('Claude nevrátil správný formát. Zkus znovu.');
+    }
 
     if (!leads.length) { status.textContent = 'Nenalezeni žádní lektoři. Zkus jiné parametry.'; return; }
 
