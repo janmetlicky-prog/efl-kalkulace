@@ -2510,6 +2510,27 @@ Tel.: +420 737 575 688
 www.essenceforlife.cz
 Buďme si blíž ve FB skupině NA CESTĚ`;
 
+const CALL_EMAIL_TEMPLATE = (name) => `Krásný den, ${name}!
+
+Moc děkuji, že jste si našli čas a vyplnili dotazník — to pro mě znamená hodně a vnímám to jako první krok k něčemu hezkému.
+
+Z vašich odpovědí vidím, že vás to volá k moři a k práci se skupinou v zahraničí. Přesně to je svět, ve kterém se pohybuji každý den — a ráda vám v tom budu oporou.
+
+Aby naše spolupráce dávala smysl pro obě strany, ráda bych se s vámi nezávazně potkala na krátkém online hovoru. Probereme vaše představy, sny o destinaci i to, jak konkrétně naše spolupráce může vypadat.
+
+Rezervujte si termín, který vám vyhovuje:
+https://cal.eu/essence-for-life/konzultace-s-adelou
+
+Budu se těšit!
+
+S láskou k cestám,
+Adéla
+
+Za tým Essence for life
+adela@essenceforlife.cz | +420 737 575 688
+www.essenceforlife.cz
+Buďme si blíž ve FB skupině NA CESTĚ`;
+
 let instrView = 'pipeline';
 
 function renderInstructors() {
@@ -2672,7 +2693,7 @@ function renderInstrGrid(filter, pipelineFilter) {
               </div>
             </div>` : ''}
           <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
-          <button onclick="copyToClipboard('https://cal.eu/essence-for-life/konzultace-s-adelou','Cal.com link zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>
+          ${ins.email ? `<a href="mailto:${ins.email}?subject=${encodeURIComponent('Essence for Life — pojďme se potkat!')}&body=${encodeURIComponent(CALL_EMAIL_TEMPLATE(ins.name.split(' ')[0]))}" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;text-decoration:none">📅 Call</a>` : '<button onclick="copyToClipboard(\'https://cal.eu/essence-for-life/konzultace-s-adelou\',\'Cal.com link zkopírován!\')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>'}
           <button onclick="quickPipelineAdvance('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
         </div>
       </div>`;
