@@ -2536,9 +2536,9 @@ function renderInstructors() {
           <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--navy)">Lektoři CRM</div>
           <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap">
             <span style="font-size:11px;color:var(--text-muted)">Scoring:</span>
-            <span style="font-size:11px;font-weight:600;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:10px;border:1px solid #6ee7b733">🟢 75–100 · Prioritní</span>
-            <span style="font-size:11px;font-weight:600;color:#d97706;background:#fffbeb;padding:2px 8px;border-radius:10px;border:1px solid #fcd34d33">🟡 45–74 · Perspektivní</span>
-            <span style="font-size:11px;font-weight:600;color:#dc2626;background:#fef2f2;padding:2px 8px;border-radius:10px;border:1px solid #fca5a533">🔴 0–44 · Nízká priorita</span>
+            <span style="font-size:11px;font-weight:600;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:10px;border:1px solid #6ee7b733">🟢 75–100 · Připravený partner</span>
+            <span style="font-size:11px;font-weight:600;color:#d97706;background:#fffbeb;padding:2px 8px;border-radius:10px;border:1px solid #fcd34d33">🟡 45–74 · Rozvíjející se</span>
+            <span style="font-size:11px;font-weight:600;color:#dc2626;background:#fef2f2;padding:2px 8px;border-radius:10px;border:1px solid #fca5a533">🔴 0–44 · Na začátku</span>
           </div>
           <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${instructors.length} kontaktů · ${activeCount} aktivních · ${inProgressCount} v pipeline</div>
         </div>
@@ -2905,59 +2905,52 @@ async function syncPullInstructors() {
     function calcScore(cols) {
       let score = 0;
 
-      // 1. Zkušenosti se skupinami (0–25 bodů)
+      // 1. Zkušenost s prací se skupinami (0–25 bodů)
       const exp = colExp >= 0 ? (cols[colExp]||'').toLowerCase() : '';
-      if (exp.includes('10') || exp.includes('víc') || exp.includes('15') || exp.includes('20')) score += 25;
-      else if (exp.includes('5') || exp.includes('6') || exp.includes('7') || exp.includes('8') || exp.includes('9')) score += 18;
-      else if (exp.includes('3') || exp.includes('4')) score += 12;
-      else if (exp.includes('1') || exp.includes('2') || exp.includes('rok')) score += 6;
-      else if (exp.length > 5) score += 3;
+      if (exp.includes('7 let') || exp.includes('7+') || exp.includes('více')) score += 25;
+      else if (exp.includes('3') && exp.includes('7')) score += 18;
+      else if (exp.includes('1') && exp.includes('3')) score += 10;
+      else if (exp.includes('začín') || exp.includes('méně než rok') || exp.includes('méně jak rok')) score += 3;
 
-      // 2. Organizoval už retreat (0–15 bodů)
+      // 2. Organizoval/a retreat nebo víkend (0–20 bodů)
       const hadRet = colHadRetrt >= 0 ? (cols[colHadRetrt]||'').toLowerCase() : '';
-      if (hadRet.includes('ano') || hadRet.includes('yes') || hadRet.includes('několikrát') || hadRet.includes('více')) score += 15;
-      else if (hadRet.includes('jednou') || hadRet.includes('1x') || hadRet.includes('jedno')) score += 8;
+      if (hadRet.includes('několikrát') || hadRet.includes('pravidelně')) score += 20;
+      else if (hadRet.includes('jednou') || hadRet.includes('dvakrát') || hadRet.includes('základní')) score += 12;
+      else if (hadRet.includes('plánuji') || hadRet.includes('konkrétní plán')) score += 6;
+      else if (hadRet.includes('teprve') || hadRet.includes('začátku') || hadRet.includes('uvažuji')) score += 1;
 
-      // 3. Připravenost — přímé hodnocení z dotazníku (0–20 bodů)
-      const readiness = colReadiness >= 0 ? (cols[colReadiness]||'').toLowerCase() : '';
-      if (readiness.includes('velmi') || readiness.includes('připraven') || readiness.includes('5') || readiness.includes('plně')) score += 20;
-      else if (readiness.includes('4') || readiness.includes('spíše ano') || readiness.includes('dobře')) score += 14;
-      else if (readiness.includes('3') || readiness.includes('středně') || readiness.includes('částečně')) score += 8;
-      else if (readiness.includes('2') || readiness.includes('málo') || readiness.includes('spíše ne')) score += 3;
+      // 3. Kde potřebuje pomoc — typ podpory (0–20 bodů)
+      const support = colReadiness >= 0 ? (cols[colReadiness]||'').toLowerCase() : '';
+      if (support.includes('organizační pomoc') || support.includes('zlegalizov')) score += 20;
+      else if (support.includes('oba') || support.includes('obě')) score += 12;
+      else if (support.includes('nevím') || support.includes('poradit')) score += 6;
+      else if (support.includes('mentorský') || support.includes('koučink') || support.includes('celým procesem')) score += 4;
 
-      // 4. Konkrétní destinace (0–10 bodů)
+      // 4. Typ setkání — zahrnuje zahraniční retreaty (0–15 bodů)
+      const meetType = colMeetType >= 0 ? (cols[colMeetType]||'').toLowerCase() : '';
+      if (meetType.includes('zahraniční') || meetType.includes('retreat')) score += 15;
+      else if (meetType.includes('víkend') || meetType.includes('pobyt')) score += 8;
+      else if (meetType.length > 3) score += 3;
+
+      // 5. Konkrétní destinace (0–10 bodů)
       const dest = colDest >= 0 ? (cols[colDest]||'').trim() : '';
       if (dest.length > 3 && !dest.toLowerCase().includes('nevím') && !dest.toLowerCase().includes('nemám')) score += 10;
       else if (dest.length > 0) score += 4;
 
-      // 5. Konkrétní termín (0–10 bodů)
-      const date = colDate >= 0 ? (cols[colDate]||'').trim() : '';
-      if (date.length > 3 && !date.toLowerCase().includes('nevím') && !date.toLowerCase().includes('zatím')) score += 10;
-      else if (date.length > 0) score += 4;
-
-      // 6. Počet účastníků > 8 (0–10 bodů)
-      const cnt = colCount >= 0 ? (cols[colCount]||'') : '';
-      const cntNum = parseInt(cnt.replace(/[^0-9]/g,'')) || 0;
-      if (cntNum >= 12) score += 10;
-      else if (cntNum >= 8) score += 7;
-      else if (cntNum >= 5) score += 4;
-      else if (cntNum > 0) score += 2;
-
-      // 7. Cenová představa (0–5 bodů)
+      // 6. Cenová hladina účastníků (0–10 bodů)
       const price = colPrice >= 0 ? (cols[colPrice]||'').trim() : '';
-      if (price.length > 3 && !price.toLowerCase().includes('nevím') && !price.toLowerCase().includes('nemám')) score += 5;
-
-      // 8. Má web/profil (0–5 bodů)
-      const web = colWeb >= 0 ? (cols[colWeb]||'').trim() : '';
-      if (web.length > 5) score += 5;
+      if (price.includes('50 000') || price.includes('nad 50')) score += 10;
+      else if (price.includes('35 000') || price.includes('35')) score += 7;
+      else if (price.includes('20 000') || price.includes('20') && price.includes('35')) score += 4;
+      else if (price.includes('do 20')) score += 2;
 
       return Math.min(score, 100);
     }
 
     function scoreLabel(score) {
-      if (score >= 75) return { emoji: '🟢', label: 'Vysoký potenciál', color: '#059669', bg: '#ecfdf5' };
-      if (score >= 45) return { emoji: '🟡', label: 'Střední potenciál', color: '#d97706', bg: '#fffbeb' };
-      return { emoji: '🔴', label: 'Začátečník', color: '#dc2626', bg: '#fef2f2' };
+      if (score >= 75) return { emoji: '🟢', label: 'Připravený partner', color: '#059669', bg: '#ecfdf5' };
+      if (score >= 45) return { emoji: '🟡', label: 'Rozvíjející se', color: '#d97706', bg: '#fffbeb' };
+      return { emoji: '🔴', label: 'Na začátku', color: '#dc2626', bg: '#fef2f2' };
     }
 
     if (!db.instructors) db.instructors = [];
