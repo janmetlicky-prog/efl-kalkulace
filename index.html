@@ -2647,7 +2647,7 @@ function renderInstrGrid(filter, pipelineFilter) {
         </div>
         <div style="display:flex;align-items:center;justify-content:space-between">
           <span style="font-size:11px;font-weight:700;color:${stage.color};background:${stage.bg};padding:3px 10px;border-radius:20px;border:1px solid ${stage.color}33">${stage.label}</span>
-          ${ins.lastContact ? `<span style="font-size:10px;color:var(--text-muted)">Osloven: ${esc(ins.lastContact)}</span>` : ''}
+          ${ins.lastContact && ins.pipeline === 'Osloven' ? `<span style="font-size:10px;color:var(--text-muted)">Osloven: ${esc(ins.lastContact)}</span>` : ''}
         </div>
         ${ins.phone||ins.email ? `<div style="display:flex;gap:10px;flex-wrap:wrap">
           ${ins.phone ? `<a href="tel:${ins.phone}" style="font-size:12px;color:var(--teal);text-decoration:none">📞 ${esc(ins.phone)}</a>` : ''}
@@ -2663,7 +2663,14 @@ function renderInstrGrid(filter, pipelineFilter) {
         ${ins.demand ? `<div><span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span><div style="font-size:12px;color:var(--navy);margin-top:1px;cursor:pointer" data-full="${esc(ins.demand)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,80))}${ins.demand.length>80?'…':''}</div></div>` : ''}
         ${ins.nextAction ? `<div style="background:#fffbeb;border-radius:6px;padding:5px 10px;font-size:12px;color:#92400e">→ <strong>Další krok:</strong> ${esc(ins.nextAction)}</div>` : ''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
-          ${ins.email ? `<a href="mailto:${ins.email}?subject=${subject}&body=${body}" onclick="markInstrOsloven('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#2563eb;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #bfdbfe">📧 Oslovit</a>` : ''}
+          ${ins.email ? `
+            <div style="display:inline-flex;align-items:center;border:1px solid #bfdbfe;border-radius:6px;overflow:hidden;background:#eff6ff">
+              <a href="mailto:${ins.email}?subject=${subject}&body=${encodeURIComponent(ins.instrType==='remote' ? OUTREACH_EMAIL_TEMPLATE_REMOTE : OUTREACH_EMAIL_TEMPLATE)}" onclick="markInstrOsloven('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">📧 Oslovit</a>
+              <div style="display:flex;border-left:1px solid #bfdbfe">
+                <button onclick="setInstrType('${ins.id}','region');event.preventDefault()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType!=='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType!=='remote'?'#fff':'#93c5fd'}">Region</button>
+                <button onclick="setInstrType('${ins.id}','remote');event.preventDefault()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType==='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType==='remote'?'#fff':'#93c5fd'}">Vzdálený</button>
+              </div>
+            </div>` : ''}
           <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
           <button onclick="copyToClipboard('https://cal.eu/essence-for-life/konzultace-s-adelou','Cal.com link zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>
           <button onclick="quickPipelineAdvance('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
@@ -3192,6 +3199,14 @@ function addDiscoveryLeads(leads) {
   closeDiscoveryModal();
   renderInstructorsKeepSearch();
   alert(`✅ Přidáno ${added} nových lektorů do CRM.`);
+}
+
+function setInstrType(id, type) {
+  const ins = (db.instructors||[]).find(i => i.id === id);
+  if (!ins) return;
+  ins.instrType = type;
+  save(db);
+  renderInstructorsKeepSearch();
 }
 
 function markInstrOsloven(id) {
