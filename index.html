@@ -251,6 +251,7 @@
   .status-ongoing   { background: #e8f0fe; color: #1a56db; }
   .status-done      { background: var(--storno-bg); color: var(--storno); }
   .status-storno    { background: var(--danger-bg); color: var(--danger); }
+  .status-accounting { background: #fef3c7; color: #92400e; border-color: #fcd34d; }
   .status-kalkulace { background: #fef9e7; color: #b8860b; }
 
   /* CARDS */
@@ -1460,7 +1461,11 @@ function getAutoStatus(trip) {
   const endDay   = new Date(dates.end.getFullYear(),   dates.end.getMonth(),   dates.end.getDate());
 
   if (today < startDay) return 'active';
-  if (today > endDay)   return 'done';
+  if (today > endDay) {
+    // Den po skončení cesty → Vyúčtovat s MP (pokud není vyúčtováno)
+    if (!trip.accountingDone) return 'accounting';
+    return 'done';
+  }
   return 'ongoing';
 }
 
@@ -1591,7 +1596,7 @@ function showView(view, tripId) {
 // ─── OVERVIEW ───
 function renderOverview() {
   const MONTH_NAMES = ['Led','Úno','Bře','Dub','Kvě','Čvn','Čvc','Srp','Zář','Říj','Lis','Pro'];
-  const activeStatuses = ['active','ongoing','done'];
+  const activeStatuses = ['active','ongoing','done','accounting'];
 
   const allTrips = db.trips.filter(t => t.year === currentYear);
   const trips = allTrips.filter(t => activeStatuses.includes(t.status))
@@ -2548,6 +2553,12 @@ function renderInstructors() {
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px">
         <div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--navy)">Lektoři CRM</div>
+          <div style="display:flex;gap:10px;align-items:center;margin-top:4px;flex-wrap:wrap">
+            <span style="font-size:11px;color:var(--text-muted)">Scoring:</span>
+            <span style="font-size:11px;font-weight:600;color:#059669;background:#ecfdf5;padding:2px 8px;border-radius:10px;border:1px solid #6ee7b733">🟢 75–100 · Prioritní</span>
+            <span style="font-size:11px;font-weight:600;color:#d97706;background:#fffbeb;padding:2px 8px;border-radius:10px;border:1px solid #fcd34d33">🟡 45–74 · Perspektivní</span>
+            <span style="font-size:11px;font-weight:600;color:#dc2626;background:#fef2f2;padding:2px 8px;border-radius:10px;border:1px solid #fca5a533">🔴 0–44 · Nízká priorita</span>
+          </div>
           <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${instructors.length} kontaktů · ${activeCount} aktivních · ${inProgressCount} v pipeline</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -3337,7 +3348,7 @@ function renderTripDetail() {
       <div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
           <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">${trip.name}</h2>
-          <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace'}[trip.status]}</span>
+          <span class="status-pill status-${trip.status}">${{active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno',storno:'Storno',kalkulace:'Kalkulace',accounting:'Vyúčtovat s MP'}[trip.status]}</span>
           <span style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);background:var(--bg-subtle,#f0f7f7);border:1px solid var(--border);border-radius:6px;padding:3px 8px" title="Číslo projektu">${getTripProjectNum(trip)}</span>
         </div>
         <div class="info-chips">
@@ -3359,6 +3370,12 @@ function renderTripDetail() {
             style="width:16px;height:16px;accent-color:var(--danger);cursor:pointer;">
           Storno
         </label>
+        ${(trip.status === 'accounting' || trip.accountingDone) ? `
+        <label style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${trip.accountingDone?'#d1fae5':'#fef3c7'};border:1.5px solid ${trip.accountingDone?'#6ee7b7':'#fcd34d'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:${trip.accountingDone?'#065f46':'#92400e'};transition:all .2s;">
+          <input type="checkbox" ${trip.accountingDone?'checked':''} onchange="toggleAccounting('${trip.id}',this.checked)"
+            style="width:16px;height:16px;accent-color:#059669;cursor:pointer;">
+          Vyúčtováno MP
+        </label>` : ''}
         <button class="btn btn-secondary admin-only" onclick="editTrip('${trip.id}')">✏️ Upravit info</button>
         <button class="btn btn-danger btn-sm admin-only" onclick="deleteTrip('${trip.id}')">🗑️ Smazat</button>
       </div>
@@ -3843,6 +3860,15 @@ function toggleKalkulace(tripId, checked) {
   save(db);
   renderSidebar();
   renderTripDetail();
+}
+
+function toggleAccounting(tripId, checked) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  trip.accountingDone = checked;
+  trip.status = checked ? 'done' : 'accounting';
+  save(db);
+  renderTrips();
 }
 
 function toggleStorno(tripId, checked) {
