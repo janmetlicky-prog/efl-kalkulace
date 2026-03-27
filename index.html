@@ -2552,7 +2552,7 @@ function renderInstrGrid(filter, pipelineFilter) {
               const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706'} : {emoji:'🔴',color:'#dc2626'}) : null;
               return `<div onclick="openInstructorModal('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
                 <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 5px;border-radius:8px;margin-left:3px">NOVÝ</span>` : ''}</div>
-              ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipelineChangedAt)}</div>` : ''}
+              ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipeline||'')} · ${esc(ins.pipelineChangedAt)}</div>` : ''}
                 ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
                 ${sl ? `<div style="font-size:11px;color:${sl.color};margin-top:2px">${sl.emoji} ${ins.score}/100</div>` : ''}
                 ${ins.nextAction ? `<div style="font-size:10px;color:#b8860b;margin-top:3px;border-top:1px solid var(--border);padding-top:3px">→ ${esc(ins.nextAction.substring(0,40))}</div>` : ''}
@@ -2940,7 +2940,7 @@ async function syncPullInstructors() {
           city: '', status: sl.label, about: aboutParts,
           demand: demandParts, process: processParts,
           pipeline: 'Dotazník', source: 'Dotazník',
-          lastContact: new Date().toLocaleDateString('cs-CZ'),
+          lastContact: '',
           nextAction: 'Naplánovat konzultaci s Adelou',
           score, scoreLabel: sl.label,
           isNew: true,
