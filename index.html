@@ -2453,7 +2453,7 @@ const PIPELINE_STAGES = [
 ];
 const OUTREACH_EMAIL_TEMPLATE = `Dobrý den,\n\njmenuji se Honza Metlický a spolu s manželkou Adelou vedeme cestovní agenturu Essence for Life (www.essenceforlife.cz). Specializujeme se na jógové a wellness retreaty do zahraničí.\n\nNarazili jsme na Váš profil a moc se nám líbí Vaše práce. Rádi bychom Vám představili náš program pro lektory — zajišťujeme veškerou organizaci retreatu (ubytování, strava, transfer, smlouvy, pojištění), Vy se staráte jen o svou skupinu.\n\nSpolupracujeme s lektory v destinacích jako Ischia, Bali, Keňa, Azory, Madeira, Malta a dalších.\n\nRádi bychom se s Vámi virtuálně potkali a ukázali Vám, jak spolupráce funguje. Máte zájem o krátký online call?\n\nS pozdravem,\nHonza Metlický\nEssence for Life\nwww.essenceforlife.cz`;
 
-let instrView = 'cards';
+let instrView = 'pipeline';
 
 function renderInstructors() {
   const content = document.getElementById('content');
@@ -2764,7 +2764,7 @@ function deleteInstructor(id) {
   renderInstructorsKeepSearch();
 }
 
-const INSTR_CSV_URL = 'https://docs.google.com/spreadsheets/d/1VDDDvdRzyLTJ83ScTKAMPHhVxQzlE6AyuO_CPl00ErI/export?format=csv&gid=0';
+const INSTR_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQNdH5bgXvFkElz3TuhjpSjoY80ICx6SHQ96lWP4YGsBSk-mY9CkdlbDUYPpZ1DtPJ7NJNVDNHMEAxK/pub?gid=1248246763&single=true&output=csv';
 
 async function syncPullInstructors() {
   const btn = document.querySelector('[onclick="syncPullInstructors()"]');
