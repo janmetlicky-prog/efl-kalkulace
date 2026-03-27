@@ -2552,6 +2552,7 @@ function renderInstrGrid(filter, pipelineFilter) {
               const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706'} : {emoji:'🔴',color:'#dc2626'}) : null;
               return `<div onclick="openInstructorModal('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
                 <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 5px;border-radius:8px;margin-left:3px">NOVÝ</span>` : ''}</div>
+              ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipelineChangedAt)}</div>` : ''}
                 ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
                 ${sl ? `<div style="font-size:11px;color:${sl.color};margin-top:2px">${sl.emoji} ${ins.score}/100</div>` : ''}
                 ${ins.nextAction ? `<div style="font-size:10px;color:#b8860b;margin-top:3px;border-top:1px solid var(--border);padding-top:3px">→ ${esc(ins.nextAction.substring(0,40))}</div>` : ''}
@@ -2575,6 +2576,7 @@ function renderInstrGrid(filter, pipelineFilter) {
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:700;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;margin-left:4px">NOVÝ</span>` : ''}</div>
+            ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipelineChangedAt)}</div>` : ''}
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px">
               ${ins.type ? `<span style="font-size:10px;font-weight:600;background:#e0f4f5;color:var(--teal);padding:2px 7px;border-radius:10px">${esc(ins.type)}</span>` : ''}
               ${ins.city ? `<span style="font-size:11px;color:var(--text-muted)">📍 ${esc(ins.city)}</span>` : ''}
@@ -2750,7 +2752,13 @@ function saveInstructorModal() {
   };
   if (editingInstructorId) {
     const ins = db.instructors.find(i => i.id === editingInstructorId);
-    if (ins) Object.assign(ins, data);
+    if (ins) {
+      const oldPipeline = ins.pipeline;
+      Object.assign(ins, data);
+      if (ins.pipeline !== oldPipeline) {
+        ins.pipelineChangedAt = new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+      }
+    }
   } else {
     db.instructors.push({ id: 'ins_' + uid(), ...data });
   }
@@ -2936,6 +2944,7 @@ async function syncPullInstructors() {
           nextAction: 'Naplánovat konzultaci s Adelou',
           score, scoreLabel: sl.label,
           isNew: true,
+          pipelineChangedAt: new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),
         });
         added++;
       }
@@ -3117,6 +3126,7 @@ function addDiscoveryLeads(leads) {
       lastContact: '', nextAction: 'Oslovit',
       score: null,
       isNew: true,
+      pipelineChangedAt: new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),
     });
     added++;
   });
@@ -3132,6 +3142,7 @@ function markInstrOsloven(id) {
   if (!ins) return;
   ins.pipeline = 'Osloven';
   ins.lastContact = new Date().toLocaleDateString('cs-CZ');
+  ins.pipelineChangedAt = new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   ins.isNew = false;
   save(db);
   renderInstructorsKeepSearch();
@@ -3142,6 +3153,7 @@ function quickPipelineAdvance(id) {
   if (!ins) return;
   const idx = PIPELINE_STAGES.findIndex(s => s.key === (ins.pipeline||'Nalezen'));
   ins.pipeline = PIPELINE_STAGES[Math.min(idx+1, PIPELINE_STAGES.length-1)].key;
+  ins.pipelineChangedAt = new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
   save(db);
   renderInstructorsKeepSearch();
 }
