@@ -2551,7 +2551,7 @@ function renderInstrGrid(filter, pipelineFilter) {
             ${stageIns.length ? stageIns.map(ins => {
               const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706'} : {emoji:'🔴',color:'#dc2626'}) : null;
               return `<div onclick="openInstructorModal('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
-                <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}</div>
+                <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 5px;border-radius:8px;margin-left:3px">NOVÝ</span>` : ''}</div>
                 ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
                 ${sl ? `<div style="font-size:11px;color:${sl.color};margin-top:2px">${sl.emoji} ${ins.score}/100</div>` : ''}
                 ${ins.nextAction ? `<div style="font-size:10px;color:#b8860b;margin-top:3px;border-top:1px solid var(--border);padding-top:3px">→ ${esc(ins.nextAction.substring(0,40))}</div>` : ''}
@@ -2574,7 +2574,7 @@ function renderInstrGrid(filter, pipelineFilter) {
       <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:18px 20px;transition:box-shadow .2s;display:flex;flex-direction:column;gap:8px" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div style="flex:1;min-width:0">
-            <div style="font-size:15px;font-weight:700;color:var(--navy)">${esc(ins.name)}</div>
+            <div style="font-size:15px;font-weight:700;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;margin-left:4px">NOVÝ</span>` : ''}</div>
             <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px">
               ${ins.type ? `<span style="font-size:10px;font-weight:600;background:#e0f4f5;color:var(--teal);padding:2px 7px;border-radius:10px">${esc(ins.type)}</span>` : ''}
               ${ins.city ? `<span style="font-size:11px;color:var(--text-muted)">📍 ${esc(ins.city)}</span>` : ''}
@@ -2604,8 +2604,8 @@ function renderInstrGrid(filter, pipelineFilter) {
         ${ins.demand ? `<div><span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span><div style="font-size:12px;color:var(--navy);margin-top:1px;cursor:pointer" data-full="${esc(ins.demand)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,80))}${ins.demand.length>80?'…':''}</div></div>` : ''}
         ${ins.nextAction ? `<div style="background:#fffbeb;border-radius:6px;padding:5px 10px;font-size:12px;color:#92400e">→ <strong>Další krok:</strong> ${esc(ins.nextAction)}</div>` : ''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
-          ${ins.email ? `<a href="mailto:${ins.email}?subject=${subject}&body=${body}" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#2563eb;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #bfdbfe">📧 Oslovit</a>` : ''}
-          <button onclick="copyToClipboard('https://forms.gle/w8qoU9CKoyQAqhbSA','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
+          ${ins.email ? `<a href="mailto:${ins.email}?subject=${subject}&body=${body}" onclick="markInstrOsloven('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#eff6ff;color:#2563eb;border-radius:6px;font-size:11px;font-weight:600;text-decoration:none;border:1px solid #bfdbfe">📧 Oslovit</a>` : ''}
+          <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
           <button onclick="copyToClipboard('https://cal.eu/essence-for-life/konzultace-s-adelou','Cal.com link zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>
           <button onclick="quickPipelineAdvance('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
         </div>
@@ -2619,6 +2619,8 @@ let editingInstructorId = null;
 function openInstructorModal(id) {
   editingInstructorId = id || null;
   const ins = id ? getInstructors().find(i => i.id === id) : null;
+  // Smaž Nový badge při otevření
+  if (ins && ins.isNew) { ins.isNew = false; save(db); }
   document.getElementById('instrModalTitle').textContent = ins ? 'Upravit lektora' : 'Nový lektor';
   document.getElementById('mInstrName').value       = ins ? (ins.name||'') : '';
   document.getElementById('mInstrPhone').value      = ins ? (ins.phone||'') : '';
@@ -2929,10 +2931,11 @@ async function syncPullInstructors() {
           name, email, phone, sourceUrl, type,
           city: '', status: sl.label, about: aboutParts,
           demand: demandParts, process: processParts,
-          pipeline: 'Reagoval', source: 'Dotazník',
+          pipeline: 'Dotazník', source: 'Dotazník',
           lastContact: new Date().toLocaleDateString('cs-CZ'),
           nextAction: 'Naplánovat konzultaci s Adelou',
           score, scoreLabel: sl.label,
+          isNew: true,
         });
         added++;
       }
@@ -3113,6 +3116,7 @@ function addDiscoveryLeads(leads) {
       pipeline: 'Nalezen', source: 'AI Discovery',
       lastContact: '', nextAction: 'Oslovit',
       score: null,
+      isNew: true,
     });
     added++;
   });
@@ -3121,6 +3125,16 @@ function addDiscoveryLeads(leads) {
   closeDiscoveryModal();
   renderInstructorsKeepSearch();
   alert(`✅ Přidáno ${added} nových lektorů do CRM.`);
+}
+
+function markInstrOsloven(id) {
+  const ins = (db.instructors||[]).find(i => i.id === id);
+  if (!ins) return;
+  ins.pipeline = 'Osloven';
+  ins.lastContact = new Date().toLocaleDateString('cs-CZ');
+  ins.isNew = false;
+  save(db);
+  renderInstructorsKeepSearch();
 }
 
 function quickPipelineAdvance(id) {
