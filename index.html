@@ -31,7 +31,46 @@
     --sidebar-w: 290px;
     --accent: #cdaa3a;
     --package-price: #03989e;
+    --bg-main: #fbfefe;
+    --bg-sidebar: #026d72;
   }
+  body.dark-mode {
+    --navy: #4ecdc4;
+    --navy-light: #6eddd6;
+    --teal: #4ecdc4;
+    --teal-light: #6eddd6;
+    --sand: #1e2a2a;
+    --sand-dark: #243333;
+    --text: #e2e8f0;
+    --text-muted: #94a3b8;
+    --white: #0f1a1a;
+    --border: #2a3f40;
+    --success: #4ecdc4;
+    --success-bg: #0d2a2a;
+    --warning: #f59e0b;
+    --warning-bg: #2a1f00;
+    --danger: #f87171;
+    --danger-bg: #2a1010;
+    --storno: #94a3b8;
+    --storno-bg: #1e2535;
+    --bg-main: #0d1117;
+    --bg-sidebar: #0a1a1a;
+  }
+  body.dark-mode { background: var(--bg-main); color: var(--text); }
+  body.dark-mode .topbar { background: #0d1117; border-bottom-color: #2a3f40; }
+  body.dark-mode #sidebar { background: linear-gradient(180deg, #0a1a1a 0%, #0d2020 100%); }
+  body.dark-mode .card, body.dark-mode .trip-card { background: #161b22; border-color: #2a3f40; }
+  body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #161b22; color: var(--text); border-color: #2a3f40; }
+  body.dark-mode .gear-menu { background: #161b22; border-color: #2a3f40; }
+  body.dark-mode .topbar-nav-btn { color: var(--text-muted); }
+  body.dark-mode .topbar-nav-btn:hover { background: #1e2a2a; }
+  body.dark-mode .topbar-nav-btn.active { background: var(--teal); color: #fff; }
+  body.dark-mode .modal-bg { background: rgba(0,0,0,.7); }
+  body.dark-mode .modal { background: #161b22; border-color: #2a3f40; }
+  body.dark-mode .btn-secondary { background: #1e2a2a; color: var(--text); }
+  body.dark-mode .sand-section, body.dark-mode .section-box { background: #161b22; border-color: #2a3f40; }
+  #darkToggle { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 16px; color: var(--text-muted); transition: all .2s; }
+  #darkToggle:hover { background: var(--sand); }
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   /* EFL Package Price Highlight */
@@ -592,6 +631,7 @@
 
     </div>
     <div class="gear-wrap" id="gearWrap">
+      <button id="darkToggle" onclick="toggleDarkMode()" title="Světlý / tmavý režim">🌙</button>
       <button class="gear-btn admin-only" onclick="toggleGearMenu()" title="Nastavení & nástroje">⚙️</button>
       <button class="gear-btn colleague-only" onclick="openColleagueSettings()" title="Nastavení" style="display:none">⚙️</button>
       <div class="gear-menu" id="gearMenu">
@@ -3217,6 +3257,22 @@ function setInstrType(id, type) {
   save(db);
   renderInstructorsKeepSearch();
 }
+
+function toggleDarkMode() {
+  const dark = document.body.classList.toggle('dark-mode');
+  document.getElementById('darkToggle').textContent = dark ? '☀️' : '🌙';
+  localStorage.setItem('efl_dark_mode', dark ? '1' : '0');
+}
+// Načti uložený režim
+(function() {
+  if (localStorage.getItem('efl_dark_mode') === '1') {
+    document.body.classList.add('dark-mode');
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('darkToggle');
+      if (btn) btn.textContent = '☀️';
+    });
+  }
+})();
 
 function markInstrOsloven(id) {
   const ins = (db.instructors||[]).find(i => i.id === id);
