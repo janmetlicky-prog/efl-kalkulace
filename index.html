@@ -1297,6 +1297,10 @@
         <label>Proces / historie komunikace</label>
         <textarea id="mInstrProcess" style="min-height:60px" placeholder="Co bylo posláno, nabídnuto, domluveno..."></textarea>
       </div>
+      <div class="form-group" style="grid-column:span 2">
+        <label>🎙 Zápis z callu</label>
+        <textarea id="mInstrCallNotes" style="min-height:100px" placeholder="Summary z Fireflies.ai · automaticky doplněno po schůzce..."></textarea>
+      </div>
     </div>
 
     <div class="modal-footer">
@@ -2809,6 +2813,7 @@ function renderInstrGrid(filter, pipelineFilter) {
         ${ins.about ? `<div style="font-size:12px;color:var(--text-muted);line-height:1.5;cursor:pointer" data-full="${esc(ins.about)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)"><div style="display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${esc(ins.about)}</div></div>` : ''}
         ${ins.demand ? `<div><span style="font-size:10px;font-weight:600;color:#b8860b;text-transform:uppercase;letter-spacing:.5px">Poptávka</span><div style="font-size:12px;color:var(--navy);margin-top:1px;cursor:pointer" data-full="${esc(ins.demand)}" onmouseenter="showInstrTooltip(this,this.dataset.full)" onmouseleave="hideInstrTooltip(this)">${esc(ins.demand.substring(0,80))}${ins.demand.length>80?'…':''}</div></div>` : ''}
         ${ins.nextAction ? `<div style="background:#fffbeb;border-radius:6px;padding:5px 10px;font-size:12px;color:#92400e">→ <strong>Další krok:</strong> ${esc(ins.nextAction)}</div>` : ''}
+        ${ins.callNotes ? `<div style="background:#f0f9f9;border-radius:6px;padding:8px 10px;font-size:11px;color:var(--text-muted);margin-top:2px"><strong style="color:var(--teal)">🎙 Zápis z callu:</strong><br>${esc(ins.callNotes.substring(0,200))}${ins.callNotes.length>200?'…':''}</div>` : ''}
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
           ${ins.email ? `
             <div style="display:inline-flex;align-items:center;border:1px solid #bfdbfe;border-radius:6px;overflow:hidden;background:#eff6ff">
@@ -2846,6 +2851,7 @@ function openInstructorModal(id) {
   document.getElementById('mInstrSource').value     = ins ? (ins.source||'') : '';
   document.getElementById('mInstrLastContact').value= ins ? (ins.lastContact||'') : '';
   document.getElementById('mInstrNextAction').value = ins ? (ins.nextAction||'') : '';
+  document.getElementById('mInstrCallNotes').value  = ins ? (ins.callNotes||'') : '';
   document.getElementById('mInstrStatus').value     = ins ? (ins.status||'') : '';
   document.getElementById('mInstrAbout').value      = ins ? (ins.about||'') : '';
   document.getElementById('mInstrDemand').value     = ins ? (ins.demand||'') : '';
@@ -2957,6 +2963,7 @@ function saveInstructorModal() {
     source:      document.getElementById('mInstrSource').value,
     lastContact: document.getElementById('mInstrLastContact').value.trim(),
     nextAction:  document.getElementById('mInstrNextAction').value.trim(),
+    callNotes:   document.getElementById('mInstrCallNotes').value.trim(),
     status:      document.getElementById('mInstrStatus').value.trim(),
     about:       document.getElementById('mInstrAbout').value.trim(),
     demand:      document.getElementById('mInstrDemand').value.trim(),
