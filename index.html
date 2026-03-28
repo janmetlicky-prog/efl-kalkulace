@@ -39,12 +39,12 @@
     --navy-light: #6eddd6;
     --teal: #4ecdc4;
     --teal-light: #6eddd6;
-    --sand: #1e2a2a;
-    --sand-dark: #243333;
+    --sand: #1a2332;
+    --sand-dark: #243344;
     --text: #e2e8f0;
     --text-muted: #94a3b8;
-    --white: #0f1a1a;
-    --border: #2a3f40;
+    --white: #0f1923;
+    --border: #2a3f50;
     --success: #4ecdc4;
     --success-bg: #0d2a2a;
     --warning: #f59e0b;
@@ -54,22 +54,116 @@
     --storno: #94a3b8;
     --storno-bg: #1e2535;
     --bg-main: #0d1117;
-    --bg-sidebar: #0a1a1a;
+    --bg-sidebar: #0a1520;
+    --accent: #cdaa3a;
   }
-  body.dark-mode { background: var(--bg-main); color: var(--text); }
-  body.dark-mode .topbar { background: #0d1117; border-bottom-color: #2a3f40; }
-  body.dark-mode #sidebar { background: linear-gradient(180deg, #0a1a1a 0%, #0d2020 100%); }
-  body.dark-mode .card, body.dark-mode .trip-card { background: #161b22; border-color: #2a3f40; }
-  body.dark-mode input, body.dark-mode select, body.dark-mode textarea { background: #161b22; color: var(--text); border-color: #2a3f40; }
-  body.dark-mode .gear-menu { background: #161b22; border-color: #2a3f40; }
-  body.dark-mode .topbar-nav-btn { color: var(--text-muted); }
-  body.dark-mode .topbar-nav-btn:hover { background: #1e2a2a; }
-  body.dark-mode .topbar-nav-btn.active { background: var(--teal); color: #fff; }
-  body.dark-mode .modal-bg { background: rgba(0,0,0,.7); }
-  body.dark-mode .modal { background: #161b22; border-color: #2a3f40; }
-  body.dark-mode .btn-secondary { background: #1e2a2a; color: var(--text); }
-  body.dark-mode .sand-section, body.dark-mode .section-box { background: #161b22; border-color: #2a3f40; }
-  #darkToggle { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 16px; color: var(--text-muted); transition: all .2s; }
+  body.dark-mode { background: #0d1117 !important; color: #e2e8f0; }
+
+  /* Topbar */
+  body.dark-mode .topbar { background: #0d1117 !important; border-bottom: 1px solid #2a3f50 !important; }
+  body.dark-mode .topbar-title { color: #4ecdc4 !important; }
+  body.dark-mode .topbar-nav-btn { color: #94a3b8 !important; }
+  body.dark-mode .topbar-nav-btn:hover { background: #1a2332 !important; color: #e2e8f0 !important; }
+  body.dark-mode .topbar-nav-btn.active { background: #4ecdc4 !important; color: #0d1117 !important; }
+
+  /* Sidebar */
+  body.dark-mode #sidebar { background: linear-gradient(180deg, #0a1520 0%, #0d1f2a 100%) !important; }
+  body.dark-mode .sidebar-trip { background: rgba(255,255,255,.04) !important; border-color: #2a3f50 !important; }
+  body.dark-mode .sidebar-trip:hover { background: rgba(255,255,255,.08) !important; }
+  body.dark-mode .sidebar-trip.active { background: rgba(78,205,196,.15) !important; border-color: #4ecdc4 !important; }
+  body.dark-mode .year-tab { background: transparent !important; color: #94a3b8 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .year-tab.active { background: #cdaa3a !important; color: #0d1117 !important; border-color: #cdaa3a !important; }
+  body.dark-mode .btn-new-trip { background: #4ecdc4 !important; color: #0d1117 !important; }
+
+  /* Main content */
+  body.dark-mode #mainContent { background: #0d1117 !important; }
+  body.dark-mode .card { background: #161b22 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .trip-card { background: #161b22 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .card-title { color: #4ecdc4 !important; }
+
+  /* Stat cards */
+  body.dark-mode .stat-card { background: #161b22 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .stat-value { color: #4ecdc4 !important; }
+  body.dark-mode .stat-label { color: #94a3b8 !important; }
+
+  /* Tables */
+  body.dark-mode table { background: #161b22 !important; }
+  body.dark-mode th { background: #1a2332 !important; color: #94a3b8 !important; border-color: #2a3f50 !important; }
+  body.dark-mode td { border-color: #2a3f50 !important; color: #e2e8f0 !important; }
+  body.dark-mode tr:hover td { background: #1a2332 !important; }
+  body.dark-mode tr.participant-pending td { background: #2a2200 !important; }
+
+  /* Forms & inputs */
+  body.dark-mode input, body.dark-mode select, body.dark-mode textarea {
+    background: #1a2332 !important; color: #e2e8f0 !important;
+    border-color: #2a3f50 !important;
+  }
+  body.dark-mode input::placeholder { color: #4a5568 !important; }
+  body.dark-mode label { color: #94a3b8 !important; }
+
+  /* Buttons */
+  body.dark-mode .btn-secondary { background: #1a2332 !important; color: #e2e8f0 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .btn-primary { background: #4ecdc4 !important; color: #0d1117 !important; }
+
+  /* Modals */
+  body.dark-mode .modal-bg { background: rgba(0,0,0,.75) !important; }
+  body.dark-mode .modal { background: #161b22 !important; border-color: #2a3f50 !important; color: #e2e8f0 !important; }
+  body.dark-mode .modal h3 { color: #4ecdc4 !important; }
+
+  /* Gear menu */
+  body.dark-mode .gear-menu { background: #161b22 !important; border-color: #2a3f50 !important; }
+  body.dark-mode .gear-menu-item { color: #e2e8f0 !important; }
+  body.dark-mode .gear-menu-item:hover { background: #1a2332 !important; }
+  body.dark-mode .gear-menu-sep { background: #2a3f50 !important; }
+
+  /* Instructor kanban cards */
+  body.dark-mode [style*="background:#fff"], body.dark-mode [style*="background: #fff"],
+  body.dark-mode [style*="background:white"], body.dark-mode [style*="background: white"] {
+    background: #161b22 !important;
+  }
+  body.dark-mode [style*="border:1.5px solid var(--border)"],
+  body.dark-mode [style*="border: 1.5px solid var(--border)"] {
+    border-color: #2a3f50 !important;
+  }
+  body.dark-mode [style*="color:var(--navy)"], body.dark-mode [style*="color: var(--navy)"] {
+    color: #4ecdc4 !important;
+  }
+  body.dark-mode [style*="color:var(--text)"], body.dark-mode [style*="color: var(--text)"] {
+    color: #e2e8f0 !important;
+  }
+  body.dark-mode [style*="color:var(--text-muted)"], body.dark-mode [style*="color: var(--text-muted)"] {
+    color: #94a3b8 !important;
+  }
+  body.dark-mode [style*="background:var(--white)"], body.dark-mode [style*="background: var(--white)"] {
+    background: #161b22 !important;
+  }
+  body.dark-mode [style*="background:var(--sand)"], body.dark-mode [style*="background: var(--sand)"] {
+    background: #1a2332 !important;
+  }
+  body.dark-mode [style*="background:#f0f9f9"] { background: #0d2a2a !important; }
+  body.dark-mode [style*="background:#fffbeb"] { background: #2a1f00 !important; }
+  body.dark-mode [style*="background:#fef2f2"] { background: #2a1010 !important; }
+  body.dark-mode [style*="background:#ecfdf5"] { background: #0d2a2a !important; }
+  body.dark-mode [style*="background:#eff6ff"] { background: #0d1f3a !important; }
+  body.dark-mode [style*="background:#f5f3ff"] { background: #1a1030 !important; }
+  body.dark-mode [style*="background:#ecfeff"] { background: #0d2a2a !important; }
+
+  /* Kanban columns */
+  body.dark-mode [style*="background:var(--success-bg)"] { background: #0d2a2a !important; }
+  body.dark-mode [style*="border-radius:10px"][style*="padding:6px"] { background: #161b22 !important; }
+
+  /* Section boxes */
+  body.dark-mode .section-box, body.dark-mode .sand-section,
+  body.dark-mode [style*="background:var(--sand-dark)"] { background: #1a2332 !important; }
+
+  /* Info chips */
+  body.dark-mode .info-chip { background: #1a2332 !important; border-color: #2a3f50 !important; color: #94a3b8 !important; }
+
+  /* Score pills */
+  body.dark-mode [style*="background:#ecfdf5"][style*="color:#059669"] { background: #0d2a1a !important; }
+  body.dark-mode [style*="background:#fffbeb"][style*="color:#d97706"] { background: #2a1a00 !important; }
+  body.dark-mode [style*="background:#fef2f2"][style*="color:#dc2626"] { background: #2a0d0d !important; }
+  #darkToggle { background: none; border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; cursor: pointer; font-size: 16px; color: var(--text-muted); transition: all .2s; margin-right: 8px; }
   #darkToggle:hover { background: var(--sand); }
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
