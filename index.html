@@ -4449,18 +4449,22 @@ function saveSyncUrl() {
 
 function openSyncModal() {
   const url = getSyncUrl();
-  document.getElementById('syncUrl').value = url;
-  document.getElementById('sheetCsvUrl').value = getSheetCsvUrl();
+  const syncUrlEl = document.getElementById('syncUrl');
+  if (syncUrlEl) syncUrlEl.value = url;
+  const sheetEl = document.getElementById('sheetCsvUrl');
+  if (sheetEl) sheetEl.value = getSheetCsvUrl();
   const pUrl = localStorage.getItem('efl_payment_sync_url') || '';
-  document.getElementById('paymentSyncUrl').value = pUrl;
-  document.getElementById('scriptCode').value = APPS_SCRIPT_CODE;
+  const payEl = document.getElementById('paymentSyncUrl');
+  if (payEl) payEl.value = pUrl;
+  const scriptEl = document.getElementById('scriptCode');
+  if (scriptEl) scriptEl.value = APPS_SCRIPT_CODE;
   const ghInp = document.getElementById('ghTokenInput');
   if (ghInp) ghInp.value = ghToken();
   const idokladInp = document.getElementById('idokladSyncUrl');
   if (idokladInp) idokladInp.value = localStorage.getItem('efl_idoklad_url') || '';
   const eurInp = document.getElementById('eurRateInput');
   if (eurInp) eurInp.value = getEurRate();
-  checkSyncUrl(url);
+  if (syncUrlEl) checkSyncUrl(url);
   document.getElementById('syncModal').classList.remove('hidden');
 }
 async function syncPayments() {
