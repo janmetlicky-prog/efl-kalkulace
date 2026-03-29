@@ -2838,10 +2838,10 @@ function renderInstrGrid(filter, pipelineFilter) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
           ${ins.email ? `
             <div style="display:inline-flex;align-items:center;border:1px solid #bfdbfe;border-radius:6px;overflow:hidden;background:#eff6ff">
-              <a href="mailto:${ins.email}?subject=${subject}&body=${encodeURIComponent(ins.instrType==='remote' ? OUTREACH_EMAIL_TEMPLATE_REMOTE : OUTREACH_EMAIL_TEMPLATE)}" onclick="markInstrOsloven('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#2563eb;font-size:11px;font-weight:600;text-decoration:none">📧 Oslovit</a>
+              <button onclick="oslovitLektora('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#2563eb;font-size:11px;font-weight:600;background:transparent;border:none;cursor:pointer">📧 Oslovit</button>
               <div style="display:flex;border-left:1px solid #bfdbfe">
-                <button onclick="setInstrType('${ins.id}','region');event.preventDefault()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType!=='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType!=='remote'?'#fff':'#93c5fd'}">Region</button>
-                <button onclick="setInstrType('${ins.id}','remote');event.preventDefault()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType==='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType==='remote'?'#fff':'#93c5fd'}">Vzdálený</button>
+                <button onclick="setInstrType('${ins.id}','region');event.stopPropagation()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType!=='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType!=='remote'?'#fff':'#93c5fd'}">Region</button>
+                <button onclick="setInstrType('${ins.id}','remote');event.stopPropagation()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType==='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType==='remote'?'#fff':'#93c5fd'}">Vzdálený</button>
               </div>
             </div>` : ''}
           <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
@@ -3371,6 +3371,35 @@ function addDiscoveryLeads(leads) {
   closeDiscoveryModal();
   renderInstructorsKeepSearch();
   alert(`✅ Přidáno ${added} nových lektorů do CRM.`);
+}
+
+async function oslovitLektora(id) {
+  const ins = (db.instructors||[]).find(i => i.id === id);
+  if (!ins) return;
+  if (!ins.email) { alert('Lektor nemá email.'); return; }
+
+  const typ = ins.instrType === 'remote' ? 'remote' : 'region';
+  const btn = document.querySelector(`[onclick="oslovitLektora('${id}')"]`);
+  if (btn) { btn.textContent = '⏳ Odesílám...'; btn.disabled = true; }
+
+  try {
+    const res = await fetch(OSLOVIT_POST_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'oslovitLektora', email: ins.email, typ }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      markInstrOsloven(id);
+      if (btn) btn.textContent = '✅ Odesláno';
+      setTimeout(() => renderInstructorsKeepSearch(), 1500);
+    } else {
+      if (btn) { btn.textContent = '📧 Oslovit'; btn.disabled = false; }
+      alert('Chyba: ' + (data.error || 'Neznámá chyba'));
+    }
+  } catch(err) {
+    if (btn) { btn.textContent = '📧 Oslovit'; btn.disabled = false; }
+    alert('Chyba spojení: ' + err.message);
+  }
 }
 
 function setInstrType(id, type) {
@@ -5149,6 +5178,7 @@ function hideNoteTooltip(input) {
 
 // ─── PARTICIPANT MODAL ───
 const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbz2_mgzxaTPmvhNvLYbYS8EHl9gz_BrYDZUgilm8uqhWjPFkhsnY5HO4uPgTYTzYEY5/exec';
+const OSLOVIT_POST_URL = 'https://script.google.com/macros/s/AKfycbyd-5D6AjMltWgi2wo27f-a9Fp8KcvmeB6zh3898uiNeH0hqH8Ud_c945yMQ4xhlLcN/exec';
 let pModalTripId = null;
 let pModalIdx = null;
 
