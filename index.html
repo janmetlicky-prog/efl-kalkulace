@@ -1064,6 +1064,21 @@
       <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
     </div>
 
+    <!-- EUR kurz -->
+    <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
+      💱 Kurz EUR/CZK
+    </div>
+    <div class="form-group" style="margin-bottom:18px">
+      <label>Kurz 1 EUR = <span style="color:var(--navy)">Kč</span> <span style="font-size:10px;color:var(--text-muted)">(výchozí 25, používá se v kalkulaci nákladů)</span></label>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="eurRateInput" value="25" min="1" max="100" step="0.1"
+          style="width:100px;font-size:15px;font-weight:700;color:var(--navy);text-align:right;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"
+          oninput="saveEurRate(this.value)">
+        <span style="font-size:13px;color:var(--text-muted)">Kč za 1 EUR</span>
+        <button class="btn btn-secondary btn-sm" onclick="resetEurRate()">Reset (25)</button>
+      </div>
+    </div>
+
     <!-- GitHub sync -->
     <div style="font-weight:700;font-size:13px;color:var(--navy);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">
       🔐 GitHub sync (sdílená data)
@@ -3419,7 +3434,23 @@ function renderTripDetail() {
     <tr data-idx="${idx}">
       <td><input type="text" value="${item.name||''}" onchange="updateItem('${trip.id}',${idx},'name',this.value)" placeholder="Druh nákladu"></td>
       <td><input type="text" value="${item.thirdParty||''}" onchange="updateItem('${trip.id}',${idx},'thirdParty',this.value)" placeholder="Poznámka / provize 3. stran"></td>
-      <td style="width:105px"><input type="number" value="${item.costPP||''}" onchange="updateItem('${trip.id}',${idx},'costPP',this.value)" placeholder="0" style="text-align:right"></td>
+      <td style="width:190px">
+        <div style="display:flex;align-items:center;gap:4px">
+          <div style="position:relative;flex:1">
+            <input type="number" id="czk_${trip.id}_${idx}" value="${item.costPP||''}"
+              onchange="onCzkChange('${trip.id}',${idx},this.value)"
+              placeholder="0" style="text-align:right;width:100%;padding-right:24px">
+            <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-muted);pointer-events:none">Kč</span>
+          </div>
+          <span style="font-size:11px;color:var(--border);flex-shrink:0">|</span>
+          <div style="position:relative;flex:1">
+            <input type="number" id="eur_${trip.id}_${idx}" value="${item.costPP ? (Math.round((item.costPP/getEurRate())*100)/100) : ''}"
+              onchange="onEurChange('${trip.id}',${idx},this.value)"
+              placeholder="0" style="text-align:right;width:100%;padding-right:26px;color:#03989e">
+            <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:#03989e;pointer-events:none">€</span>
+          </div>
+        </div>
+      </td>
       <td><label style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFlight?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFlight',this.checked)" style="accent-color:var(--terracotta)"> <span class="flight-mark">✈</span></label></td>
       <td><span class="calc-cell">${item.costPP ? fmt(parseFloat(item.costPP)) : '—'}</span></td>
       <td style="text-align:center">
@@ -3530,7 +3561,7 @@ function renderTripDetail() {
           <thead><tr>
             <th style="min-width:180px">Druh nákladu</th>
             <th style="min-width:160px">Poznámka / Provize 3. stran</th>
-            <th style="width:105px;text-align:right">Náklad/os. Kč</th>
+            <th style="width:190px;text-align:right">Náklad/os. Kč&nbsp;<span style="color:#03989e;font-weight:400;font-size:10px">/ EUR</span></th>
             <th style="width:60px;text-align:center" title="Označit jako letenku (bude vyloučena z ceny balíčku)">✈ Let.</th>
             <th style="width:120px;text-align:right">Náklad/os.</th>
             <th style="width:36px"></th>
@@ -3539,7 +3570,7 @@ function renderTripDetail() {
           <tfoot>
             <tr style="background:var(--sand)">
               <td colspan="2" style="padding:10px 8px;font-weight:600;font-size:12px;color:var(--text-muted)">CELKEM (${calc.totalPersons} os.)</td>
-              <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:14px">${fmt(calc.costPP)}<br><span style="font-size:11px;color:var(--text-muted);font-weight:400">bez letenky: ${fmt(calc.costWithoutFlightPP)}</span></td>
+              <td style="padding:10px 8px;text-align:right;font-weight:700;font-size:14px">${fmt(calc.costPP)}<br><span style="font-size:11px;color:#03989e;font-weight:600">${(czk2eur(calc.costPP)).toLocaleString('cs-CZ',{minimumFractionDigits:0,maximumFractionDigits:2})} EUR</span><br><span style="font-size:11px;color:var(--text-muted);font-weight:400">bez letenky: ${fmt(calc.costWithoutFlightPP)} / ${(czk2eur(calc.costWithoutFlightPP)).toLocaleString('cs-CZ',{minimumFractionDigits:0,maximumFractionDigits:2})} EUR</span></td>
               <td></td>
               <td style="padding:6px 8px;text-align:right">
                 <div class="admin-only" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
@@ -3581,6 +3612,7 @@ function renderTripDetail() {
           <div class="pph-badge">🏷 Kalkulovaná prodejní cena</div>
           <div class="pph-label">Cena balíčku bez letenky / osoba</div>
           <div class="pph-value">${fmt(calc.packagePP)}</div>
+          <div style="font-size:13px;color:rgba(255,255,255,.7);font-weight:600;margin-top:2px">≈ ${(czk2eur(calc.packagePP)).toLocaleString('cs-CZ',{minimumFractionDigits:0,maximumFractionDigits:0})} EUR <span style="font-size:10px;opacity:.6">@ ${getEurRate()} Kč/EUR</span></div>
           <div class="pph-sublabel">= prodejní cena vč. letenky ${fmt(calc.sellingPP)} − letenka ${fmt(calc.flightCostPP)}</div>
           ${trip.price ? `<div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.2)">
             <div style="font-size:10px;color:rgba(255,255,255,.55);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Smluvní cena cesty</div>
@@ -3590,6 +3622,7 @@ function renderTripDetail() {
         <div class="pph-right">
           <div style="font-size:10px;color:rgba(255,255,255,.45);letter-spacing:1px;text-transform:uppercase;margin-bottom:4px">Prod. cena vč. letenky</div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:24px;font-weight:600;color:rgba(255,255,255,.75)">${fmt(calc.sellingPP)}</div>
+          <div style="font-size:12px;color:rgba(255,255,255,.55);font-weight:600;margin-top:2px">${(czk2eur(calc.sellingPP)).toLocaleString('cs-CZ',{minimumFractionDigits:0,maximumFractionDigits:0})} EUR</div>
           <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:4px">Mezicena: ${fmt(calc.mezicena)}</div>
           <div style="font-size:10px;color:rgba(255,255,255,.35);margin-top:2px">Kalkulace na ${calc.minPersons} os.</div>
         </div>
@@ -3769,6 +3802,47 @@ function updateItem(tripId, idx, field, val) {
   if (!trip || !trip.costItems[idx]) return;
   trip.costItems[idx][field] = val;
   save(db);
+  renderTripDetail();
+}
+
+function getEurRate() {
+  return parseFloat(localStorage.getItem('efl_eur_rate') || '25') || 25;
+}
+function saveEurRate(val) {
+  const v = parseFloat(val);
+  if (v > 0) localStorage.setItem('efl_eur_rate', v);
+}
+function resetEurRate() {
+  localStorage.setItem('efl_eur_rate', '25');
+  const inp = document.getElementById('eurRateInput');
+  if (inp) inp.value = '25';
+}
+function czk2eur(czk) {
+  const r = getEurRate();
+  return r > 0 ? Math.round((czk / r) * 100) / 100 : 0;
+}
+function eur2czk(eur) {
+  return Math.round(eur * getEurRate());
+}
+function onCzkChange(tripId, idx, val) {
+  const czk = parseFloat(val) || 0;
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.costItems[idx]) return;
+  trip.costItems[idx].costPP = czk || '';
+  save(db);
+  const eurField = document.getElementById(`eur_${tripId}_${idx}`);
+  if (eurField) eurField.value = czk ? (Math.round((czk / getEurRate()) * 100) / 100) : '';
+  renderTripDetail();
+}
+function onEurChange(tripId, idx, val) {
+  const eur = parseFloat(val) || 0;
+  const czk = eur ? eur2czk(eur) : '';
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.costItems[idx]) return;
+  trip.costItems[idx].costPP = czk || '';
+  save(db);
+  const czkField = document.getElementById(`czk_${tripId}_${idx}`);
+  if (czkField) czkField.value = czk || '';
   renderTripDetail();
 }
 
@@ -4374,6 +4448,12 @@ function openSyncModal() {
   const pUrl = localStorage.getItem('efl_payment_sync_url') || '';
   document.getElementById('paymentSyncUrl').value = pUrl;
   document.getElementById('scriptCode').value = APPS_SCRIPT_CODE;
+  const ghInp = document.getElementById('ghTokenInput');
+  if (ghInp) ghInp.value = ghToken();
+  const idokladInp = document.getElementById('idokladSyncUrl');
+  if (idokladInp) idokladInp.value = localStorage.getItem('efl_idoklad_url') || '';
+  const eurInp = document.getElementById('eurRateInput');
+  if (eurInp) eurInp.value = getEurRate();
   checkSyncUrl(url);
   document.getElementById('syncModal').classList.remove('hidden');
 }
@@ -5217,18 +5297,7 @@ async function syncFromGitHub() {
 }
 
 // Načti GitHub token do inputu při otevření modalu
-function openSyncModal() {
-  const inp = document.getElementById('ghTokenInput');
-  if (inp) inp.value = ghToken();
-  const csvInp = document.getElementById('sheetCsvUrl');
-  if (csvInp) csvInp.value = localStorage.getItem('efl_sheet_csv_url') || '';
-  const payInp = document.getElementById('paymentSyncUrl');
-  if (payInp) payInp.value = localStorage.getItem('efl_payment_sync_url') || '';
-  const idokladInp = document.getElementById('idokladSyncUrl');
-  if (idokladInp) idokladInp.value = localStorage.getItem('efl_idoklad_url') || '';
-  document.getElementById('syncModal').classList.remove('hidden');
-  checkSyncUrl(getSyncUrl());
-}
+// openSyncModal defined above (merged with EUR rate)
 
 function openColleagueSettings() {
   const inp = document.getElementById('colleagueGhToken');
