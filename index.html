@@ -1042,6 +1042,12 @@
     </div>
 
     <div class="form-group" style="margin-bottom:10px">
+      <label>Apps Script URL <span style="font-size:10px;color:var(--text-muted)">(doGet Web App)</span></label>
+      <input type="url" id="syncUrl" placeholder="https://script.google.com/macros/s/..."
+        style="font-size:12px;" oninput="localStorage.setItem('efl_sync_url',this.value)">
+    </div>
+
+    <div class="form-group" style="margin-bottom:10px">
       <label>CSV URL <span style="font-size:10px;color:var(--text-muted)">(stahování klientů z formuláře)</span></label>
       <input type="url" id="sheetCsvUrl" placeholder="https://docs.google.com/spreadsheets/d/.../export?format=csv&gid=..."
         style="font-size:12px;" oninput="localStorage.setItem('efl_sheet_csv_url',this.value)">
