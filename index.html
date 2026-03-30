@@ -1077,11 +1077,13 @@
     <div class="form-group" style="margin-bottom:18px">
       <label>Kurz 1 EUR = <span style="color:var(--navy)">Kč</span> <span style="font-size:10px;color:var(--text-muted)">(výchozí 25, používá se v kalkulaci nákladů)</span></label>
       <div style="display:flex;align-items:center;gap:8px">
-        <input type="number" id="eurRateInput" value="25" min="1" max="100" step="0.1"
+        <input type="number" id="eurRateInput" value="26" min="1" max="100" step="0.1"
           style="width:100px;font-size:15px;font-weight:700;color:var(--navy);text-align:right;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;"
-          oninput="saveEurRate(this.value)">
+          oninput="saveEurRate(this.value)" onchange="saveEurRate(this.value);eurRateSaved()">
         <span style="font-size:13px;color:var(--text-muted)">Kč za 1 EUR</span>
-        <button class="btn btn-secondary btn-sm" onclick="resetEurRate()">Reset (25)</button>
+        <button class="btn btn-secondary btn-sm" onclick="resetEurRate()">Reset (26)</button>
+        <button class="btn btn-primary btn-sm" onclick="saveEurRate(document.getElementById('eurRateInput').value);eurRateSaved()">💾 Uložit a použít</button>
+        <span id="eurRateSavedMsg" style="font-size:11px;color:var(--teal);display:none;margin-left:4px">✅ Uloženo</span>
       </div>
     </div>
 
@@ -3841,14 +3843,19 @@ function updateItem(tripId, idx, field, val) {
 }
 
 function getEurRate() {
-  return parseFloat(localStorage.getItem('efl_eur_rate') || '25') || 25;
+  return parseFloat(localStorage.getItem('efl_eur_rate') || '26') || 26;
 }
 function saveEurRate(val) {
   const v = parseFloat(val);
   if (v > 0) localStorage.setItem('efl_eur_rate', v);
 }
+function eurRateSaved() {
+  renderTripDetail();
+  const msg = document.getElementById('eurRateSavedMsg');
+  if (msg) { msg.style.display = 'inline'; setTimeout(() => msg.style.display = 'none', 2000); }
+}
 function resetEurRate() {
-  localStorage.setItem('efl_eur_rate', '25');
+  localStorage.setItem('efl_eur_rate', '26');
   const inp = document.getElementById('eurRateInput');
   if (inp) inp.value = '25';
 }
