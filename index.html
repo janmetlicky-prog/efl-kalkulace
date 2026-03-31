@@ -899,9 +899,9 @@
         <label class="form-label">Forma stravování</label>
         <select id="scFoodBoard" class="form-input">
           <option value="">Bez preference</option>
+          <option value="min. snídaně (aspoň snídaně musí být k dispozici)">Min. snídaně (aspoň snídaně)</option>
+          <option value="min. polopenze (snídaně + večeře nebo oběd)">Min. polopenze</option>
           <option value="plná penze">Plná penze</option>
-          <option value="polopenze">Polopenze</option>
-          <option value="snídaně">Snídaně</option>
           <option value="all inclusive">All inclusive</option>
           <option value="vlastní kuchyň">Vlastní kuchyň</option>
         </select>
@@ -3535,6 +3535,8 @@ async function runDestScout() {
 Prohledej web a najdi 6–8 konkrétních, skutečně existujících retreat center nebo hotelů v oblasti: "${country}"${paramText}
 
 Centrum musí být vhodné pro skupinové jóga retreaty — velký prostor pro cvičení, klid, wellness zázemí.
+
+Důležité k stravování: pokud je zadána forma stravování jako "min. snídaně", hledej centra kde je alespoň snídaně zahrnuta v ceně (B&B nebo výše). Pokud "min. polopenze", hledej centra s polopenzí nebo plnou penzí. Vždy uveď v poli "food" co přesně centrum nabízí.
 
 Ceny uváděj tak jak jsou prezentovány na webu (většinou za pokoj/noc). Do pole "priceNote" uveď zda jde o cenu za pokoj, za osobu, nebo za celý objekt.
 
