@@ -3607,29 +3607,23 @@ async function runDestScout() {
   const results = document.getElementById('scResults');
 
   btn.disabled = true; btn.textContent = '⏳ Hledám...';
-  status.textContent = 'Hledám retreat centra...';
+  status.textContent = 'Krok 1/2: Hledám na webu...';
   results.innerHTML = '';
 
-  const params = [];
-  if (capacity)  params.push('min. ' + capacity + ' osob');
-  if (foodType)  params.push(foodType);
-  if (foodBoard) params.push(foodBoard);
-  if (airport)   params.push(airport + ' od letiště');
-  if (price)     params.push(price);
-  if (yogaHall)  params.push(yogaHall);
-  if (vibes)     params.push(vibes);
-  if (extra)     params.push(extra);
-
-  const paramStr = params.length > 0 ? ' Požadavky: ' + params.join(', ') + '.' : '';
-
-  // Jeden request — přímý JSON výstup, stručný prompt
-  const prompt = 'Najdi 5 skutečných retreat center pro skupinové jóga pobyty v oblasti: ' + country + '.' + paramStr +
-    ' Pro každé centrum POVINNĚ dohledej: web URL, email nebo telefon, přesnou adresu.' +
-    ' Odpověz POUZE JSON arraym, žádný text před/za/markdown:' +
-    '[{"name":"","country":"","region":"","address":"ulice, město, PSČ","web":"https://...","email":"info@...","phone":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]';
+  const reqs = [];
+  if (capacity)  reqs.push('min. ' + capacity + ' osob');
+  if (foodBoard) reqs.push(foodBoard);
+  if (foodType)  reqs.push(foodType);
+  if (airport)   reqs.push(airport + ' od letiště');
+  if (price)     reqs.push(price);
+  if (yogaHall)  reqs.push(yogaHall);
+  if (vibes)     reqs.push(vibes);
+  if (extra)     reqs.push(extra);
+  const reqStr = reqs.length ? ' (' + reqs.join(', ') + ')' : '';
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // KROK 1 — web search, Sonnet, volný výstup
+    const r1 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3638,69 +3632,63 @@ async function runDestScout() {
         'anthropic-dangerous-direct-browser-access': 'true'
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2000,
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 3000,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{
+          role: 'user',
+          content: 'Najdi 5 konkrétních retreat center nebo hotelů vhodných pro skupinové jóga pobyty (10-20 osob) v oblasti: ' + country + reqStr + '. Pro každé centrum dohledej přesný název, URL webu, email nebo telefon, přesnou adresu, max kapacitu, typ stravování, vzdálenost od letiště, cenu za pokoj/noc a popis prostoru pro cvičení jógy.'
+        }]
       })
     });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || 'HTTP ' + res.status);
-    }
+    if (!r1.ok) { const e = await r1.json(); throw new Error(e.error?.message || 'HTTP ' + r1.status); }
+    const d1 = await r1.json();
+    let searchText = '';
+    for (const b of (d1.content||[])) { if (b.type === 'text') searchText += b.text; }
+    console.log('[Scout] step1 length:', searchText.length, 'preview:', searchText.substring(0,200));
 
-    const data = await res.json();
-    let text = '';
-    for (const block of (data.content || [])) {
-      if (block.type === 'text') text += block.text;
-    }
+    status.textContent = 'Krok 2/2: Převádím na strukturu...';
 
-    console.log('[DestScout] response:', text.substring(0, 300));
+    // KROK 2 — čistý JSON, Sonnet bez tools
+    const jsonSchema = '[{"name":"","country":"","region":"","address":"","web":"","email":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","priceNote":"","yogaSpace":"","keywords":"","minStay":"","notes":""}]';
+    const r2 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: 'You are a JSON converter. You ONLY output valid JSON arrays. No text before or after. No markdown. No explanation. Only the raw JSON array.',
+        messages: [{
+          role: 'user',
+          content: 'Convert this research into a JSON array using this exact schema:\n' + jsonSchema + '\n\nResearch:\n' + searchText.substring(0, 3000)
+        }]
+      })
+    });
 
-    // Robustní parsování
+    if (!r2.ok) { const e = await r2.json(); throw new Error(e.error?.message || 'HTTP ' + r2.status); }
+    const d2 = await r2.json();
+    let jsonText = '';
+    for (const b of (d2.content||[])) { if (b.type === 'text') jsonText += b.text; }
+    console.log('[Scout] step2 raw:', jsonText.substring(0, 300));
+
+    // Parsování
     let dests = null;
-    const t = text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
-    try { dests = JSON.parse(t); } catch(e) {}
+    const clean = jsonText.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+    try { dests = JSON.parse(clean); } catch(e) {}
     if (!dests) {
-      const m = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
-      if (m) { try { dests = JSON.parse(m[0]); } catch(e2) {} }
-    }
-    if (!dests) { try { dests = JSON.parse(text); } catch(e) {} }
-
-    if (!dests || !Array.isArray(dests) || dests.length === 0) {
-      // Fallback: zkus druhý request čistě pro JSON konverzi
-      const jsonRes = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 2000,
-          messages: [{
-            role: 'user',
-            content: 'Převeď tento text na JSON array retreat center. Vrať POUZE JSON, nic jiného:\n\n' +
-              text.substring(0, 2000) +
-              '\n\nFormát: [{"name":"","country":"","region":"","web":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]'
-          }]
-        })
-      });
-      if (jsonRes.ok) {
-        const jd = await jsonRes.json();
-        let jt = '';
-        for (const b of (jd.content||[])) { if (b.type==='text') jt += b.text; }
-        const jt2 = jt.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
-        try { dests = JSON.parse(jt2); } catch(e) {}
-        if (!dests) { const m2 = jt.match(/\[\s*\{[\s\S]*\}\s*\]/); if (m2) { try { dests = JSON.parse(m2[0]); } catch(e){} } }
-      }
+      const m = jsonText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (m) { try { dests = JSON.parse(m[0]); } catch(e) {} }
     }
 
     if (!dests || !Array.isArray(dests) || dests.length === 0) {
-      throw new Error('Nepodařilo se získat strukturovaná data. Zkus jiné parametry nebo znovu za chvíli.');
+      console.log('[Scout] PARSE FAIL. Full text2:', jsonText);
+      throw new Error('Parsování selhalo. Zkus znovu — AI vrátila: ' + jsonText.substring(0, 120));
     }
 
     status.textContent = '✅ Nalezeno ' + dests.length + ' center — vyber které přidat do databáze:';
@@ -3714,13 +3702,15 @@ async function runDestScout() {
             '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">' +
               (d.country||d.region ? '<span>📍 ' + esc([d.region,d.country].filter(Boolean).join(', ')) + '</span>' : '') +
               (d.maxPersons ? '<span>👥 max. ' + esc(String(d.maxPersons)) + ' os.</span>' : '') +
-              (d.price ? '<span>💰 ' + esc(d.price) + '</span>' : '') +
+              (d.price ? '<span>💰 ' + esc(d.price) + (d.priceNote?' ('+esc(d.priceNote)+')':'') + '</span>' : '') +
               (d.distanceAirport ? '<span>✈️ ' + esc(d.distanceAirport) + '</span>' : '') +
             '</div>' +
+            (d.address ? '<div style="font-size:12px;color:var(--text-muted);margin-top:2px">📬 ' + esc(d.address) + '</div>' : '') +
             (d.food||d.foodType ? '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ' + esc([d.food,d.foodType].filter(Boolean).join(' · ')) + '</div>' : '') +
             (d.yogaSpace ? '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🧘 ' + esc(d.yogaSpace) + '</div>' : '') +
             (d.keywords ? '<div style="font-size:12px;margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">' + d.keywords.split(',').map(function(k){return '<span style="background:#e8f7f7;color:#026d72;border-radius:4px;padding:1px 6px;font-size:11px">'+esc(k.trim())+'</span>';}).join('') + '</div>' : '') +
             (d.web ? '<a href="' + esc(d.web) + '" target="_blank" style="font-size:11px;color:var(--teal);margin-top:4px;display:block">🔗 ' + esc(d.web.substring(0,70)) + (d.web.length>70?'…':'') + '</a>' : '') +
+            ((d.email||d.phone) ? '<div style="font-size:11px;color:var(--text-muted);margin-top:2px">✉️ ' + esc(d.email||d.phone) + '</div>' : '') +
             (d.notes ? '<div style="font-size:12px;color:#555;margin-top:4px;font-style:italic">' + esc(d.notes) + '</div>' : '') +
           '</div>' +
         '</div>'
