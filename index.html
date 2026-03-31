@@ -3515,58 +3515,59 @@ async function runDestScout() {
   const results = document.getElementById('scResults');
 
   btn.disabled = true; btn.textContent = '⏳ Hledám...';
-  status.textContent = 'Claude prohledává web — může to trvat 20–40 sekund...';
+  status.textContent = 'Krok 1/2: Claude prohledává web...';
   results.innerHTML = '';
 
   const params = [];
-  if (capacity)  params.push(`kapacita minimálně ${capacity} osob`);
-  if (foodType)  params.push(`typ stravy: ${foodType}`);
-  if (foodBoard) params.push(`forma stravování: ${foodBoard}`);
-  if (airport)   params.push(`dostupnost z letiště: ${airport}`);
-  if (price)     params.push(`orientační cena: ${price} na noc na osobu`);
-  if (yogaHall)  params.push(`prostor pro cvičení: ${yogaHall}`);
-  if (vibes)     params.push(`vibe / atmosféra: ${vibes}`);
+  if (capacity)  params.push('kapacita minimálně ' + capacity + ' osob');
+  if (foodType)  params.push('typ stravy: ' + foodType);
+  if (foodBoard) params.push('forma stravování: ' + foodBoard);
+  if (airport)   params.push('dostupnost z letiště: ' + airport);
+  if (price)     params.push('orientační cena: ' + price);
+  if (yogaHall)  params.push('prostor pro cvičení: ' + yogaHall);
+  if (vibes)     params.push('vibe / atmosféra: ' + vibes);
   if (extra)     params.push(extra);
 
   const paramText = params.length > 0 ? '\n\nPožadavky:\n- ' + params.join('\n- ') : '';
 
-  const prompt = `Jsi asistent cestovní agentury Essence for Life, která pořádá jóga retreaty pro české klienty. Hledáme retreat centra, hotely nebo vily vhodné pro skupinové jóga pobyty.
-
-Prohledej web a najdi 6–8 konkrétních, skutečně existujících retreat center nebo hotelů v oblasti: "${country}"${paramText}
-
-Centrum musí být vhodné pro skupinové jóga retreaty — velký prostor pro cvičení, klid, wellness zázemí.
-
-Důležité k stravování: pokud je zadána forma stravování jako "min. snídaně", hledej centra kde je alespoň snídaně zahrnuta v ceně (B&B nebo výše). Pokud "min. polopenze", hledej centra s polopenzí nebo plnou penzí. Vždy uveď v poli "food" co přesně centrum nabízí.
-
-Ceny uváděj tak jak jsou prezentovány na webu (většinou za pokoj/noc). Do pole "priceNote" uveď zda jde o cenu za pokoj, za osobu, nebo za celý objekt.
-
-DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádný markdown. Pouze surový JSON array.
-
-[
-  {
-    "name": "Název centra",
-    "country": "Itálie",
-    "region": "Ischia",
-    "web": "https://...",
-    "email": "",
-    "maxPersons": 20,
-    "roomTypes": "Single, double, suite",
-    "food": "Plná penze",
-    "foodType": "Vegetariánská",
-    "distanceAirport": "45 min autem z Neapole",
-    "price": "od 120 EUR/pokoj/noc",
-    "priceNote": "za double pokoj / za osobu v double",
-    "yogaSpace": "Venkovní terasa 80m² + vnitřní sál",
-    "keywords": "moře, příroda, bazén, wellness",
-    "minStay": "7 nocí",
-    "notes": "Proč je vhodné pro EFL retreaty, co je zajímavé."
-  }
-]
-
-Najdi skutečná, existující místa. Pokud email není veřejně dostupný, nech prázdný string.`;
+  const searchPrompt = 'Jsi asistent cestovní agentury Essence for Life. Prohledej web a najdi 6 konkrétních, skutečně existujících retreat center nebo hotelů vhodných pro skupinové jóga retreaty (10–20 osob) v oblasti: "' + country + '"' + paramText + '\n\nPro každé centrum zjisti: název, web, zemi, region, max kapacitu, stravování, typ stravy, vzdálenost od letiště, cenu za pokoj/noc, prostor pro cvičení jógy, klíčová slova/vibe, min. délku pobytu a proč je vhodné pro jóga retreaty.';
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
+    // KROK 1: Hledání s web_search
+    const res1 = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: searchPrompt }]
+      })
+    });
+
+    if (!res1.ok) {
+      const err = await res1.json();
+      throw new Error(err.error?.message || 'HTTP ' + res1.status);
+    }
+
+    const data1 = await res1.json();
+    let searchResult = '';
+    for (const block of (data1.content || [])) {
+      if (block.type === 'text') searchResult += block.text;
+    }
+    if (!searchResult.trim()) searchResult = 'Výsledky hledání nejsou k dispozici, použij svou znalost oblasti.';
+
+    status.textContent = 'Krok 2/2: Převádím výsledky do struktury...';
+
+    // KROK 2: Konverze na čistý JSON — BEZ web_search
+    const jsonPrompt = 'Na základě těchto výsledků výzkumu vrať POUZE čistý JSON array. Bez jakéhokoliv textu před ani za, bez markdown, bez backticks — POUZE surový JSON array začínající [ a končící ].\n\nVýsledky výzkumu:\n' + searchResult + '\n\nJSON array formát (všechna pole jako string, maxPersons jako číslo):\n[{"name":"","country":"","region":"","web":"","email":"","maxPersons":0,"roomTypes":"","food":"","foodType":"","distanceAirport":"","price":"","priceNote":"","yogaSpace":"","keywords":"","minStay":"","notes":""}]';
+
+    const res2 = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3577,67 +3578,68 @@ Najdi skutečná, existující místa. Pokud email není veřejně dostupný, ne
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
         max_tokens: 3000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
+        messages: [{ role: 'user', content: jsonPrompt }]
       })
     });
 
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || 'HTTP ' + res.status);
+    if (!res2.ok) {
+      const err = await res2.json();
+      throw new Error(err.error?.message || 'HTTP ' + res2.status);
     }
 
-    const data = await res.json();
-
+    const data2 = await res2.json();
     let text = '';
-    for (const block of (data.content || [])) {
+    for (const block of (data2.content || [])) {
       if (block.type === 'text') text += block.text;
     }
 
-    console.log('[DestScout] raw response:', text.substring(0, 800));
+    console.log('[DestScout] JSON step2:', text.substring(0, 400));
 
+    // Robustní parsování
     let dests = null;
-    const jsonMatch = text.match(/\[[\s\S]*?\]/);
-    if (jsonMatch) { try { dests = JSON.parse(jsonMatch[0]); } catch(e) {} }
+    const t = text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+    try { dests = JSON.parse(t); } catch(e) {}
     if (!dests) {
-      const codeMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
-      if (codeMatch) { try { dests = JSON.parse(codeMatch[1]); } catch(e) {} }
+      const m = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (m) { try { dests = JSON.parse(m[0]); } catch(e2) {} }
     }
-    if (!dests) { try { dests = JSON.parse(text.trim()); } catch(e) {} }
+    if (!dests) { try { dests = JSON.parse(text); } catch(e) {} }
 
     if (!dests || !Array.isArray(dests) || dests.length === 0) {
-      console.log('[DestScout] full response:', text);
-      throw new Error('Claude nevrátil správný formát. Zkus znovu nebo upřesni parametry.');
+      console.log('[DestScout] full text2:', text);
+      throw new Error('Nepodařilo se získat strukturovaná data. Zkus znovu.');
     }
 
-    status.textContent = `✅ Nalezeno ${dests.length} center — vyber které přidat do databáze:`;
+    status.textContent = '✅ Nalezeno ' + dests.length + ' center — vyber které přidat do databáze:';
 
-    results.innerHTML = `
-      <div style="display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-right:4px">
-        ${dests.map((d, i) => `
-          <div id="sc_card_${i}" style="background:#f8fffe;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
-            <input type="checkbox" id="sc_chk_${i}" checked style="margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex-shrink:0">
-            <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:14px;color:var(--navy)">${esc(d.name||'')}</div>
-              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">
-                ${d.country||d.region ? `<span>📍 ${esc([d.region,d.country].filter(Boolean).join(', '))}</span>` : ''}
-                ${d.maxPersons ? `<span>👥 max. ${esc(String(d.maxPersons))} os.</span>` : ''}
-                ${d.price ? `<span>💰 ${esc(d.price)}${d.priceNote ? ' ('+esc(d.priceNote)+')' : ''}</span>` : ''}
-                ${d.distanceAirport ? `<span>✈️ ${esc(d.distanceAirport)}</span>` : ''}
-              </div>
-              ${d.food||d.foodType ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ${esc([d.food,d.foodType].filter(Boolean).join(' · '))}</div>` : ''}
-              ${d.yogaSpace ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🧘 ${esc(d.yogaSpace)}</div>` : ''}
-              ${d.keywords ? `<div style="font-size:12px;margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${d.keywords.split(',').map(k=>`<span style="background:#e8f7f7;color:#026d72;border-radius:4px;padding:1px 6px;font-size:11px">${esc(k.trim())}</span>`).join('')}</div>` : ''}
-              ${d.web ? `<a href="${esc(d.web)}" target="_blank" style="font-size:11px;color:var(--teal);margin-top:4px;display:block">🔗 ${esc(d.web.substring(0,70))}${d.web.length>70?'…':''}</a>` : ''}
-              ${d.notes ? `<div style="font-size:12px;color:#555;margin-top:4px;font-style:italic">${esc(d.notes)}</div>` : ''}
-            </div>
-          </div>`).join('')}
-      </div>
-      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
-        <button class="btn btn-primary" onclick='addScoutedDestinations(${JSON.stringify(dests).replace(/'/g,"\\'")} )'>✅ Přidat vybrané do databáze</button>
-        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=sc_chk_]').forEach(c=>c.checked=true)">Vybrat vše</button>
-        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=sc_chk_]').forEach(c=>c.checked=false)">Odznačit vše</button>
-      </div>`;
+    results.innerHTML = '<div style="display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-right:4px">' +
+      dests.map(function(d, i) { return (
+        '<div id="sc_card_' + i + '" style="background:#f8fffe;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px">' +
+          '<input type="checkbox" id="sc_chk_' + i + '" checked style="margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex-shrink:0">' +
+          '<div style="flex:1;min-width:0">' +
+            '<div style="font-weight:700;font-size:14px;color:var(--navy)">' + esc(d.name||'') + '</div>' +
+            '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">' +
+              (d.country||d.region ? '<span>📍 ' + esc([d.region,d.country].filter(Boolean).join(', ')) + '</span>' : '') +
+              (d.maxPersons ? '<span>👥 max. ' + esc(String(d.maxPersons)) + ' os.</span>' : '') +
+              (d.price ? '<span>💰 ' + esc(d.price) + (d.priceNote ? ' ('+esc(d.priceNote)+')' : '') + '</span>' : '') +
+              (d.distanceAirport ? '<span>✈️ ' + esc(d.distanceAirport) + '</span>' : '') +
+            '</div>' +
+            (d.food||d.foodType ? '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ' + esc([d.food,d.foodType].filter(Boolean).join(' · ')) + '</div>' : '') +
+            (d.yogaSpace ? '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🧘 ' + esc(d.yogaSpace) + '</div>' : '') +
+            (d.keywords ? '<div style="font-size:12px;margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">' + d.keywords.split(',').map(function(k){return '<span style="background:#e8f7f7;color:#026d72;border-radius:4px;padding:1px 6px;font-size:11px">'+esc(k.trim())+'</span>';}).join('') + '</div>' : '') +
+            (d.web ? '<a href="' + esc(d.web) + '" target="_blank" style="font-size:11px;color:var(--teal);margin-top:4px;display:block">🔗 ' + esc(d.web.substring(0,70)) + (d.web.length>70?'…':'') + '</a>' : '') +
+            (d.notes ? '<div style="font-size:12px;color:#555;margin-top:4px;font-style:italic">' + esc(d.notes) + '</div>' : '') +
+          '</div>' +
+        '</div>'
+      );}).join('') +
+    '</div>' +
+    '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">' +
+      '<button class="btn btn-primary" id="scAddBtn">✅ Přidat vybrané do databáze</button>' +
+      '<button class="btn btn-secondary" onclick="document.querySelectorAll(\'[id^=sc_chk_]\').forEach(c=>c.checked=true)">Vybrat vše</button>' +
+      '<button class="btn btn-secondary" onclick="document.querySelectorAll(\'[id^=sc_chk_]\').forEach(c=>c.checked=false)">Odznačit vše</button>' +
+    '</div>';
+
+    document.getElementById('scAddBtn').onclick = function() { addScoutedDestinations(dests); };
 
   } catch(e) {
     status.textContent = '❌ Chyba: ' + e.message;
