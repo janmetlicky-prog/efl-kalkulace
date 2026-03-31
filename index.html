@@ -2462,6 +2462,7 @@ function renderDestinations() {
   if (filter.capacity) items = items.filter(d => d.maxPersons >= parseInt(filter.capacity));
   if (filter.food) items = items.filter(d => (d.food||'').toLowerCase().includes(filter.food.toLowerCase()));
   if (filter.vibe) items = items.filter(d => (d.keywords||'').toLowerCase().includes(filter.vibe.toLowerCase()));
+  if (filter.yogaHall) items = items.filter(d => (d.keywords||'').toLowerCase().includes(filter.yogaHall.toLowerCase()) || (d.notes||'').toLowerCase().includes(filter.yogaHall.split(' ')[0].toLowerCase()));
   if (filter.experience) items = items.filter(d => filter.experience === 'yes' ? d.ownExperience : !d.ownExperience);
   if (filter.yogaHall) {
     items = items.filter(d => {
@@ -2531,6 +2532,16 @@ function renderDestinations() {
           <option value="plná penze" ${filter.food==='plná penze'?'selected':''}>Plná penze</option>
           <option value="polopenze" ${filter.food==='polopenze'?'selected':''}>Polopenze</option>
           <option value="vlastní kuchyň" ${filter.food==='vlastní kuchyň'?'selected':''}>Vlastní kuchyň</option>
+        </select>
+      </div>
+      <div style="min-width:140px">
+        <label style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px">Jógovna</label>
+        <select onchange="setDestFilter('yogaHall',this.value)" style="width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;background:#fff">
+          <option value="">Vše</option>
+          <option value="venkovní nebo vnitřní" ${filter.yogaHall==='venkovní nebo vnitřní'?'selected':''}>Venkovní nebo vnitřní</option>
+          <option value="venkovní i vnitřní" ${filter.yogaHall==='venkovní i vnitřní'?'selected':''}>Venkovní i vnitřní</option>
+          <option value="vnitřní" ${filter.yogaHall==='vnitřní'?'selected':''}>Vnitřní</option>
+          <option value="venkovní" ${filter.yogaHall==='venkovní'?'selected':''}>Venkovní / terasa</option>
         </select>
       </div>
       <div style="min-width:110px">
