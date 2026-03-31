@@ -2463,6 +2463,16 @@ function renderDestinations() {
   if (filter.food) items = items.filter(d => (d.food||'').toLowerCase().includes(filter.food.toLowerCase()));
   if (filter.vibe) items = items.filter(d => (d.keywords||'').toLowerCase().includes(filter.vibe.toLowerCase()));
   if (filter.experience) items = items.filter(d => filter.experience === 'yes' ? d.ownExperience : !d.ownExperience);
+  if (filter.yogaHall) {
+    items = items.filter(d => {
+      const ys = (d.yogaSpace||d.keywords||d.notes||'').toLowerCase();
+      if (filter.yogaHall === 'venkovní nebo vnitřní') return ys.includes('jógovna') || ys.includes('jogovna') || ys.includes('yoga') || ys.includes('terasa') || ys.includes('sál') || ys.includes('sal');
+      if (filter.yogaHall === 'venkovní i vnitřní') return (ys.includes('venkovní') || ys.includes('terasa')) && (ys.includes('vnitřní') || ys.includes('sál') || ys.includes('sal'));
+      if (filter.yogaHall === 'vnitřní') return ys.includes('vnitřní') || ys.includes('sál') || ys.includes('sal') || ys.includes('indoor');
+      if (filter.yogaHall === 'venkovní') return ys.includes('venkovní') || ys.includes('terasa') || ys.includes('outdoor') || ys.includes('platforma');
+      return true;
+    });
+  }
   if (filter.search) {
     const s = filter.search.toLowerCase();
     items = items.filter(d =>
