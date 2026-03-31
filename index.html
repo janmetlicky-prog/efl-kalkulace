@@ -3515,26 +3515,28 @@ async function runDestScout() {
   const results = document.getElementById('scResults');
 
   btn.disabled = true; btn.textContent = '⏳ Hledám...';
-  status.textContent = 'Krok 1/2: Claude prohledává web...';
+  status.textContent = 'Hledám retreat centra...';
   results.innerHTML = '';
 
   const params = [];
-  if (capacity)  params.push('kapacita minimálně ' + capacity + ' osob');
-  if (foodType)  params.push('typ stravy: ' + foodType);
-  if (foodBoard) params.push('forma stravování: ' + foodBoard);
-  if (airport)   params.push('dostupnost z letiště: ' + airport);
-  if (price)     params.push('orientační cena: ' + price);
-  if (yogaHall)  params.push('prostor pro cvičení: ' + yogaHall);
-  if (vibes)     params.push('vibe / atmosféra: ' + vibes);
+  if (capacity)  params.push('min. ' + capacity + ' osob');
+  if (foodType)  params.push(foodType);
+  if (foodBoard) params.push(foodBoard);
+  if (airport)   params.push(airport + ' od letiště');
+  if (price)     params.push(price);
+  if (yogaHall)  params.push(yogaHall);
+  if (vibes)     params.push(vibes);
   if (extra)     params.push(extra);
 
-  const paramText = params.length > 0 ? '\n\nPožadavky:\n- ' + params.join('\n- ') : '';
+  const paramStr = params.length > 0 ? ' Požadavky: ' + params.join(', ') + '.' : '';
 
-  const searchPrompt = 'Jsi asistent cestovní agentury Essence for Life. Prohledej web a najdi 6 konkrétních, skutečně existujících retreat center nebo hotelů vhodných pro skupinové jóga retreaty (10–20 osob) v oblasti: "' + country + '"' + paramText + '\n\nPro každé centrum zjisti: název, web, zemi, region, max kapacitu, stravování, typ stravy, vzdálenost od letiště, cenu za pokoj/noc, prostor pro cvičení jógy, klíčová slova/vibe, min. délku pobytu a proč je vhodné pro jóga retreaty.';
+  // Jeden request — přímý JSON výstup, stručný prompt
+  const prompt = 'Najdi 5 skutečných retreat center pro skupinové jóga pobyty v oblasti: ' + country + '.' + paramStr +
+    ' Odpověz POUZE JSON arraym, žádný text před/za/markdown:' +
+    '[{"name":"","country":"","region":"","web":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]';
 
   try {
-    // KROK 1: Hledání s web_search
-    const res1 = await fetch('https://api.anthropic.com/v1/messages', {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -3544,56 +3546,24 @@ async function runDestScout() {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4000,
+        max_tokens: 2000,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: searchPrompt }]
+        messages: [{ role: 'user', content: prompt }]
       })
     });
 
-    if (!res1.ok) {
-      const err = await res1.json();
-      throw new Error(err.error?.message || 'HTTP ' + res1.status);
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'HTTP ' + res.status);
     }
 
-    const data1 = await res1.json();
-    let searchResult = '';
-    for (const block of (data1.content || [])) {
-      if (block.type === 'text') searchResult += block.text;
-    }
-    if (!searchResult.trim()) searchResult = 'Výsledky hledání nejsou k dispozici, použij svou znalost oblasti.';
-
-    status.textContent = 'Krok 2/2: Převádím výsledky do struktury...';
-
-    // KROK 2: Konverze na čistý JSON — BEZ web_search
-    const jsonPrompt = 'Na základě těchto výsledků výzkumu vrať POUZE čistý JSON array. Bez jakéhokoliv textu před ani za, bez markdown, bez backticks — POUZE surový JSON array začínající [ a končící ].\n\nVýsledky výzkumu:\n' + searchResult + '\n\nJSON array formát (všechna pole jako string, maxPersons jako číslo):\n[{"name":"","country":"","region":"","web":"","email":"","maxPersons":0,"roomTypes":"","food":"","foodType":"","distanceAirport":"","price":"","priceNote":"","yogaSpace":"","keywords":"","minStay":"","notes":""}]';
-
-    const res2 = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 3000,
-        messages: [{ role: 'user', content: jsonPrompt }]
-      })
-    });
-
-    if (!res2.ok) {
-      const err = await res2.json();
-      throw new Error(err.error?.message || 'HTTP ' + res2.status);
-    }
-
-    const data2 = await res2.json();
+    const data = await res.json();
     let text = '';
-    for (const block of (data2.content || [])) {
+    for (const block of (data.content || [])) {
       if (block.type === 'text') text += block.text;
     }
 
-    console.log('[DestScout] JSON step2:', text.substring(0, 400));
+    console.log('[DestScout] response:', text.substring(0, 300));
 
     // Robustní parsování
     let dests = null;
@@ -3606,8 +3576,38 @@ async function runDestScout() {
     if (!dests) { try { dests = JSON.parse(text); } catch(e) {} }
 
     if (!dests || !Array.isArray(dests) || dests.length === 0) {
-      console.log('[DestScout] full text2:', text);
-      throw new Error('Nepodařilo se získat strukturovaná data. Zkus znovu.');
+      // Fallback: zkus druhý request čistě pro JSON konverzi
+      const jsonRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2000,
+          messages: [{
+            role: 'user',
+            content: 'Převeď tento text na JSON array retreat center. Vrať POUZE JSON, nic jiného:\n\n' +
+              text.substring(0, 2000) +
+              '\n\nFormát: [{"name":"","country":"","region":"","web":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]'
+          }]
+        })
+      });
+      if (jsonRes.ok) {
+        const jd = await jsonRes.json();
+        let jt = '';
+        for (const b of (jd.content||[])) { if (b.type==='text') jt += b.text; }
+        const jt2 = jt.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+        try { dests = JSON.parse(jt2); } catch(e) {}
+        if (!dests) { const m2 = jt.match(/\[\s*\{[\s\S]*\}\s*\]/); if (m2) { try { dests = JSON.parse(m2[0]); } catch(e){} } }
+      }
+    }
+
+    if (!dests || !Array.isArray(dests) || dests.length === 0) {
+      throw new Error('Nepodařilo se získat strukturovaná data. Zkus jiné parametry nebo znovu za chvíli.');
     }
 
     status.textContent = '✅ Nalezeno ' + dests.length + ' center — vyber které přidat do databáze:';
@@ -3621,7 +3621,7 @@ async function runDestScout() {
             '<div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">' +
               (d.country||d.region ? '<span>📍 ' + esc([d.region,d.country].filter(Boolean).join(', ')) + '</span>' : '') +
               (d.maxPersons ? '<span>👥 max. ' + esc(String(d.maxPersons)) + ' os.</span>' : '') +
-              (d.price ? '<span>💰 ' + esc(d.price) + (d.priceNote ? ' ('+esc(d.priceNote)+')' : '') + '</span>' : '') +
+              (d.price ? '<span>💰 ' + esc(d.price) + '</span>' : '') +
               (d.distanceAirport ? '<span>✈️ ' + esc(d.distanceAirport) + '</span>' : '') +
             '</div>' +
             (d.food||d.foodType ? '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ' + esc([d.food,d.foodType].filter(Boolean).join(' · ')) + '</div>' : '') +
