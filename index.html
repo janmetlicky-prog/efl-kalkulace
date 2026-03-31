@@ -1010,6 +1010,14 @@
         <input type="text" id="mTripDest" placeholder="např. Ischia, Itálie">
       </div>
       <div class="form-group">
+        <label>Hotel / ubytování</label>
+        <input type="text" id="mTripHotel" placeholder="např. Hotel Terme Manzi">
+      </div>
+      <div class="form-group">
+        <label>Link na ubytování</label>
+        <input type="url" id="mTripHotelUrl" placeholder="https://...">
+      </div>
+      <div class="form-group">
         <label>Min. osob (kalkulace)</label>
         <input type="number" id="mTripMinP" value="8">
       </div>
@@ -3995,6 +4003,7 @@ function renderTripDetail() {
           ${trip.destination ? `<div class="info-chip">📍 ${trip.destination}</div>` : ''}
           ${trip.date ? `<div class="info-chip">📅 ${trip.date}</div>` : ''}
           ${trip.instructor ? `<div class="info-chip">👤 ${trip.instructor}</div>` : ''}
+          ${trip.hotelName ? `<div class="info-chip" style="background:#f0f7f7;border-color:#c8e4e5">🏨 ${trip.hotelName}${trip.hotelUrl ? ` <a href="${trip.hotelUrl}" target="_blank" style="margin-left:5px;color:var(--teal);text-decoration:none;font-weight:700" title="Otevřít web hotelu">↗</a>` : ''}</div>` : (trip.hotelUrl ? `<a href="${trip.hotelUrl}" target="_blank" class="info-chip" style="background:#f0f7f7;border-color:#c8e4e5;color:var(--teal);text-decoration:none;font-weight:600">🔗 Ubytování</a>` : '')}
           <div class="info-chip">🌙 ${trip.nights||'?'} nocí</div>
           <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${(trip.participants||[]).filter(p=>!p.isCancelled).length || trip.totalPersons||0} os.</div>
         </div>
@@ -4594,18 +4603,22 @@ function editTrip(tripId) { editingTripId = tripId; openEditModal(tripId); }
 // ═══════════════════════════════════════════════
 function openNewTripModal() {
   editingTripId = null;
-  document.getElementById('modalTitle').textContent = 'Nový zájezd';
+  document.getElementById('modalTitle').textContent = 'Nový zájezd / kalkulace';
   document.getElementById('mTripName').value = '';
   document.getElementById('mTripYear').value = currentYear;
   document.getElementById('mTripMonth').value = new Date().getMonth() + 1;
   document.getElementById('mTripDate').value = '';
   document.getElementById('mTripInstructor').value = '';
   document.getElementById('mTripDest').value = '';
+  document.getElementById('mTripHotel').value = '';
+  document.getElementById('mTripHotelUrl').value = '';
   document.getElementById('mTripMinP').value = 8;
   document.getElementById('mTripTotalP').value = 0;
   document.getElementById('mTripNights').value = 7;
   document.getElementById('mTripPrice').value = '';
   document.getElementById('tripModal').classList.remove('hidden');
+  // Nový zájezd = vždy kalkulace
+  window._newTripIsKalkulace = true;
 }
 
 function openEditModal(tripId) {
@@ -4622,6 +4635,9 @@ function openEditModal(tripId) {
   document.getElementById('mTripTotalP').value     = trip.totalPersons || 0;
   document.getElementById('mTripNights').value     = trip.nights      || 7;
   document.getElementById('mTripPrice').value      = trip.price       || '';
+  document.getElementById('mTripHotel').value      = trip.hotelName   || '';
+  document.getElementById('mTripHotelUrl').value   = trip.hotelUrl    || '';
+  window._newTripIsKalkulace = false;
   document.getElementById('tripModal').classList.remove('hidden');
 }
 
@@ -4638,6 +4654,8 @@ function saveTripModal() {
     date: document.getElementById('mTripDate').value,
     instructor: document.getElementById('mTripInstructor').value,
     destination: document.getElementById('mTripDest').value,
+    hotelName: document.getElementById('mTripHotel').value.trim(),
+    hotelUrl: document.getElementById('mTripHotelUrl').value.trim(),
     minPersons: parseInt(document.getElementById('mTripMinP').value) || 0,
     totalPersons: parseInt(document.getElementById('mTripTotalP').value) || 0,
     nights: parseInt(document.getElementById('mTripNights').value) || 0,
@@ -4649,12 +4667,12 @@ function saveTripModal() {
     savedTrip = db.trips.find(t => t.id === editingTripId);
     if (savedTrip) Object.assign(savedTrip, data);
   } else {
-    savedTrip = { id: uid(), ...data, costItems: [], participants: [], notes: '', status: 'active', essenceRate: 0.15, mpRate: 0.05 };
+    savedTrip = { id: uid(), ...data, costItems: [], participants: [], notes: '', status: 'kalkulace', essenceRate: 0.15, mpRate: 0.05 };
     db.trips.push(savedTrip);
   }
 
-  // Apply auto-status (storno is preserved via toggleStorno, not here)
-  if (savedTrip && savedTrip.status !== 'storno') {
+  // Apply auto-status — nové zájezdy začínají jako kalkulace, editace zachovávají status
+  if (savedTrip && savedTrip.status !== 'storno' && savedTrip.status !== 'kalkulace') {
     savedTrip.status = getAutoStatus(savedTrip);
   }
   save(db); closeTripModal();
