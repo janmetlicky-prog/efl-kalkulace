@@ -863,6 +863,104 @@
   </div>
 </div>
 
+<!-- MODAL: Scout destinací -->
+<div class="modal-overlay hidden" id="destScoutModal">
+  <div class="modal" style="max-width:720px;max-height:90vh;overflow-y:auto">
+    <h2>🌍 Scout destinací</h2>
+    <p style="font-size:13px;color:var(--text-muted);margin-bottom:20px">Claude prohledá web a najde retreat centra podle tvých parametrů. Výsledky přidáš do databáze jedním kliknutím.</p>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+      <div>
+        <label class="form-label">Země / region *</label>
+        <input type="text" id="scCountry" class="form-input" placeholder="Itálie, Španělsko, Bali, Thajsko...">
+      </div>
+      <div>
+        <label class="form-label">Kapacita (min. osob)</label>
+        <select id="scCapacity" class="form-input">
+          <option value="">Libovolná</option>
+          <option value="8">min. 8 osob</option>
+          <option value="10">min. 10 osob</option>
+          <option value="12">min. 12 osob</option>
+          <option value="15">min. 15 osob</option>
+          <option value="20">min. 20 osob</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Typ stravy</label>
+        <select id="scFoodType" class="form-input">
+          <option value="">Bez preference</option>
+          <option value="vegetariánská">Vegetariánská</option>
+          <option value="vegánská">Vegánská</option>
+          <option value="raw food">Raw food</option>
+          <option value="zdravá strava">Zdravá strava obecně</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Forma stravování</label>
+        <select id="scFoodBoard" class="form-input">
+          <option value="">Bez preference</option>
+          <option value="plná penze">Plná penze</option>
+          <option value="polopenze">Polopenze</option>
+          <option value="snídaně">Snídaně</option>
+          <option value="all inclusive">All inclusive</option>
+          <option value="vlastní kuchyň">Vlastní kuchyň</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Dostupnost z letiště</label>
+        <select id="scAirport" class="form-input">
+          <option value="">Bez preference</option>
+          <option value="do 30 minut">Do 30 minut</option>
+          <option value="do 60 minut">Do 60 minut</option>
+          <option value="do 90 minut">Do 90 minut</option>
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Orientační cena / noc / os</label>
+        <select id="scPrice" class="form-input">
+          <option value="">Bez preference</option>
+          <option value="do 50 EUR">do 50 EUR</option>
+          <option value="50–100 EUR">50–100 EUR</option>
+          <option value="100–200 EUR">100–200 EUR</option>
+          <option value="200+ EUR">200+ EUR (luxus)</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Prostor pro cvičení / jógovnu</label>
+        <select id="scYogaHall" class="form-input" style="max-width:300px">
+          <option value="">Bez preference</option>
+          <option value="venkovní i vnitřní jógovna">Venkovní i vnitřní jógovna</option>
+          <option value="vnitřní jógovna">Vnitřní jógovna</option>
+          <option value="venkovní terasa nebo platforma">Venkovní terasa / platforma</option>
+        </select>
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Vibe / klíčová slova</label>
+        <input type="text" id="scVibes" class="form-input" placeholder="příroda, moře, bazén, luxus, wellness, spa, hory, klid... (odděluj čárkami)">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Upřesnění (volitelné)</label>
+        <input type="text" id="scExtra" class="form-input" placeholder="Specifické požadavky, typ centra, lokalita...">
+      </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Anthropic API klíč</label>
+        <input type="password" id="scApiKey" class="form-input" placeholder="sk-ant-..." style="font-family:monospace"
+          oninput="localStorage.setItem('efl_anthropic_key',this.value)">
+        <div style="font-size:11px;color:var(--text-muted);margin-top:4px">Klíč se uloží lokálně v prohlížeči.</div>
+      </div>
+    </div>
+
+    <button id="scRunBtn" onclick="runDestScout()" class="btn btn-primary" style="width:100%;justify-content:center;margin-bottom:16px">🌍 Spustit scout</button>
+
+    <div id="scStatus" style="font-size:13px;color:var(--text-muted);min-height:20px;margin-bottom:12px"></div>
+    <div id="scResults"></div>
+
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="closeDestScoutModal()">Zavřít</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /app -->
 
 <!-- MODAL: New/Edit Trip -->
@@ -2362,7 +2460,10 @@ function renderDestinations() {
         <div style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:700;color:var(--navy)">📍 Destinace & ubytování</div>
         <div style="font-size:13px;color:var(--text-muted);margin-top:2px">${db.destinations.length} center v databázi${items.length !== db.destinations.length ? ` · ${items.length} odpovídá filtru` : ''}</div>
       </div>
-      <button class="btn btn-primary" onclick="openNewDestModal()">+ Přidat centrum</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="openDestScoutModal()" style="background:linear-gradient(135deg,#026d72,#03989e);color:#fff;border-color:transparent">🌍 Scout destinací</button>
+        <button class="btn btn-primary" onclick="openNewDestModal()">+ Přidat centrum</button>
+      </div>
     </div>
 
     <!-- FILTRY -->
@@ -3373,6 +3474,218 @@ function addDiscoveryLeads(leads) {
   closeDiscoveryModal();
   renderInstructorsKeepSearch();
   alert(`✅ Přidáno ${added} nových lektorů do CRM.`);
+}
+
+// ═══════════════════════════════════════════════
+// SCOUT DESTINACÍ — AI vyhledávač retreat center
+// ═══════════════════════════════════════════════
+function openDestScoutModal() {
+  const saved = localStorage.getItem('efl_anthropic_key') || '';
+  const inp = document.getElementById('scApiKey');
+  if (inp) inp.value = saved;
+  document.getElementById('scResults').innerHTML = '';
+  document.getElementById('scStatus').textContent = '';
+  document.getElementById('destScoutModal').classList.remove('hidden');
+}
+
+function closeDestScoutModal() {
+  document.getElementById('destScoutModal').classList.add('hidden');
+}
+
+async function runDestScout() {
+  const apiKey = document.getElementById('scApiKey').value.trim();
+  if (!apiKey) { alert('Zadej Anthropic API klíč.'); return; }
+  localStorage.setItem('efl_anthropic_key', apiKey);
+
+  const country   = (document.getElementById('scCountry').value || '').trim();
+  const capacity  = document.getElementById('scCapacity').value;
+  const foodType  = document.getElementById('scFoodType').value;
+  const foodBoard = document.getElementById('scFoodBoard').value;
+  const airport   = document.getElementById('scAirport').value;
+  const price     = document.getElementById('scPrice').value;
+  const yogaHall  = document.getElementById('scYogaHall').value;
+  const vibes     = (document.getElementById('scVibes').value || '').trim();
+  const extra     = (document.getElementById('scExtra').value || '').trim();
+
+  if (!country) { alert('Zadej alespoň zemi nebo region.'); return; }
+
+  const btn     = document.getElementById('scRunBtn');
+  const status  = document.getElementById('scStatus');
+  const results = document.getElementById('scResults');
+
+  btn.disabled = true; btn.textContent = '⏳ Hledám...';
+  status.textContent = 'Claude prohledává web — může to trvat 20–40 sekund...';
+  results.innerHTML = '';
+
+  const params = [];
+  if (capacity)  params.push(`kapacita minimálně ${capacity} osob`);
+  if (foodType)  params.push(`typ stravy: ${foodType}`);
+  if (foodBoard) params.push(`forma stravování: ${foodBoard}`);
+  if (airport)   params.push(`dostupnost z letiště: ${airport}`);
+  if (price)     params.push(`orientační cena: ${price} na noc na osobu`);
+  if (yogaHall)  params.push(`prostor pro cvičení: ${yogaHall}`);
+  if (vibes)     params.push(`vibe / atmosféra: ${vibes}`);
+  if (extra)     params.push(extra);
+
+  const paramText = params.length > 0 ? '\n\nPožadavky:\n- ' + params.join('\n- ') : '';
+
+  const prompt = `Jsi asistent cestovní agentury Essence for Life, která pořádá jóga retreaty pro české klienty. Hledáme retreat centra, hotely nebo vily vhodné pro skupinové jóga pobyty.
+
+Prohledej web a najdi 6–8 konkrétních, skutečně existujících retreat center nebo hotelů v oblasti: "${country}"${paramText}
+
+Centrum musí být vhodné pro skupinové jóga retreaty — velký prostor pro cvičení, klid, wellness zázemí.
+
+DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádný markdown. Pouze surový JSON array.
+
+[
+  {
+    "name": "Název centra",
+    "country": "Itálie",
+    "region": "Ischia",
+    "web": "https://...",
+    "email": "",
+    "maxPersons": 20,
+    "roomTypes": "Single, double, suite",
+    "food": "Plná penze",
+    "foodType": "Vegetariánská",
+    "distanceAirport": "45 min autem z Neapole",
+    "price": "od 120 EUR/noc/os",
+    "yogaSpace": "Venkovní terasa 80m² + vnitřní sál",
+    "keywords": "moře, příroda, bazén, wellness",
+    "minStay": "7 nocí",
+    "notes": "Proč je vhodné pro EFL retreaty, co je zajímavé."
+  }
+]
+
+Najdi skutečná, existující místa. Pokud email není veřejně dostupný, nech prázdný string.`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 3000,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error?.message || 'HTTP ' + res.status);
+    }
+
+    const data = await res.json();
+
+    let text = '';
+    for (const block of (data.content || [])) {
+      if (block.type === 'text') text += block.text;
+    }
+
+    console.log('[DestScout] raw response:', text.substring(0, 800));
+
+    let dests = null;
+    const jsonMatch = text.match(/\[[\s\S]*?\]/);
+    if (jsonMatch) { try { dests = JSON.parse(jsonMatch[0]); } catch(e) {} }
+    if (!dests) {
+      const codeMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
+      if (codeMatch) { try { dests = JSON.parse(codeMatch[1]); } catch(e) {} }
+    }
+    if (!dests) { try { dests = JSON.parse(text.trim()); } catch(e) {} }
+
+    if (!dests || !Array.isArray(dests) || dests.length === 0) {
+      console.log('[DestScout] full response:', text);
+      throw new Error('Claude nevrátil správný formát. Zkus znovu nebo upřesni parametry.');
+    }
+
+    status.textContent = `✅ Nalezeno ${dests.length} center — vyber které přidat do databáze:`;
+
+    results.innerHTML = `
+      <div style="display:flex;flex-direction:column;gap:10px;max-height:450px;overflow-y:auto;padding-right:4px">
+        ${dests.map((d, i) => `
+          <div id="sc_card_${i}" style="background:#f8fffe;border:1.5px solid var(--border);border-radius:10px;padding:14px 16px;display:flex;align-items:flex-start;gap:12px">
+            <input type="checkbox" id="sc_chk_${i}" checked style="margin-top:3px;accent-color:var(--teal);width:16px;height:16px;flex-shrink:0">
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:14px;color:var(--navy)">${esc(d.name||'')}</div>
+              <div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">
+                ${d.country||d.region ? `<span>📍 ${esc([d.region,d.country].filter(Boolean).join(', '))}</span>` : ''}
+                ${d.maxPersons ? `<span>👥 max. ${esc(String(d.maxPersons))} os.</span>` : ''}
+                ${d.price ? `<span>💰 ${esc(d.price)}</span>` : ''}
+                ${d.distanceAirport ? `<span>✈️ ${esc(d.distanceAirport)}</span>` : ''}
+              </div>
+              ${d.food||d.foodType ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ${esc([d.food,d.foodType].filter(Boolean).join(' · '))}</div>` : ''}
+              ${d.yogaSpace ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🧘 ${esc(d.yogaSpace)}</div>` : ''}
+              ${d.keywords ? `<div style="font-size:12px;margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${d.keywords.split(',').map(k=>`<span style="background:#e8f7f7;color:#026d72;border-radius:4px;padding:1px 6px;font-size:11px">${esc(k.trim())}</span>`).join('')}</div>` : ''}
+              ${d.web ? `<a href="${esc(d.web)}" target="_blank" style="font-size:11px;color:var(--teal);margin-top:4px;display:block">🔗 ${esc(d.web.substring(0,70))}${d.web.length>70?'…':''}</a>` : ''}
+              ${d.notes ? `<div style="font-size:12px;color:#555;margin-top:4px;font-style:italic">${esc(d.notes)}</div>` : ''}
+            </div>
+          </div>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick='addScoutedDestinations(${JSON.stringify(dests).replace(/'/g,"\\'")} )'>✅ Přidat vybrané do databáze</button>
+        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=sc_chk_]').forEach(c=>c.checked=true)">Vybrat vše</button>
+        <button class="btn btn-secondary" onclick="document.querySelectorAll('[id^=sc_chk_]').forEach(c=>c.checked=false)">Odznačit vše</button>
+      </div>`;
+
+  } catch(e) {
+    status.textContent = '❌ Chyba: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = '🌍 Spustit scout';
+  }
+}
+
+function addScoutedDestinations(dests) {
+  const checkboxes = document.querySelectorAll('[id^=sc_chk_]');
+  const selected = dests.filter((_, i) => checkboxes[i] && checkboxes[i].checked);
+  if (!selected.length) { alert('Nic není vybráno.'); return; }
+
+  if (!db.destinations) db.destinations = [];
+  const normN = s => (s||'').trim().toLowerCase();
+  let added = 0;
+
+  selected.forEach(d => {
+    if (!d.name || d.name.length < 2) return;
+    const exists = db.destinations.find(x => normN(x.name) === normN(d.name));
+    if (exists) return;
+    db.destinations.push({
+      id: uid(),
+      name: d.name || '',
+      country: d.country || '',
+      region: d.region || '',
+      web: d.web || '',
+      email: d.email || '',
+      contact: '',
+      distanceAirport: d.distanceAirport || '',
+      parking: '',
+      maxPersons: parseInt(d.maxPersons) || 0,
+      roomTypes: d.roomTypes || '',
+      food: d.food || '',
+      ownKitchen: false,
+      foodType: d.foodType || '',
+      keywords: [d.keywords, d.yogaSpace ? 'jógovna' : ''].filter(Boolean).join(', '),
+      price: d.price || '',
+      minStay: d.minStay || '',
+      storno: '',
+      ownExperience: false,
+      notes: d.notes || '',
+      source: 'AI Scout',
+    });
+    added++;
+  });
+
+  save(db);
+  closeDestScoutModal();
+  renderDestinations();
+  setTimeout(() => {
+    if (added > 0) alert(`✅ Přidáno ${added} nových center do databáze destinací.`);
+    else alert('Všechna vybraná centra již v databázi jsou.');
+  }, 100);
 }
 
 async function oslovitLektora(id) {
