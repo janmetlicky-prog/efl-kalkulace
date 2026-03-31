@@ -899,10 +899,9 @@
         <label class="form-label">Forma stravování</label>
         <select id="scFoodBoard" class="form-input">
           <option value="">Bez preference</option>
-          <option value="jakákoliv strava k dispozici (i snídaně stačí)">Jakákoliv — i snídaně stačí</option>
-          <option value="snídaně">Snídaně</option>
-          <option value="polopenze">Polopenze</option>
           <option value="plná penze">Plná penze</option>
+          <option value="polopenze">Polopenze</option>
+          <option value="snídaně">Snídaně</option>
           <option value="all inclusive">All inclusive</option>
           <option value="vlastní kuchyň">Vlastní kuchyň</option>
         </select>
@@ -917,20 +916,19 @@
         </select>
       </div>
       <div>
-        <label class="form-label">Orientační cena / noc / os</label>
+        <label class="form-label">Orientační cena / pokoj / noc</label>
         <select id="scPrice" class="form-input">
           <option value="">Bez preference</option>
-          <option value="do 50 EUR">do 50 EUR</option>
-          <option value="50–100 EUR">50–100 EUR</option>
-          <option value="100–200 EUR">100–200 EUR</option>
-          <option value="200+ EUR">200+ EUR (luxus)</option>
+          <option value="do 80 EUR za pokoj/noc">do 80 EUR / pokoj / noc</option>
+          <option value="80–150 EUR za pokoj/noc">80–150 EUR / pokoj / noc</option>
+          <option value="150–300 EUR za pokoj/noc">150–300 EUR / pokoj / noc</option>
+          <option value="300+ EUR za pokoj/noc">300+ EUR / pokoj / noc (luxus)</option>
         </select>
       </div>
       <div style="grid-column:1/-1">
         <label class="form-label">Prostor pro cvičení / jógovnu</label>
         <select id="scYogaHall" class="form-input" style="max-width:300px">
           <option value="">Bez preference</option>
-          <option value="venkovní nebo vnitřní jógovna (cokoliv)">Venkovní nebo vnitřní (cokoliv)</option>
           <option value="venkovní i vnitřní jógovna">Venkovní i vnitřní jógovna</option>
           <option value="vnitřní jógovna">Vnitřní jógovna</option>
           <option value="venkovní terasa nebo platforma">Venkovní terasa / platforma</option>
@@ -3537,6 +3535,8 @@ Prohledej web a najdi 6–8 konkrétních, skutečně existujících retreat cen
 
 Centrum musí být vhodné pro skupinové jóga retreaty — velký prostor pro cvičení, klid, wellness zázemí.
 
+Ceny uváděj tak jak jsou prezentovány na webu (většinou za pokoj/noc). Do pole "priceNote" uveď zda jde o cenu za pokoj, za osobu, nebo za celý objekt.
+
 DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za. Žádný markdown. Pouze surový JSON array.
 
 [
@@ -3551,7 +3551,8 @@ DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za
     "food": "Plná penze",
     "foodType": "Vegetariánská",
     "distanceAirport": "45 min autem z Neapole",
-    "price": "od 120 EUR/noc/os",
+    "price": "od 120 EUR/pokoj/noc",
+    "priceNote": "za double pokoj / za osobu v double",
     "yogaSpace": "Venkovní terasa 80m² + vnitřní sál",
     "keywords": "moře, příroda, bazén, wellness",
     "minStay": "7 nocí",
@@ -3618,7 +3619,7 @@ Najdi skutečná, existující místa. Pokud email není veřejně dostupný, ne
               <div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;flex-wrap:wrap;gap:6px">
                 ${d.country||d.region ? `<span>📍 ${esc([d.region,d.country].filter(Boolean).join(', '))}</span>` : ''}
                 ${d.maxPersons ? `<span>👥 max. ${esc(String(d.maxPersons))} os.</span>` : ''}
-                ${d.price ? `<span>💰 ${esc(d.price)}</span>` : ''}
+                ${d.price ? `<span>💰 ${esc(d.price)}${d.priceNote ? ' ('+esc(d.priceNote)+')' : ''}</span>` : ''}
                 ${d.distanceAirport ? `<span>✈️ ${esc(d.distanceAirport)}</span>` : ''}
               </div>
               ${d.food||d.foodType ? `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">🍽️ ${esc([d.food,d.foodType].filter(Boolean).join(' · '))}</div>` : ''}
@@ -3672,6 +3673,7 @@ function addScoutedDestinations(dests) {
       foodType: d.foodType || '',
       keywords: [d.keywords, d.yogaSpace ? 'jógovna' : ''].filter(Boolean).join(', '),
       price: d.price || '',
+      priceNote: d.priceNote || '',
       minStay: d.minStay || '',
       storno: '',
       ownExperience: false,
