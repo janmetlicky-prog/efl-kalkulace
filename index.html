@@ -1067,6 +1067,10 @@
         <label class="form-label">Kontaktní osoba</label>
         <input type="text" id="dContact" class="form-input" placeholder="Jméno">
       </div>
+      <div style="grid-column:1/-1">
+        <label class="form-label">Adresa</label>
+        <input type="text" id="dAddress" class="form-input" placeholder="Via Roma 1, 90100 Palermo, Sicília">
+      </div>
       <div>
         <label class="form-label">Vzdálenost od letiště</label>
         <input type="text" id="dDistanceAirport" class="form-input" placeholder="30 min autem">
@@ -1125,6 +1129,24 @@
       <button class="btn btn-secondary" onclick="closeDestModal()">Zrušit</button>
       <button class="btn btn-primary" onclick="saveDestModal()">Uložit centrum</button>
     </div>
+  </div>
+</div>
+
+<!-- MODAL: Preview destinace -->
+<div class="modal-overlay hidden" id="destPreviewModal">
+  <div class="modal" style="max-width:660px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <div id="dpTitle" style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--navy)"></div>
+        <div id="dpSubtitle" style="font-size:13px;color:var(--text-muted);margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0">
+        <button class="btn btn-secondary btn-sm" id="dpEditBtn">✏️ Upravit</button>
+        <button class="btn btn-secondary btn-sm admin-only" id="dpDeleteBtn">🗑 Smazat</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeDestPreview()" style="font-size:16px;padding:4px 10px">✕</button>
+      </div>
+    </div>
+    <div id="dpBody"></div>
   </div>
 </div>
 
@@ -2530,9 +2552,10 @@ function renderDestinations() {
 function renderDestCard(d) {
   const vibes = (d.keywords||'').split(',').map(k=>k.trim()).filter(Boolean);
   return `
-    <div style="background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .2s;display:flex;flex-direction:column"
-         onmouseover="this.style.boxShadow='0 4px 24px rgba(3,152,158,.12)'"
-         onmouseout="this.style.boxShadow='none'">
+    <div style="background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:box-shadow .2s,transform .15s;display:flex;flex-direction:column;cursor:pointer"
+         onclick="openDestPreview('${d.id}')"
+         onmouseover="this.style.boxShadow='0 4px 24px rgba(3,152,158,.15)';this.style.transform='translateY(-2px)'"
+         onmouseout="this.style.boxShadow='none';this.style.transform='none'">
       <!-- Header -->
       <div style="padding:18px 20px 14px;border-bottom:1px solid var(--sand)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
@@ -2540,7 +2563,7 @@ function renderDestCard(d) {
             <div style="font-size:16px;font-weight:700;color:var(--navy);margin-bottom:3px">${esc(d.name)}</div>
             <div style="font-size:13px;color:var(--text-muted)">📍 ${esc(d.country)}${d.region ? ' · ' + esc(d.region) : ''}</div>
           </div>
-          <div style="display:flex;gap:4px;flex-shrink:0">
+          <div style="display:flex;gap:4px;flex-shrink:0" onclick="event.stopPropagation()">
             <span style="font-size:18px" title="${d.ownExperience ? 'Máme vlastní zkušenost' : 'Bez vlastní zkušenosti'}">${d.ownExperience ? '✅' : '❌'}</span>
             <button class="btn-icon" onclick="openEditDestModal('${d.id}')" title="Upravit">✏️</button>
             <button class="btn-icon admin-only" onclick="deleteDest('${d.id}')" title="Smazat">✕</button>
@@ -2618,6 +2641,7 @@ function populateDestModal(d) {
   document.getElementById('dWeb').value = d.web||'';
   document.getElementById('dEmail').value = d.email||'';
   document.getElementById('dContact').value = d.contact||'';
+  document.getElementById('dAddress').value = d.address||'';
   document.getElementById('dDistanceAirport').value = d.distanceAirport||'';
   document.getElementById('dParking').value = d.parking||'';
   document.getElementById('dMaxPersons').value = d.maxPersons||'';
@@ -2633,6 +2657,73 @@ function populateDestModal(d) {
   document.getElementById('dNotes').value = d.notes||'';
 }
 
+// ── PREVIEW DESTINACE ──
+function openDestPreview(id) {
+  const d = (db.destinations||[]).find(x => x.id === id);
+  if (!d) return;
+
+  document.getElementById('dpTitle').textContent = d.name || '';
+  document.getElementById('dpSubtitle').textContent = [d.region, d.country].filter(Boolean).join(', ');
+
+  const row = (label, value, full) => value ? `
+    <div style="${full ? 'grid-column:1/-1;' : ''}border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${label}</div>
+      <div style="font-size:13px;color:var(--navy)">${value}</div>
+    </div>` : '';
+
+  const mapsUrl = d.address ? 'https://www.google.com/maps/search/' + encodeURIComponent(d.address) : null;
+
+  document.getElementById('dpBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${d.web ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Web</div>
+        <a href="${esc(d.web)}" target="_blank" style="font-size:13px;color:var(--teal);text-decoration:none;font-weight:600">${esc(d.web)}</a>
+      </div>` : ''}
+      ${d.email ? `<div style="border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Email / Telefon</div>
+        <a href="mailto:${esc(d.email)}" style="font-size:13px;color:var(--teal);text-decoration:none">${esc(d.email)}</a>
+      </div>` : ''}
+      ${row('Kontaktní osoba', d.contact)}
+      ${d.address ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div>
+          <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Adresa</div>
+          <div style="font-size:13px;color:var(--navy)">${esc(d.address)}</div>
+        </div>
+        <a href="${mapsUrl}" target="_blank" style="flex-shrink:0;padding:6px 12px;background:#e8f7f7;border:1px solid #c8e4e5;border-radius:8px;color:#026d72;font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap">🗺 Google Maps</a>
+      </div>` : ''}
+      ${row('Vzdálenost od letiště', d.distanceAirport)}
+      ${row('Parkování', d.parking)}
+      ${row('Max. kapacita', d.maxPersons ? d.maxPersons + ' osob' : null)}
+      ${row('Typy pokojů', d.roomTypes)}
+      ${row('Stravování', d.food)}
+      ${row('Typ stravy', d.foodType)}
+      ${d.ownKitchen ? row('Vlastní kuchyň', '✅ K dispozici') : ''}
+      ${row('Orientační cena', d.price)}
+      ${row('Min. délka pobytu', d.minStay)}
+      ${row('Storno podmínky', d.storno)}
+      ${d.keywords ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Vibe / klíčová slova</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">${d.keywords.split(',').map(k=>`<span style="font-size:12px;padding:3px 10px;background:var(--sand);border-radius:12px;color:var(--navy)">${esc(k.trim())}</span>`).join('')}</div>
+      </div>` : ''}
+      ${d.notes ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Poznámky & zkušenosti</div>
+        <div style="font-size:13px;color:var(--navy);white-space:pre-wrap">${esc(d.notes)}</div>
+      </div>` : ''}
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:8px 0">
+        <span style="font-size:13px">${d.ownExperience ? '✅ Máme vlastní zkušenost z retreatu' : '❌ Bez vlastní zkušenosti'}</span>
+        ${d.source === 'AI Scout' ? '<span style="font-size:11px;padding:2px 8px;background:#fef3c7;color:#92400e;border-radius:6px">AI Scout</span>' : ''}
+      </div>
+    </div>`;
+
+  document.getElementById('dpEditBtn').onclick = () => { closeDestPreview(); openEditDestModal(id); };
+  document.getElementById('dpDeleteBtn').onclick = () => { closeDestPreview(); deleteDest(id); };
+  document.getElementById('destPreviewModal').classList.remove('hidden');
+}
+
+function closeDestPreview() {
+  document.getElementById('destPreviewModal').classList.add('hidden');
+}
+
 function closeDestModal() {
   document.getElementById('destModal').classList.add('hidden');
 }
@@ -2646,6 +2737,7 @@ function saveDestModal() {
     web:              document.getElementById('dWeb').value.trim(),
     email:            document.getElementById('dEmail').value.trim(),
     contact:          document.getElementById('dContact').value.trim(),
+    address:          document.getElementById('dAddress').value.trim(),
     distanceAirport:  document.getElementById('dDistanceAirport').value.trim(),
     parking:          document.getElementById('dParking').value.trim(),
     maxPersons:       parseInt(document.getElementById('dMaxPersons').value)||0,
@@ -3532,8 +3624,9 @@ async function runDestScout() {
 
   // Jeden request — přímý JSON výstup, stručný prompt
   const prompt = 'Najdi 5 skutečných retreat center pro skupinové jóga pobyty v oblasti: ' + country + '.' + paramStr +
+    ' Pro každé centrum POVINNĚ dohledej: web URL, email nebo telefon, přesnou adresu.' +
     ' Odpověz POUZE JSON arraym, žádný text před/za/markdown:' +
-    '[{"name":"","country":"","region":"","web":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]';
+    '[{"name":"","country":"","region":"","address":"ulice, město, PSČ","web":"https://...","email":"info@...","phone":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","yogaSpace":"","keywords":"","notes":""}]';
 
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
@@ -3667,7 +3760,7 @@ function addScoutedDestinations(dests) {
       country: d.country || '',
       region: d.region || '',
       web: d.web || '',
-      email: d.email || '',
+      email: d.email || d.phone || '',
       contact: '',
       distanceAirport: d.distanceAirport || '',
       parking: '',
@@ -3683,6 +3776,7 @@ function addScoutedDestinations(dests) {
       storno: '',
       ownExperience: false,
       notes: d.notes || '',
+      address: d.address || '',
       source: 'AI Scout',
     });
     added++;
