@@ -3442,6 +3442,26 @@ async function syncPullInstructors() {
       const score     = calcScore(cols);
       const sl        = scoreLabel(score);
 
+      const g = col => col >= 0 ? (cols[col]||'').replace(/\"/g,'').trim() : '';
+      const qna = { _timestamp: new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}), _source: 'Dotazník' };
+      if (g(colType))      qna.typ        = g(colType);
+      if (g(colDest))      qna.destinace  = g(colDest);
+      if (g(colEnv))       qna.prostredi  = g(colEnv);
+      if (g(colCount))     qna.pocet      = g(colCount);
+      if (g(colDate))      qna.termin     = g(colDate);
+      if (g(colPrice))     qna.cena       = g(colPrice);
+      if (g(colSupport))   qna.podpora    = g(colSupport);
+      if (g(colGuide))     qna.vedeni     = g(colGuide);
+      if (g(colRetChal))   qna.vyzvy      = g(colRetChal);
+      if (g(colExp))       qna.zkusenosti = g(colExp);
+      if (g(colWhy))       qna.motivace   = g(colWhy);
+      if (g(colResult))    qna.cil        = g(colResult);
+      if (g(colHadRetrt))  qna.mel_retreat= g(colHadRetrt);
+      if (g(colMeetType))  qna.typ_setkani= g(colMeetType);
+      if (g(colBestWorst)) qna.bavilo     = g(colBestWorst);
+      if (g(colReadiness)) qna.pripraveno = g(colReadiness);
+      if (g(colExtra))     qna.poznamka   = g(colExtra);
+
       const demandParts = [
         colDest  >= 0 && cols[colDest]  ? 'Destinace: ' + cols[colDest].replace(/"/g,'').trim() : '',
         colEnv   >= 0 && cols[colEnv]   ? 'Prostředí: ' + cols[colEnv].replace(/"/g,'').trim() : '',
@@ -3472,9 +3492,10 @@ async function syncPullInstructors() {
         if (!existing.demand    && demandParts) existing.demand    = demandParts;
         if (!existing.about     && aboutParts)  existing.about     = aboutParts;
         if (!existing.process   && processParts) existing.process  = processParts;
-        // Vždy přepiš score
+        // Vždy přepiš score a questionnaire
         existing.score = score;
         existing.scoreLabel = sl.label;
+        existing.questionnaire = qna;
         existing.isChanged = true;
         existing.pipelineChangedAt = new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
         updated++;
@@ -3488,6 +3509,7 @@ async function syncPullInstructors() {
           lastContact: '',
           nextAction: 'Naplánovat konzultaci s Adelou',
           score, scoreLabel: sl.label,
+          questionnaire: qna,
           isNew: true,
           pipelineChangedAt: new Date().toLocaleString('cs-CZ', {day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}),
         });
