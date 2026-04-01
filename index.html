@@ -1355,6 +1355,20 @@
   <div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto">
     <h2 id="instrModalTitle">Nový lektor</h2>
 
+    <!-- Záložky -->
+    <div style="display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:18px">
+      <button id="instrTabBtnInfo" onclick="switchInstrTab('info')"
+        style="padding:8px 18px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:transparent;color:var(--teal);border-bottom:2px solid var(--teal);margin-bottom:-2px;transition:all .15s">
+        📝 Základní info
+      </button>
+      <button id="instrTabBtnDotaznik" onclick="switchInstrTab('dotaznik')"
+        style="padding:8px 18px;border:none;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;background:transparent;color:var(--text-muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:all .15s">
+        📋 Dotazník
+      </button>
+    </div>
+
+    <!-- TAB: Základní info -->
+    <div id="instrTabInfo">
     <div style="font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:var(--teal);margin-bottom:10px">Základní info</div>
     <div class="form-grid" style="margin-bottom:16px">
       <div class="form-group" style="grid-column:span 2">
@@ -1452,6 +1466,14 @@
       <div class="form-group" style="grid-column:span 2">
         <label>🎙 Zápis z callu</label>
         <textarea id="mInstrCallNotes" style="min-height:100px" placeholder="Summary z Fireflies.ai · automaticky doplněno po schůzce..."></textarea>
+      </div>
+    </div>
+    </div><!-- /instrTabInfo -->
+
+    <!-- TAB: Dotazník -->
+    <div id="instrTabDotaznik" style="display:none">
+      <div id="instrQnaContent" style="font-size:13px;color:var(--navy);line-height:1.7">
+        <div style="color:var(--text-muted);font-size:13px;padding:24px 0;text-align:center">📋 Lektor zatím nevyplnil dotazník.</div>
       </div>
     </div>
 
@@ -3079,7 +3101,59 @@ function renderInstrGrid(filter, pipelineFilter) {
   </div>`;
 }
 
-let editingInstructorId = null;
+function switchInstrTab(tab) {
+  const isInfo = tab === 'info';
+  document.getElementById('instrTabInfo').style.display      = isInfo ? '' : 'none';
+  document.getElementById('instrTabDotaznik').style.display  = isInfo ? 'none' : '';
+  const btnInfo = document.getElementById('instrTabBtnInfo');
+  const btnDot  = document.getElementById('instrTabBtnDotaznik');
+  btnInfo.style.color       = isInfo ? 'var(--teal)' : 'var(--text-muted)';
+  btnInfo.style.borderBottom= isInfo ? '2px solid var(--teal)' : '2px solid transparent';
+  btnDot.style.color        = isInfo ? 'var(--text-muted)' : 'var(--teal)';
+  btnDot.style.borderBottom = isInfo ? '2px solid transparent' : '2px solid var(--teal)';
+}
+
+function renderInstrQna(ins) {
+  const box = document.getElementById('instrQnaContent');
+  if (!box) return;
+  const q = ins && ins.questionnaire;
+  if (!q || !Object.keys(q).length) {
+    box.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:24px 0;text-align:center">📋 Lektor zatím nevyplnil dotazník.</div>';
+    return;
+  }
+  const ts = q._timestamp ? `<div style="font-size:11px;color:var(--text-muted);margin-bottom:16px">📅 Odesláno: ${q._timestamp}</div>` : '';
+  const LABELS = {
+    typ:       'Obor / zaměření',
+    destinace: 'Preferovaná destinace',
+    prostredi: 'Typ prostředí',
+    pocet:     'Počet účastníků',
+    termin:    'Termín pobytu',
+    cena:      'Cenová hladina',
+    podpora:   'Typ podpory',
+    vedeni:    'Vedení / koučink',
+    vyzvy:     'Nejtěžší výzvy / co chybělo',
+    zkusenosti:'Zkušenosti se skupinami',
+    motivace:  'Motivace pořádat retreat',
+    cil:       'Cíl pro účastníky',
+    mel_retreat:'Organizoval/a retreat',
+    typ_setkani:'Typ setkání s klienty',
+    bavilo:    'Co bavilo nejvíc',
+    poznamka:  'Cokoliv dalšího',
+    pripraveno:'Kde nejlépe pomoci',
+  };
+  const rows = Object.entries(q)
+    .filter(([k]) => k !== '_timestamp' && k !== '_source')
+    .map(([k, v]) => {
+      const label = LABELS[k] || k;
+      return `<div style="display:grid;grid-template-columns:160px 1fr;gap:6px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px;padding-top:1px">${label}</div>
+        <div style="font-size:13px;color:var(--navy)">${esc(v)}</div>
+      </div>`;
+    }).join('');
+  box.innerHTML = ts + rows;
+}
+
+
 
 function openInstructorModal(id) {
   editingInstructorId = id || null;
@@ -3103,6 +3177,12 @@ function openInstructorModal(id) {
   document.getElementById('mInstrAbout').value      = ins ? (ins.about||'') : '';
   document.getElementById('mInstrDemand').value     = ins ? (ins.demand||'') : '';
   document.getElementById('mInstrProcess').value    = ins ? (ins.process||'') : '';
+  switchInstrTab('info');
+  renderInstrQna(ins);
+  // Badge na záložce Dotazník
+  const dotBtn = document.getElementById('instrTabBtnDotaznik');
+  const hasQ = ins && ins.questionnaire && Object.keys(ins.questionnaire).filter(k => k !== '_timestamp' && k !== '_source').length > 0;
+  dotBtn.innerHTML = hasQ ? '📋 Dotazník <span style="background:var(--teal);color:#fff;font-size:9px;padding:1px 6px;border-radius:8px;margin-left:3px">✓</span>' : '📋 Dotazník';
   document.getElementById('instructorModal').classList.remove('hidden');
 }
 
