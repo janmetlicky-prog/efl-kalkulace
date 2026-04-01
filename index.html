@@ -1350,6 +1350,24 @@
   </div>
 </div>
 
+<!-- MODAL: Preview lektora -->
+<div class="modal-overlay hidden" id="instrPreviewModal">
+  <div class="modal" style="max-width:660px;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+      <div style="flex:1;min-width:0">
+        <div id="ipName" style="font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:700;color:var(--navy)"></div>
+        <div id="ipMeta" style="font-size:13px;color:var(--text-muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"></div>
+      </div>
+      <div style="display:flex;gap:8px;flex-shrink:0;margin-left:12px">
+        <button class="btn btn-secondary btn-sm" id="ipEditBtn">✏️ Upravit</button>
+        <button class="btn btn-secondary btn-sm admin-only" id="ipDeleteBtn">🗑 Smazat</button>
+        <button class="btn btn-secondary btn-sm" onclick="closeInstrPreview()" style="font-size:16px;padding:4px 10px">✕</button>
+      </div>
+    </div>
+    <div id="ipBody"></div>
+  </div>
+</div>
+
 <!-- MODAL: Instructor -->
 <div class="modal-overlay hidden" id="instructorModal">
   <div class="modal" style="max-width:640px;max-height:92vh;overflow-y:auto">
@@ -3027,7 +3045,7 @@ function renderInstrGrid(filter, pipelineFilter) {
           <div style="border:1.5px solid ${stage.color}33;border-top:none;border-radius:0 0 8px 8px;min-height:60px;padding:6px;display:flex;flex-direction:column;gap:6px">
             ${stageIns.length ? stageIns.map(ins => {
               const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706'} : {emoji:'🔴',color:'#dc2626'}) : null;
-              return `<div onclick="openInstructorModal('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
+              return `<div onclick="openInstrPreview('${ins.id}')" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:9px 11px;cursor:pointer;transition:box-shadow .15s" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.1)'" onmouseout="this.style.boxShadow='none'">
                 <div style="font-size:13px;font-weight:600;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 5px;border-radius:8px;margin-left:3px">NOVÝ</span>` : ''}${ins.isChanged ? ` <span style="font-size:9px;font-weight:700;background:#d97706;color:#fff;padding:1px 5px;border-radius:8px;margin-left:3px">ZMĚNA</span>` : ''}</div>
               ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipeline||'')} · ${esc(ins.pipelineChangedAt)}</div>` : ''}
                 ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
@@ -3049,7 +3067,7 @@ function renderInstrGrid(filter, pipelineFilter) {
       const body = encodeURIComponent(OUTREACH_EMAIL_TEMPLATE);
       const sl = ins.score != null ? (ins.score >= 75 ? { emoji:'🟢', color:'#059669', bg:'#ecfdf5' } : ins.score >= 45 ? { emoji:'🟡', color:'#d97706', bg:'#fffbeb' } : { emoji:'🔴', color:'#dc2626', bg:'#fef2f2' }) : null;
       return `
-      <div style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:18px 20px;transition:box-shadow .2s;display:flex;flex-direction:column;gap:8px" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
+      <div onclick="openInstrPreview('${ins.id}')" style="background:#fff;border:1.5px solid var(--border);border-radius:12px;padding:18px 20px;transition:box-shadow .2s;display:flex;flex-direction:column;gap:8px;cursor:pointer" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,.08)'" onmouseout="this.style.boxShadow='none'">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:700;color:var(--navy)">${esc(ins.name)}${ins.isNew ? ` <span style="font-size:9px;font-weight:700;background:#2563eb;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;margin-left:4px">NOVÝ</span>` : ''}${ins.isChanged ? ` <span style="font-size:9px;font-weight:700;background:#d97706;color:#fff;padding:1px 6px;border-radius:10px;vertical-align:middle;margin-left:4px">ZMĚNA</span>` : ''}</div>
@@ -3100,6 +3118,89 @@ function renderInstrGrid(filter, pipelineFilter) {
     }).join('')}
   </div>`;
 }
+
+function closeInstrPreview() {
+  document.getElementById('instrPreviewModal').classList.add('hidden');
+}
+
+function openInstrPreview(id) {
+  const ins = (db.instructors||[]).find(i => i.id === id);
+  if (!ins) return;
+
+  // Smaž badge při otevření
+  if (ins.isNew) { ins.isNew = false; save(db); }
+  if (ins.isChanged) { ins.isChanged = false; save(db); }
+
+  const stage = PIPELINE_STAGES.find(s => s.key === (ins.pipeline||'Nalezen')) || PIPELINE_STAGES[0];
+  const sl = ins.score != null ? (ins.score >= 75 ? {emoji:'🟢',color:'#059669',bg:'#ecfdf5'} : ins.score >= 45 ? {emoji:'🟡',color:'#d97706',bg:'#fffbeb'} : {emoji:'🔴',color:'#dc2626',bg:'#fef2f2'}) : null;
+
+  document.getElementById('ipName').textContent = ins.name || '';
+
+  // Meta řádek pod jménem
+  const metaParts = [];
+  if (ins.type) metaParts.push(`<span style="font-size:11px;font-weight:600;background:#e0f4f5;color:var(--teal);padding:2px 8px;border-radius:10px">${esc(ins.type)}</span>`);
+  if (ins.city) metaParts.push(`<span style="font-size:12px;color:var(--text-muted)">📍 ${esc(ins.city)}</span>`);
+  metaParts.push(`<span style="font-size:11px;font-weight:700;color:${stage.color};background:${stage.bg};padding:2px 8px;border-radius:10px;border:1px solid ${stage.color}33">${stage.label}</span>`);
+  if (sl) metaParts.push(`<span style="font-size:11px;font-weight:700;color:${sl.color};background:${sl.bg};padding:2px 8px;border-radius:10px;border:1px solid ${sl.color}33">${sl.emoji} ${ins.score}/100</span>`);
+  document.getElementById('ipMeta').innerHTML = metaParts.join('');
+
+  const row = (label, value, full) => value ? `
+    <div style="${full ? 'grid-column:1/-1;' : ''}border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+      <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">${label}</div>
+      <div style="font-size:13px;color:var(--navy);white-space:pre-wrap">${esc(value)}</div>
+    </div>` : '';
+
+  // Statistiky cest
+  const tripStats = (() => {
+    const lname = ins.name.toLowerCase();
+    let count = 0, totalPersons = 0, trips = [];
+    db.trips.forEach(trip => {
+      const tname = (trip.instructor||'').toLowerCase();
+      const match = tname === lname || (tname.length > 4 && lname.includes(tname)) || (lname.length > 4 && tname.includes(lname));
+      if (match) { count++; totalPersons += (trip.participants||[]).length; trips.push({name:trip.name,year:trip.year}); }
+    });
+    return count > 0 ? {count,totalPersons,trips} : null;
+  })();
+
+  document.getElementById('ipBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      ${ins.phone || ins.email ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;gap:20px;flex-wrap:wrap">
+        ${ins.phone ? `<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Telefon</div><a href="tel:${esc(ins.phone)}" style="font-size:13px;color:var(--teal);text-decoration:none;font-weight:600">📞 ${esc(ins.phone)}</a></div>` : ''}
+        ${ins.email ? `<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Email</div><a href="mailto:${esc(ins.email)}" style="font-size:13px;color:var(--teal);text-decoration:none;font-weight:600">✉️ ${esc(ins.email)}</a></div>` : ''}
+        ${ins.sourceUrl ? `<div><div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Web / Profil</div><a href="${esc(ins.sourceUrl)}" target="_blank" style="font-size:13px;color:var(--teal);text-decoration:none;font-weight:600">🔗 Profil</a></div>` : ''}
+      </div>` : ''}
+      ${ins.nextAction ? `<div style="grid-column:1/-1;background:#fffbeb;border:1px solid #fcd34d55;border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:#92400e;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Další krok</div>
+        <div style="font-size:13px;color:#92400e;font-weight:600">→ ${esc(ins.nextAction)}</div>
+      </div>` : ''}
+      ${row('Profil / poznámky', ins.about, true)}
+      ${row('Poptávka', ins.demand, true)}
+      ${row('Proces / komunikace', ins.process, true)}
+      ${row('Zápis z callu', ins.callNotes, true)}
+      ${ins.lastContact ? row('Datum oslovení', ins.lastContact) : ''}
+      ${ins.source ? row('Zdroj leadu', ins.source) : ''}
+      ${tripStats ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Cesty s EFL</div>
+        <div style="display:flex;gap:20px;align-items:center">
+          <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--teal)">${tripStats.count}</div><div style="font-size:10px;color:var(--text-muted)">cest</div></div>
+          <div style="text-align:center"><div style="font-size:22px;font-weight:700;color:var(--teal)">${tripStats.totalPersons}</div><div style="font-size:10px;color:var(--text-muted)">účastníků</div></div>
+          <div style="flex:1">${tripStats.trips.slice(0,4).map(t=>`<div style="font-size:12px;color:var(--text-muted)">• ${esc(t.name)} (${t.year})</div>`).join('')}${tripStats.trips.length>4?`<div style="font-size:11px;color:var(--teal)">+ ${tripStats.trips.length-4} dalších</div>`:''}</div>
+        </div>
+      </div>` : ''}
+      ${ins.questionnaire && Object.keys(ins.questionnaire).filter(k=>k!=='_timestamp'&&k!=='_source').length > 0 ? `<div style="grid-column:1/-1;border:1px solid #c8e4e5;border-radius:10px;padding:10px 14px;background:#f0f9f9">
+        <div style="font-size:10px;font-weight:600;color:var(--teal);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📋 Dotazník${ins.questionnaire._timestamp ? ' · ' + ins.questionnaire._timestamp : ''}</div>
+        ${Object.entries(ins.questionnaire).filter(([k])=>k!=='_timestamp'&&k!=='_source').map(([k,v])=>{
+          const LABELS={typ:'Obor',destinace:'Destinace',prostredi:'Prostředí',pocet:'Počet účastníků',termin:'Termín',cena:'Cena',podpora:'Podpora',vedeni:'Vedení',vyzvy:'Výzvy',zkusenosti:'Zkušenosti',motivace:'Motivace',cil:'Cíl',mel_retreat:'Měl retreat',typ_setkani:'Typ setkání',bavilo:'Bavilo nejvíc',pripraveno:'Kde pomoci',poznamka:'Poznámka'};
+          return `<div style="display:grid;grid-template-columns:130px 1fr;gap:4px;padding:4px 0;border-bottom:1px solid #c8e4e566"><span style="font-size:11px;font-weight:600;color:var(--text-muted)">${LABELS[k]||k}</span><span style="font-size:12px;color:var(--navy)">${esc(v)}</span></div>`;
+        }).join('')}
+      </div>` : ''}
+    </div>`;
+
+  document.getElementById('ipEditBtn').onclick = () => { closeInstrPreview(); openInstructorModal(id); };
+  document.getElementById('ipDeleteBtn').onclick = () => { closeInstrPreview(); deleteInstructor(id); };
+  document.getElementById('instrPreviewModal').classList.remove('hidden');
+}
+
 
 function switchInstrTab(tab) {
   const isInfo = tab === 'info';
