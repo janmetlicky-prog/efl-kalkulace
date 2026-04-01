@@ -2902,6 +2902,7 @@ S láskou k cestám,
 Adéla`;
 
 let instrView = 'pipeline';
+let instrPipelineFilter = null;
 
 function renderInstructors() {
   const content = document.getElementById('content');
@@ -3131,6 +3132,7 @@ function setInstrView(view) {
 }
 
 function filterInstructorsOnly(val) {
+  instrPipelineFilter = null;
   renderInstrGrid(val, null);
 }
 
@@ -3138,6 +3140,7 @@ function filterInstrByPipeline(pipelineKey) {
   // Nastav search na prázdno a filtruj podle pipeline
   const inp = document.getElementById('instrSearch');
   if (inp) inp.value = '';
+  instrPipelineFilter = pipelineKey;
   renderInstrGrid('', pipelineKey);
 }
 
@@ -3146,6 +3149,7 @@ function renderInstructorsKeepSearch() {
   renderInstructors();
   const inp = document.getElementById('instrSearch');
   if (inp) inp.value = val;
+  if (instrPipelineFilter) renderInstrGrid(val, instrPipelineFilter);
 }
 
 function showInstrSuggest(val) {
