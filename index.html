@@ -1726,20 +1726,22 @@ function calcTripReal(trip) {
   const minPersons = base.minPersons || actualPersons;
   if (!actualPersons || !minPersons) return base;
 
-  // Přepočítat náklady s rozlišením fixní/variabilní
+  // Bez zaškrtnutých F položek: výsledek musí být identický s calcTrip
+  // calcTrip.profit = (sellingPP - costPP - mpPerPerson) * totalPersons
+  // = revenue - totalCosts - mpAmount  (essenceAmount je součást zisku, NENÍ odečítán)
   const fixedCostTotal    = items.filter(i => i.isFixed)
                                  .reduce((s,i) => s + (parseFloat(i.costPP)||0) * minPersons, 0);
   const variableCostTotal = items.filter(i => !i.isFixed)
-                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0) * actualPersons, 0);
-  const flightCostTotal   = items.filter(i => i.isFlight)
                                  .reduce((s,i) => s + (parseFloat(i.costPP)||0) * actualPersons, 0);
 
   const totalCostsReal = fixedCostTotal + variableCostTotal;
   const revenue        = base.sellingPP * actualPersons;
   const mpAmount       = base.mpPerPerson * actualPersons;
-  const profitReal     = revenue - totalCostsReal - mpAmount - (base.sellingPP * base.essenceRate * actualPersons);
+  // SPRÁVNĚ: nezahrnovat essenceAmount do odpočtu — je to zisk EFL, ne náklad
+  const profitReal     = revenue - totalCostsReal - mpAmount;
+  const essenceAmount  = base.sellingPP * base.essenceRate * actualPersons;
 
-  return { ...base, profit: profitReal, totalCosts: totalCostsReal };
+  return { ...base, profit: profitReal, totalCosts: totalCostsReal, essenceAmount };
 }
 
 // ═══════════════════════════════════════════════
