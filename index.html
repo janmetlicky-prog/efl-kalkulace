@@ -6334,7 +6334,7 @@ async function presenceLoad() {
     );
     if (!res.ok) return {};
     const j = await res.json();
-    return JSON.parse(atob(j.content.replace(/\n/g, '')));
+    return JSON.parse(decodeURIComponent(escape(atob(j.content.replace(/\n/g, '')))));
   } catch { return {}; }
 }
 
