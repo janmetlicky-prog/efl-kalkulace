@@ -2214,6 +2214,48 @@ function openTrip(id) { currentTripId = id; showView('trip', id); }
 
 // ─── CLIENTS ───
 // ── Centrální funkce pro sestavení clientMap ─────────────────────
+// Parsuje note pole manualClients na syntetické trip objekty pro zobrazení a počítání
+function parseNoteToTrips(note) {
+  if (!note || !note.trim()) return [];
+  const trips = [];
+  // Rozdělení podle čárky nebo pipe
+  const parts = note.split(/[,|]/).map(s => s.trim()).filter(s => s.length > 2);
+  parts.forEach(part => {
+    // Filtrovat metadata (Státní příslušnost, RČ, Pas, Typ)
+    if (part.startsWith('Státní příslušnost:') || part.startsWith('RČ:') ||
+        part.startsWith('Pas:') || part.startsWith('Typ:')) return;
+    // Zkusit extrahovat rok z textu (formáty: 8/2023, 10/2023, (2025), 2024, atd.)
+    let year = null;
+    let month = null;
+    const yearMatch = part.match(/(?:^|\s|\()(20[12][0-9])(?:\)|$|\s|[\.,])/);
+    if (yearMatch) year = parseInt(yearMatch[1]);
+    const monthYearMatch = part.match(/(\d{1,2})\/(20[12][0-9])/);
+    if (monthYearMatch) {
+      month = parseInt(monthYearMatch[1]);
+      year = parseInt(monthYearMatch[2]);
+    }
+    if (!year) {
+      // Fallback - zkusit najít rok kdekoliv v textu
+      const anyYear = part.match(/(20[12][0-9])/);
+      if (anyYear) year = parseInt(anyYear[1]);
+    }
+    if (!year) return; // Bez roku nezahrnujeme
+    // Název = text bez roku/měsíce, zkrácený
+    let name = part
+      .replace(/\(20[12][0-9]\)/g, '')
+      .replace(/\d{1,2}\/20[12][0-9]/g, '')
+      .replace(/20[12][0-9]/g, '')
+      .replace(/^[_\-\s\d]+/, '')
+      .trim()
+      .replace(/[,\.]+$/, '')
+      .trim();
+    if (!name) name = part.trim();
+    if (name.length > 40) name = name.substring(0, 40);
+    trips.push({ name, year, month: month || 0, status: 'done', isNoteTrip: true });
+  });
+  return trips;
+}
+
 function buildClientMap() {
   const clientMap = {};
   db.trips.filter(t => ['active','done','ongoing'].includes(t.status)).forEach(trip => {
@@ -2252,6 +2294,20 @@ function buildClientMap() {
       if (mc.note) clientMap[key].note = mc.note;
       clientMap[key].manualId = mc.id;
       clientMap[key].isManual = true;
+    }
+    // Parsovat note → syntetické trip objekty (historické cesty 2019-2024)
+    if (mc.note) {
+      const noteTrips = parseNoteToTrips(mc.note);
+      noteTrips.forEach(nt => {
+        // Nepřidávat duplicity (stejný název+rok)
+        const exists = clientMap[key].trips.some(t =>
+          t.name.toLowerCase() === nt.name.toLowerCase() && t.year === nt.year
+        );
+        if (!exists) {
+          clientMap[key].trips.push(nt);
+          clientMap[key].totalTrips++;
+        }
+      });
     }
   });
   return clientMap;
@@ -2413,7 +2469,10 @@ function buildClientRows(clients) {
     const last = getLastTrip(c);
     const lastLabel = last ? `${last.name} ${last.year}` : '';
     const tripTags = c.trips.length
-      ? c.trips.map(t => `<span class="client-trip-tag">${t.name} ${t.year}</span>`).join('')
+      ? c.trips.map(t => t.isNoteTrip
+          ? `<span class="client-trip-tag" style="opacity:0.7;font-style:italic;background:var(--sand-dark,#f0ebe0)">${t.name} ${t.year}</span>`
+          : `<span class="client-trip-tag">${t.name} ${t.year}</span>`
+        ).join('')
       : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Pouze v databázi</span>';
     const manualBadge = c.isManual && c.trips.length === 0
       ? '<span style="font-size:10px;background:var(--sand-dark);color:var(--text-muted);padding:1px 7px;border-radius:8px;margin-left:6px">ruční</span>'
