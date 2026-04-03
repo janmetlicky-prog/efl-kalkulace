@@ -5657,7 +5657,8 @@ function loadSampleData() {
 // ROLE & PIN SYSTEM
 // ═══════════════════════════════════════════════
 const PINS = { '2168': 'admin', '120788': 'admin', '1234': 'colleague' };
-const PIN_NICKS = { '2168': 'Honza', '120788': 'Adéla', '1234': 'Darja' };
+const PIN_NICKS = { '2168': 'Honza', '120788': 'Adela', '1234': 'Darja' };
+const PIN_DISPLAY = { '2168': 'Honza', '120788': 'Adéla', '1234': 'Darja' };
 const ROLE_KEY = 'efl_role';
 const NICK_KEY = 'efl_nick';
 function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
@@ -6339,24 +6340,28 @@ async function presenceLoad() {
   } catch { return {}; }
 }
 
+let _presenceSaving = false;
 async function presenceSave(data) {
-  if (!ghToken()) return;
+  if (!ghToken() || _presenceSaving) return;
+  _presenceSaving = true;
   try {
-    // Načti aktuální SHA
-    let sha = null;
     const resGet = await fetch(
       `https://api.github.com/repos/${GH_REPO}/contents/${PRESENCE_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
       { headers: { Authorization: `token ${ghToken()}` } }
     );
-    if (resGet.ok) { const j = await resGet.json(); sha = j.sha; }
-    const encoded = new TextEncoder().encode(JSON.stringify(data));
+    if (!resGet.ok) return;
+    const jGet = await resGet.json();
+    const sha = jGet.sha;
+    // Čistý JSON — pouze ASCII znaky v klíčích, žádná diakritika
+    const jsonStr = JSON.stringify(data);
+    const encoded = new TextEncoder().encode(jsonStr);
     const b64 = btoa(String.fromCharCode(...encoded));
-    const body = { message: 'presence update', branch: GH_BRANCH, content: b64 };
-    if (sha) body.sha = sha;
+    const body = { message: 'presence update', branch: GH_BRANCH, content: b64, sha };
     await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${PRESENCE_FILE}`,
       { method: 'PUT', headers: { Authorization: `token ${ghToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body) });
   } catch {}
+  finally { _presenceSaving = false; }
 }
 
 async function presenceSetOnline() {
@@ -6393,7 +6398,8 @@ async function renderPresenceBanner() {
   const myNick = getNick();
   // Zobraz loading stav
   banner.style.display = 'flex';
-  banner.innerHTML = `👤 <strong style="margin-left:4px">${myNick}</strong><span style="margin-left:10px;color:#aaa;font-weight:400;font-size:11px">⟳ kontroluji online uživatele…</span>`;
+  const myDisplay = PIN_DISPLAY[Object.keys(PINS).find(k => PIN_NICKS[k] === myNick)] || myNick;
+  banner.innerHTML = `👤 <strong style="margin-left:4px">${myDisplay}</strong><span style="margin-left:10px;color:#aaa;font-weight:400;font-size:11px">⟳ kontroluji online uživatele…</span>`;
   const data = await presenceLoad();
   const now = Date.now();
   const others = Object.entries(data)
@@ -6412,7 +6418,8 @@ async function renderPresenceBanner() {
     banner.style.border = '1.5px solid #f0a020';
     banner.style.color = '#92400e';
     banner.style.fontWeight = '600';
-    banner.innerHTML = `⚠️ Právě přihlášen/a: <strong style="margin-left:4px;color:#92400e">${others.join(', ')}</strong>`;
+    const othersDisplay = others.map(n => PIN_DISPLAY[Object.keys(PINS).find(k => PIN_NICKS[k] === n)] || n);
+    banner.innerHTML = `⚠️ Právě přihlášen/a: <strong style="margin-left:4px;color:#92400e">${othersDisplay.join(', ')}</strong>`;
   }
 }
 
