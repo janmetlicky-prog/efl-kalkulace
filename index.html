@@ -718,7 +718,7 @@
 <div id="main">
   <div class="topbar">
     <div id="topbarTitle" style="display:none"></div>
-    <div id="presenceBanner" style="display:none;align-items:center;gap:8px;padding:5px 14px;background:#fffbe6;border:1px solid #f0d060;border-radius:8px;font-size:12px;font-weight:600;color:#856404"></div>
+    <div id="presenceBanner" style="display:none;align-items:center;gap:8px;padding:6px 16px;background:#fff3cd;border:1.5px solid #f0a020;border-radius:8px;font-size:13px;font-weight:600;color:#92400e"></div>
     <div class="topbar-nav">
       <button class="topbar-nav-btn" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
@@ -6312,6 +6312,7 @@ async function performAutoLogout() {
   ['mousemove','keydown','click','scroll','touchstart','pointerdown'].forEach(ev => {
     document.removeEventListener(ev, resetAutoLogout);
   });
+  stopPresenceHeartbeat();
   showPinScreen();
   setTimeout(() => {
     const err = document.getElementById('pinError');
@@ -6319,15 +6320,97 @@ async function performAutoLogout() {
   }, 100);
 }
 
-function updatePresenceBanner() {
+// ─── Sdílená presence přes GitHub ───────────────────────────────
+const PRESENCE_FILE = 'data/presence.json';
+const PRESENCE_TIMEOUT_MS = 5 * 60 * 1000; // 5 min = považujeme za offline
+let _presenceHeartbeatInterval = null;
+
+async function presenceLoad() {
+  if (!ghToken()) return {};
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${PRESENCE_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: { Authorization: `token ${ghToken()}` } }
+    );
+    if (!res.ok) return {};
+    const j = await res.json();
+    return JSON.parse(atob(j.content.replace(/\n/g, '')));
+  } catch { return {}; }
+}
+
+async function presenceSave(data) {
+  if (!ghToken()) return;
+  try {
+    // Načti aktuální SHA
+    let sha = null;
+    const resGet = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${PRESENCE_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: { Authorization: `token ${ghToken()}` } }
+    );
+    if (resGet.ok) { const j = await resGet.json(); sha = j.sha; }
+    const body = { message: 'presence update', branch: GH_BRANCH,
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))) };
+    if (sha) body.sha = sha;
+    await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${PRESENCE_FILE}`,
+      { method: 'PUT', headers: { Authorization: `token ${ghToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body) });
+  } catch {}
+}
+
+async function presenceSetOnline() {
+  if (!ghToken() || !getNick()) return;
+  const data = await presenceLoad();
+  data[getNick()] = { ts: Date.now(), role: getRole() };
+  await presenceSave(data);
+}
+
+async function presenceSetOffline() {
+  if (!ghToken() || !getNick()) return;
+  const data = await presenceLoad();
+  delete data[getNick()];
+  await presenceSave(data);
+}
+
+function startPresenceHeartbeat() {
+  presenceSetOnline();
+  clearInterval(_presenceHeartbeatInterval);
+  _presenceHeartbeatInterval = setInterval(async () => {
+    await presenceSetOnline();
+    await renderPresenceBanner();
+  }, 60 * 1000); // každých 60s
+}
+
+function stopPresenceHeartbeat() {
+  clearInterval(_presenceHeartbeatInterval);
+  presenceSetOffline();
+}
+
+async function renderPresenceBanner() {
+  const banner = document.getElementById('presenceBanner');
+  if (!banner || !getRole()) return;
+  const myNick = getNick();
+  const data = await presenceLoad();
+  const now = Date.now();
+  // Filtruj ostatní aktivní uživatele (ne sebe, ne starší než 5 min)
+  const others = Object.entries(data)
+    .filter(([nick, info]) => nick !== myNick && (now - info.ts) < PRESENCE_TIMEOUT_MS)
+    .map(([nick]) => nick);
+  if (others.length === 0) {
+    banner.style.display = 'none';
+  } else {
+    banner.style.display = 'flex';
+    banner.innerHTML = `⚠️ Právě přihlášen/a: <strong style="margin-left:4px;color:#92400e">${others.join(', ')}</strong>`;
+  }
+}
+
+async function updatePresenceBanner() {
   const banner = document.getElementById('presenceBanner');
   if (!banner) return;
-  const nick = getNick();
   const role = getRole();
   if (!role) { banner.style.display = 'none'; return; }
-  const icon = role === 'colleague' ? '👩‍💼' : '👤';
-  banner.style.display = 'flex';
-  banner.innerHTML = `${icon} Přihlášen/a: <strong style="margin-left:4px">${nick}</strong>`;
+  // Spusť heartbeat + zobraz ostatní
+  startPresenceHeartbeat();
+  await renderPresenceBanner();
 }
 
 </script>
