@@ -1714,6 +1714,32 @@ function calcTrip(trip) {
   };
 }
 
+// Výpočet reálného zisku pro Přehled roku — respektuje isFixed položky
+// Fixní náklady = costPP × minPersons (nezáleží na skutečném počtu osob)
+// Variabilní náklady = costPP × actualPersons
+function calcTripReal(trip) {
+  const base = calcTrip(trip);
+  const items = trip.costItems || [];
+  const actualPersons = base.totalPersons;
+  const minPersons = base.minPersons || actualPersons;
+  if (!actualPersons || !minPersons) return base;
+
+  // Přepočítat náklady s rozlišením fixní/variabilní
+  const fixedCostTotal    = items.filter(i => i.isFixed)
+                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0) * minPersons, 0);
+  const variableCostTotal = items.filter(i => !i.isFixed)
+                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0) * actualPersons, 0);
+  const flightCostTotal   = items.filter(i => i.isFlight)
+                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0) * actualPersons, 0);
+
+  const totalCostsReal = fixedCostTotal + variableCostTotal;
+  const revenue        = base.sellingPP * actualPersons;
+  const mpAmount       = base.mpPerPerson * actualPersons;
+  const profitReal     = revenue - totalCostsReal - mpAmount - (base.sellingPP * base.essenceRate * actualPersons);
+
+  return { ...base, profit: profitReal, totalCosts: totalCostsReal };
+}
+
 // ═══════════════════════════════════════════════
 // AUTO STATUS FROM DATE
 // ═══════════════════════════════════════════════
@@ -1935,7 +1961,7 @@ function renderOverview() {
 
   // KPI celkem
   let totalRevenue=0, totalCosts=0, totalProfit=0, totalPersons=0;
-  const tripCalcs = trips.map(t => { const c=calcTrip(t); return {t,c}; });
+  const tripCalcs = trips.map(t => { const c=calcTripReal(t); return {t,c}; });
   tripCalcs.forEach(({t,c}) => {
     totalRevenue += c.revenue;
     totalCosts   += c.totalCosts;
@@ -4201,6 +4227,7 @@ function renderTripDetail() {
         </div>
       </td>
       <td><label style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFlight?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFlight',this.checked)" style="accent-color:var(--terracotta)"> <span class="flight-mark">✈</span></label></td>
+      <td><label title="Fixní náklad (rozpočítán na min. osoby)" style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFixed?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFixed',this.checked)" style="accent-color:var(--teal)"> <span style="font-size:11px;font-weight:700;color:var(--teal)">F</span></label></td>
       <td><span class="calc-cell">${item.costPP ? fmt(parseFloat(item.costPP)) : '—'}</span></td>
       <td style="text-align:center">
         ${item.url
