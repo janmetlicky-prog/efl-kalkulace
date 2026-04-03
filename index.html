@@ -718,6 +718,7 @@
 <div id="main">
   <div class="topbar">
     <div id="topbarTitle" style="display:none"></div>
+    <div id="presenceBanner" style="display:none;align-items:center;gap:8px;padding:5px 14px;background:#fffbe6;border:1px solid #f0d060;border-radius:8px;font-size:12px;font-weight:600;color:#856404"></div>
     <div class="topbar-nav">
       <button class="topbar-nav-btn" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
@@ -5655,9 +5656,12 @@ function loadSampleData() {
 // ═══════════════════════════════════════════════
 // ROLE & PIN SYSTEM
 // ═══════════════════════════════════════════════
-const PINS = { '2168': 'admin', '1234': 'colleague' };
+const PINS = { '2168': 'admin', '120788': 'admin', '1234': 'colleague' };
+const PIN_NICKS = { '2168': 'Honza', '120788': 'Adéla', '1234': 'Darja' };
 const ROLE_KEY = 'efl_role';
+const NICK_KEY = 'efl_nick';
 function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
+function getNick() { return sessionStorage.getItem(NICK_KEY) || 'Admin'; }
 function isAdmin() { return getRole() === 'admin'; }
 function isColleague() { return getRole() === 'colleague'; }
 
@@ -5685,10 +5689,13 @@ function checkPin() {
   const role = PINS[pin];
   if (role) {
     sessionStorage.setItem(ROLE_KEY, role);
+    sessionStorage.setItem(NICK_KEY, PIN_NICKS[pin] || 'Admin');
     document.getElementById('pinOverlay').remove();
     document.getElementById('app').style.display = 'contents';
     if (role === 'colleague') document.body.classList.add('colleague-mode');
     initApp();
+    startAutoLogout();
+    updatePresenceBanner();
   } else {
     document.getElementById('pinError').textContent = 'Nesprávný PIN — zkuste znovu';
     document.getElementById('pinInput').value = '';
@@ -5744,6 +5751,8 @@ if (getRole()) {
   document.getElementById('app').style.display = 'contents';
   if (getRole() === 'colleague') document.body.classList.add('colleague-mode');
   initApp();
+  startAutoLogout();
+  updatePresenceBanner();
 } else {
   showPinScreen();
 }
@@ -6237,6 +6246,96 @@ const _origSyncFromGitHub = syncFromGitHub;
 
 // Spusť GitHub init při startu
 initFromGitHub();
+
+
+// ═══════════════════════════════════════════════
+// AUTO-LOGOUT + PRESENCE INDIKÁTOR
+// ═══════════════════════════════════════════════
+
+const AUTO_LOGOUT_MS = 10 * 60 * 1000; // 10 minut
+const AUTO_LOGOUT_WARN_MS = 60 * 1000; // varování 60s před odhlášením
+let _autoLogoutTimer = null;
+let _autoLogoutWarnTimer = null;
+let _countdownInterval = null;
+
+function startAutoLogout() {
+  resetAutoLogout();
+  ['mousemove','keydown','click','scroll','touchstart','pointerdown'].forEach(ev => {
+    document.addEventListener(ev, resetAutoLogout, { passive: true });
+  });
+}
+
+function resetAutoLogout() {
+  clearTimeout(_autoLogoutTimer);
+  clearTimeout(_autoLogoutWarnTimer);
+  clearInterval(_countdownInterval);
+  hideLogoutWarning();
+
+  _autoLogoutWarnTimer = setTimeout(() => {
+    showLogoutWarning();
+  }, AUTO_LOGOUT_MS - AUTO_LOGOUT_WARN_MS);
+
+  _autoLogoutTimer = setTimeout(() => {
+    performAutoLogout();
+  }, AUTO_LOGOUT_MS);
+}
+
+function showLogoutWarning() {
+  let existing = document.getElementById('autoLogoutWarning');
+  if (existing) existing.remove();
+  const banner = document.createElement('div');
+  banner.id = 'autoLogoutWarning';
+  banner.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a2332;color:#fff;padding:14px 24px;border-radius:12px;font-size:14px;font-weight:600;z-index:99998;display:flex;align-items:center;gap:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3)';
+  banner.innerHTML = `<span>⏱ Odhlášení za <span id="logoutCountdown">60</span>s kvůli nečinnosti</span><button onclick="resetAutoLogout()" style="background:#03989E;color:#fff;border:none;border-radius:8px;padding:6px 14px;font-size:13px;font-weight:600;cursor:pointer">Pokračovat</button>`;
+  document.body.appendChild(banner);
+  let secs = 60;
+  _countdownInterval = setInterval(() => {
+    secs--;
+    const el = document.getElementById('logoutCountdown');
+    if (el) el.textContent = secs;
+    if (secs <= 0) clearInterval(_countdownInterval);
+  }, 1000);
+}
+
+function hideLogoutWarning() {
+  const el = document.getElementById('autoLogoutWarning');
+  if (el) el.remove();
+}
+
+async function performAutoLogout() {
+  hideLogoutWarning();
+  // Ulož data na GitHub před odhlášením
+  try {
+    if (ghToken()) {
+      await ghSave(db);
+    }
+  } catch(e) { /* tichá chyba */ }
+  // Odhlásit
+  sessionStorage.removeItem(ROLE_KEY);
+  sessionStorage.removeItem(NICK_KEY);
+  document.body.classList.remove('colleague-mode');
+  document.getElementById('app').style.display = 'none';
+  ['mousemove','keydown','click','scroll','touchstart','pointerdown'].forEach(ev => {
+    document.removeEventListener(ev, resetAutoLogout);
+  });
+  showPinScreen();
+  // Zobraz info na pin screenu
+  setTimeout(() => {
+    const err = document.getElementById('pinError');
+    if (err) { err.style.color = '#856404'; err.textContent = 'Byli jste odhlášeni kvůli nečinnosti (10 min)'; }
+  }, 100);
+}
+
+function updatePresenceBanner() {
+  const banner = document.getElementById('presenceBanner');
+  if (!banner) return;
+  const nick = getNick();
+  const role = getRole();
+  if (!role) { banner.style.display = 'none'; return; }
+  const icon = role === 'colleague' ? '👩‍💼' : '👤';
+  banner.style.display = 'flex';
+  banner.innerHTML = `${icon} Přihlášen/a: <strong style="margin-left:4px">${nick}</strong>`;
+}
 
 </script>
 </body>
