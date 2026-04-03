@@ -6389,16 +6389,27 @@ async function renderPresenceBanner() {
   const banner = document.getElementById('presenceBanner');
   if (!banner || !getRole()) return;
   const myNick = getNick();
+  // Zobraz loading stav
+  banner.style.display = 'flex';
+  banner.innerHTML = `👤 <strong style="margin-left:4px">${myNick}</strong><span style="margin-left:10px;color:#aaa;font-weight:400;font-size:11px">⟳ kontroluji online uživatele…</span>`;
   const data = await presenceLoad();
   const now = Date.now();
-  // Filtruj ostatní aktivní uživatele (ne sebe, ne starší než 5 min)
   const others = Object.entries(data)
     .filter(([nick, info]) => nick !== myNick && (now - info.ts) < PRESENCE_TIMEOUT_MS)
     .map(([nick]) => nick);
   if (others.length === 0) {
-    banner.style.display = 'none';
+    // Nikdo jiný online — zobraz jen sebe (tmavě šedě, nenápadně)
+    banner.style.background = 'transparent';
+    banner.style.border = 'none';
+    banner.style.color = '#aaa';
+    banner.style.fontWeight = '400';
+    banner.innerHTML = `👤 ${myNick}`;
   } else {
-    banner.style.display = 'flex';
+    // Někdo jiný online — výrazné varování
+    banner.style.background = '#fff3cd';
+    banner.style.border = '1.5px solid #f0a020';
+    banner.style.color = '#92400e';
+    banner.style.fontWeight = '600';
     banner.innerHTML = `⚠️ Právě přihlášen/a: <strong style="margin-left:4px;color:#92400e">${others.join(', ')}</strong>`;
   }
 }
