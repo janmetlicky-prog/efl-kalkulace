@@ -6252,8 +6252,8 @@ initFromGitHub();
 // AUTO-LOGOUT + PRESENCE INDIKÁTOR
 // ═══════════════════════════════════════════════
 
-const AUTO_LOGOUT_MS = 10 * 60 * 1000; // 10 minut
-const AUTO_LOGOUT_WARN_MS = 60 * 1000; // varování 60s před odhlášením
+const AUTO_LOGOUT_MS = 10 * 60 * 1000;
+const AUTO_LOGOUT_WARN_MS = 60 * 1000;
 let _autoLogoutTimer = null;
 let _autoLogoutWarnTimer = null;
 let _countdownInterval = null;
@@ -6270,11 +6270,9 @@ function resetAutoLogout() {
   clearTimeout(_autoLogoutWarnTimer);
   clearInterval(_countdownInterval);
   hideLogoutWarning();
-
   _autoLogoutWarnTimer = setTimeout(() => {
     showLogoutWarning();
   }, AUTO_LOGOUT_MS - AUTO_LOGOUT_WARN_MS);
-
   _autoLogoutTimer = setTimeout(() => {
     performAutoLogout();
   }, AUTO_LOGOUT_MS);
@@ -6304,13 +6302,9 @@ function hideLogoutWarning() {
 
 async function performAutoLogout() {
   hideLogoutWarning();
-  // Ulož data na GitHub před odhlášením
   try {
-    if (ghToken()) {
-      await ghSave(db);
-    }
-  } catch(e) { /* tichá chyba */ }
-  // Odhlásit
+    if (ghToken()) await ghSave(db);
+  } catch(e) {}
   sessionStorage.removeItem(ROLE_KEY);
   sessionStorage.removeItem(NICK_KEY);
   document.body.classList.remove('colleague-mode');
@@ -6319,7 +6313,6 @@ async function performAutoLogout() {
     document.removeEventListener(ev, resetAutoLogout);
   });
   showPinScreen();
-  // Zobraz info na pin screenu
   setTimeout(() => {
     const err = document.getElementById('pinError');
     if (err) { err.style.color = '#856404'; err.textContent = 'Byli jste odhlášeni kvůli nečinnosti (10 min)'; }
