@@ -1722,9 +1722,12 @@ function calcTrip(trip) {
 function calcTripReal(trip) {
   const base = calcTrip(trip);
   const items = trip.costItems || [];
-  const actualPersons = base.totalPersons;
-  const minPersons = base.minPersons || actualPersons;
-  if (!actualPersons || !minPersons) return base;
+  // Skutečný počet = aktivní účastníci nebo explicitní totalPersons (bez fallbacku na minPersons)
+  const activeParticipants = (trip.participants || []).filter(p => !p.isCancelled).length;
+  const actualPersons = activeParticipants > 0 ? activeParticipants : (trip.totalPersons || 0);
+  const minPersons = base.minPersons || 0;
+  // Pokud nikdo nejede → vše nulové (nechceme fallback na minPersons jako v calcTrip)
+  if (!actualPersons || !minPersons) return { ...base, profit: 0, revenue: 0, totalCosts: 0, mpAmount: 0, essenceAmount: 0 };
 
   // Bez zaškrtnutých F položek: výsledek musí být identický s calcTrip
   // calcTrip.profit = (sellingPP - costPP - mpPerPerson) * totalPersons
