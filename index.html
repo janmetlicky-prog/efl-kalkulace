@@ -1675,8 +1675,15 @@ function calcTrip(trip) {
   const mpRate      = parseFloat(trip.mpRate)      || 0;
 
   // Naklady na osobu
-  const costPP            = items.reduce((s,i) => s + (parseFloat(i.costPP)||0), 0);
-  const flightCostPP      = items.filter(i => i.isFlight).reduce((s,i) => s + (parseFloat(i.costPP)||0), 0);
+  // isFixed položky: v DB je uložena CELKOVÁ fixní částka → přepočítáme na /os pro kalkulaci
+  const costPP = items.reduce((s,i) => {
+    const raw = parseFloat(i.costPP) || 0;
+    return s + (i.isFixed && minPersons > 0 ? raw / minPersons : raw);
+  }, 0);
+  const flightCostPP = items.filter(i => i.isFlight).reduce((s,i) => {
+    const raw = parseFloat(i.costPP) || 0;
+    return s + (i.isFixed && minPersons > 0 ? raw / minPersons : raw);
+  }, 0);
   const costWithoutFlightPP = costPP - flightCostPP;
 
   // Krok 1: Celkove naklady vcetne letenky za MIN. osoby
@@ -1732,8 +1739,10 @@ function calcTripReal(trip) {
   // Bez zaškrtnutých F položek: výsledek musí být identický s calcTrip
   // calcTrip.profit = (sellingPP - costPP - mpPerPerson) * totalPersons
   // = revenue - totalCosts - mpAmount  (essenceAmount je součást zisku, NENÍ odečítán)
+  // isFixed: item.costPP je celková fixní částka → bereme přímo (ne × minPersons)
+  // variabilní: item.costPP je /os → × actualPersons
   const fixedCostTotal    = items.filter(i => i.isFixed)
-                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0) * minPersons, 0);
+                                 .reduce((s,i) => s + (parseFloat(i.costPP)||0), 0);
   const variableCostTotal = items.filter(i => !i.isFixed)
                                  .reduce((s,i) => s + (parseFloat(i.costPP)||0) * actualPersons, 0);
 
@@ -4221,21 +4230,28 @@ function renderTripDetail() {
           <div style="position:relative;flex:1">
             <input type="number" id="czk_${trip.id}_${idx}" value="${item.costPP||''}"
               onchange="onCzkChange('${trip.id}',${idx},this.value)"
-              placeholder="0" style="text-align:right;width:100%;padding-right:24px">
+              placeholder="0"
+              title="${item.isFixed ? 'Celková fixní částka (÷ min. osob = cena/os)' : 'Náklad na osobu'}"
+              style="text-align:right;width:100%;padding-right:24px${item.isFixed ? ';background:#f0fbfb;border-color:#03989e55' : ''}">
             <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:var(--text-muted);pointer-events:none">Kč</span>
           </div>
           <span style="font-size:11px;color:var(--border);flex-shrink:0">|</span>
           <div style="position:relative;flex:1">
             <input type="number" id="eur_${trip.id}_${idx}" value="${item.costPP ? (Math.round((item.costPP/getEurRate())*100)/100) : ''}"
               onchange="onEurChange('${trip.id}',${idx},this.value)"
-              placeholder="0" style="text-align:right;width:100%;padding-right:26px;color:#03989e">
+              placeholder="0"
+              style="text-align:right;width:100%;padding-right:26px;color:#03989e${item.isFixed ? ';background:#f0fbfb;border-color:#03989e55' : ''}">
             <span style="position:absolute;right:6px;top:50%;transform:translateY(-50%);font-size:10px;color:#03989e;pointer-events:none">€</span>
           </div>
         </div>
       </td>
       <td><label style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFlight?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFlight',this.checked)" style="accent-color:var(--terracotta)"> <span class="flight-mark">✈</span></label></td>
       <td><label title="Fixní náklad (rozpočítán na min. osoby)" style="display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer"><input type="checkbox" ${item.isFixed?'checked':''} onchange="updateItem('${trip.id}',${idx},'isFixed',this.checked)" style="accent-color:var(--teal)"> <span style="font-size:11px;font-weight:700;color:var(--teal)">F</span></label></td>
-      <td><span class="calc-cell">${item.costPP ? fmt(parseFloat(item.costPP)) : '—'}</span></td>
+      <td><span class="calc-cell" title="${item.isFixed ? 'Celkem: ' + fmt(parseFloat(item.costPP||0)) : ''}">
+        ${item.isFixed && trip.minPersons > 0
+          ? fmt(parseFloat(item.costPP||0) / trip.minPersons) + '<span style="font-size:9px;opacity:.6;margin-left:2px">/os</span>'
+          : (item.costPP ? fmt(parseFloat(item.costPP)) : '—')}
+      </span></td>
       <td style="text-align:center">
         ${item.url
           ? `<a href="${item.url}" target="_blank" title="${item.url}" style="text-decoration:none;font-size:16px">🔗</a>
