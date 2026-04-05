@@ -3554,6 +3554,10 @@ function saveInstructorModal() {
     db.instructors.push({ id: 'ins_' + uid(), ...data });
   }
   save(db);
+  const _mlEmail = document.getElementById('mInstrEmail').value.trim();
+  const _mlName = document.getElementById('mInstrName').value.trim();
+  const _mlPhone = document.getElementById('mInstrPhone').value.trim();
+  if (_mlEmail) mlSyncSubscriber(_mlEmail, _mlName, _mlPhone, ML_GROUP_LEKTORI);
   closeInstructorModal();
   renderInstructorsKeepSearch();
 }
@@ -6062,6 +6066,7 @@ function saveParticipantModal(approve) {
   if (approve) p.pendingReview = false;
 
   save(db);
+  if (p.email) mlSyncSubscriber(p.email, p.name, p.phone, ML_GROUP_KLIENTI);
 
   const statusEl = document.getElementById('pSyncStatus');
   statusEl.style.color = '#026d72';
@@ -6580,6 +6585,39 @@ async function updatePresenceBanner() {
   // Spusť heartbeat + zobraz ostatní
   startPresenceHeartbeat();
   await renderPresenceBanner();
+}
+
+
+// ═══════════════════════════════════════════════
+// MAILERLITE SYNC
+// ═══════════════════════════════════════════════
+const ML_API_TOKEN = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJhdWQiOiI0IiwianRpIjoiNTVlZTRjYzlmNzIxMjQxMjhmOWRlYjdhYjY1NmE1ZTQxM2FkYTgwMDM5NjUwZjhmODA1YWZlZDc1MTAyNzY3MDhjYWI2ZmQxNTg2NzIxMmUiLCJpYXQiOjE3NzU0MTE3MzYuNTQ0Mzg2LCJuYmYiOjE3NzU0MTE3MzYuNTQ0Mzg5LCJleHAiOjQ5MzEwODUzMzYuNTMzNjg1LCJzdWIiOiI4MTI2NDkiLCJzY29wZXMiOltdfQ.QEfVobB9bMgETYfmPCds3KIRbhLTkWeLqQL3AQsFHaahYvan2KqIotZ70rFtFxK7KgyhRACH7vGwAPdRLF1hUBn7_b0vwd7iqL50TxJtyZDJT_NS9DaRvpCssSpYWEevd8CoRBKVJ56xKIe7GKVd3unl30VgJ6V-f2st09Y1ccJq_J7uwXsUjLDbFE_mPmaFR0hClYgKHSYNGLAoMGt0TtvW2NLdMq9yWASD34Icd2fr2KsjAh1oW9txjEfYtL-i-E2CcfKGaak6-8f_-jZ2K2T6qy_fZYYtKpTEXQh0LSFiRf-qH8AGLl6DMWW5nmud2T--uEvWydrKCgPaUg3ZQ1GlqmPgx16l2RO6jtgCC9Cq2l5TaZ20eRNTx0KQGKcJ4KGmW_LaL_uA1ArVNkeFF-OloRnOXWtVJG4K27rU__NX1knc8_QkDdWryKjmFqPlrXdAU4WZ7oQSR0IbgI1jmG1d6f9a1Rx6vCfa0ABsQxWufdKSoNYmA4-PiKVSBXJCJEj3Sas7O2R1fPsEED5Rpe5AvFKQyiMtpHdomCn5SQLDfnP_5MOGUzEVzcSAO9QKFll_rBBPVwnfKLjjmxHJEMBQTkxUodmXvBQqmGNfqSZFHmA7zD6CRzOy117uU34jjAMQDmwILsAHxSVU_gnCggaob5tB5XP17LuYP71rAvI';
+const ML_GROUP_KLIENTI = '183932696541529328';
+const ML_GROUP_LEKTORI = '183932697090983422';
+
+async function mlSyncSubscriber(email, name, phone, groupId) {
+  if (!email || !email.includes('@')) return;
+  const parts = (name || '').trim().split(' ');
+  const firstName = parts[0] || '';
+  const lastName = parts.slice(1).join(' ') || '';
+  try {
+    await fetch('https://connect.mailerlite.com/api/subscribers', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + ML_API_TOKEN,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        email: email.toLowerCase().trim(),
+        fields: { name: firstName, last_name: lastName, phone: phone || '' },
+        groups: [groupId],
+        status: 'active'
+      })
+    });
+  } catch(e) {
+    console.warn('MailerLite sync failed:', e);
+  }
 }
 
 </script>
