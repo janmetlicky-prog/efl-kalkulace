@@ -3826,7 +3826,7 @@ DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za
   }
 ]
 
-Pokud email není veřejný, použij prázdný string. Najdi skutečné, existující lektory z ${region}.`;
+POVINNÉ: Zařaď POUZE lektory, kteří mají veřejně dostupný emailový kontakt. Lektory bez emailu vynech. Email musí být skutečná emailová adresa (obsahuje @). Najdi skutečné, existující lektory z ${region}.`;
 
   try {
     // Multi-turn smyčka pro web_search tool use
@@ -3898,7 +3898,9 @@ Pokud email není veřejný, použij prázdný string. Najdi skutečné, existuj
       throw new Error('Claude nevrátil správný formát. Zkus znovu.');
     }
 
-    if (!leads.length) { status.textContent = 'Nenalezeni žádní lektoři. Zkus jiné parametry.'; return; }
+    // Filtr — pouze lektoři s emailem
+    leads = leads.filter(l => l.email && l.email.includes('@'));
+    if (!leads.length) { status.textContent = '⚠️ Nenalezeni žádní lektoři s emailem. Zkus jiné parametry nebo region.'; return; }
 
     status.textContent = `✅ Nalezeno ${leads.length} lektorů — vyber které přidat do CRM:`;
 
