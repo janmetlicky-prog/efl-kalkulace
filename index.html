@@ -3829,53 +3829,68 @@ DŮLEŽITÉ: Odpověz POUZE a výhradně JSON arraym. Žádný text před ani za
 Pokud email není veřejný, použij prázdný string. Najdi skutečné, existující lektory z ${region}.`;
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{ role: 'user', content: prompt }]
-      })
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.error?.message || 'HTTP ' + res.status);
+    // Multi-turn smyčka pro web_search tool use
+    async function callWithTools(msgs) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2000,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: msgs
+        })
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'HTTP ' + r.status); }
+      return r.json();
     }
 
-    const data = await res.json();
+    let messages = [{ role: 'user', content: prompt }];
+    let data = await callWithTools(messages);
 
-    // Najdi text odpovědi — projdi všechny bloky
+    // Smyčka — pokud stop_reason je tool_use, poslat výsledky zpět
+    let loopCount = 0;
+    while (data.stop_reason === 'tool_use' && loopCount < 5) {
+      loopCount++;
+      status.textContent = `Claude prohledává web (krok ${loopCount})...`;
+      const toolUseBlocks = data.content.filter(b => b.type === 'tool_use');
+      const toolResults = toolUseBlocks.map(b => ({
+        type: 'tool_result',
+        tool_use_id: b.id,
+        content: b.input ? JSON.stringify(b.input) : ''
+      }));
+      messages = [
+        ...messages,
+        { role: 'assistant', content: data.content },
+        { role: 'user', content: toolResults }
+      ];
+      data = await callWithTools(messages);
+    }
+
+    // Extrahuj text z finální odpovědi
     let text = '';
     for (const block of (data.content || [])) {
       if (block.type === 'text') text += block.text;
-      // tool_result bloky přeskoč
     }
 
     console.log('[Discovery] raw response:', text.substring(0, 500));
 
     // Parsuj JSON — zkus různé formáty
     let leads = null;
-    // 1. Přímý JSON array
-    const jsonMatch = text.match(/\[[\s\S]*?\]/);
-    if (jsonMatch) {
-      try { leads = JSON.parse(jsonMatch[0]); } catch(e) {}
+    const clean = text.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
+    try { leads = JSON.parse(clean); } catch(e) {}
+    if (!leads) {
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      if (jsonMatch) { try { leads = JSON.parse(jsonMatch[0]); } catch(e) {} }
     }
-    // 2. JSON v code blocku
     if (!leads) {
       const codeMatch = text.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
       if (codeMatch) { try { leads = JSON.parse(codeMatch[1]); } catch(e) {} }
-    }
-    // 3. Celý text jako JSON
-    if (!leads) {
-      try { leads = JSON.parse(text.trim()); } catch(e) {}
     }
 
     if (!leads || !Array.isArray(leads) || leads.length === 0) {
@@ -4006,30 +4021,53 @@ async function runDestScout() {
   const schema = '[{"name":"","country":"","region":"","address":"","web":"","email":"","maxPersons":0,"food":"","foodType":"","distanceAirport":"","price":"","priceNote":"","yogaSpace":"","keywords":"","minStay":"","notes":""}]';
 
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 2500,
-        system: 'You are a travel research assistant. Search the web for yoga retreat venues and return ONLY a valid JSON array. No text before or after the JSON. No markdown fences. Start your response with [ and end with ].',
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-        messages: [{
-          role: 'user',
-          content: 'Find 5 real yoga retreat centers for groups (10-20 people) in: ' + country + '.' + reqStr +
-            ' For each find: name, website URL, email/phone, full address, max capacity, meals/board type, diet type, distance from airport, price per room per night, yoga space description, keywords, min stay, and why suitable for yoga retreats.' +
-            ' Return ONLY this JSON array schema, filled with real data:\n' + schema
-        }]
-      })
-    });
+    // Multi-turn smyčka pro web_search tool use
+    const scoutSystem = 'You are a travel research assistant. After searching the web, return ONLY a valid JSON array. No text before or after. No markdown fences. Start with [ end with ].';
+    const scoutUserMsg = 'Find 5 real yoga retreat centers for groups (10-20 people) in: ' + country + '.' + reqStr +
+      ' For each find: name, website URL, email/phone, full address, max capacity, meals/board type, diet type, distance from airport, price per room per night, yoga space description, keywords, min stay, and why suitable for yoga retreats.' +
+      ' Return ONLY this JSON array schema, filled with real data:\n' + schema;
 
-    if (!res.ok) { const e = await res.json(); throw new Error(e.error?.message || 'HTTP ' + res.status); }
-    const data = await res.json();
+    async function scoutCall(msgs) {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true'
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 2500,
+          system: scoutSystem,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: msgs
+        })
+      });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error?.message || 'HTTP ' + r.status); }
+      return r.json();
+    }
+
+    let scoutMsgs = [{ role: 'user', content: scoutUserMsg }];
+    let data = await scoutCall(scoutMsgs);
+
+    let loopCount = 0;
+    while (data.stop_reason === 'tool_use' && loopCount < 5) {
+      loopCount++;
+      status.textContent = `Claude prohledává web (krok ${loopCount})...`;
+      const toolUseBlocks = data.content.filter(b => b.type === 'tool_use');
+      const toolResults = toolUseBlocks.map(b => ({
+        type: 'tool_result',
+        tool_use_id: b.id,
+        content: b.input ? JSON.stringify(b.input) : ''
+      }));
+      scoutMsgs = [
+        ...scoutMsgs,
+        { role: 'assistant', content: data.content },
+        { role: 'user', content: toolResults }
+      ];
+      data = await scoutCall(scoutMsgs);
+    }
 
     let text = '';
     for (const b of (data.content||[])) { if (b.type === 'text') text += b.text; }
@@ -4042,40 +4080,6 @@ async function runDestScout() {
     if (!dests) {
       const m = text.match(/\[\s*\{[\s\S]*\}\s*\]/);
       if (m) { try { dests = JSON.parse(m[0]); } catch(e) {} }
-    }
-
-    if (!dests || !Array.isArray(dests) || dests.length === 0) {
-      console.log('[Scout] parse fail, full text:', text);
-      status.textContent = '⚠️ AI nevrátila JSON — zkouším znovu...';
-
-      // Fallback: druhý call bez tools, jen konverze
-      await new Promise(r => setTimeout(r, 2000));
-      const r2 = await fetch('https://api.anthropic.com/v1/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-          'anthropic-version': '2023-06-01',
-          'anthropic-dangerous-direct-browser-access': 'true'
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4-5-20251001',
-          max_tokens: 2000,
-          system: 'Output ONLY valid JSON arrays. Nothing else. Start with [ end with ].',
-          messages: [{
-            role: 'user',
-            content: 'Convert to JSON array with schema ' + schema + ':\n\n' + text.substring(0, 1500)
-          }]
-        })
-      });
-      if (r2.ok) {
-        const d2 = await r2.json();
-        let t2 = '';
-        for (const b of (d2.content||[])) { if (b.type==='text') t2 += b.text; }
-        const c2 = t2.trim().replace(/^```(?:json)?\s*/i,'').replace(/\s*```\s*$/,'').trim();
-        try { dests = JSON.parse(c2); } catch(e) {}
-        if (!dests) { const m2 = t2.match(/\[\s*\{[\s\S]*\}\s*\]/); if (m2) { try { dests = JSON.parse(m2[0]); } catch(e) {} } }
-      }
     }
 
     if (!dests || !Array.isArray(dests) || dests.length === 0) {
