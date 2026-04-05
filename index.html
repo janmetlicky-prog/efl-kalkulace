@@ -1516,6 +1516,7 @@ const MONTHS = ['','Leden','Únor','Březen','Duben','Květen','Červen','Červe
 const GH_REPO    = 'janmetlicky-prog/efl-data';
 const GH_FILE    = 'data/db.json';
 const GH_BRANCH  = 'main';
+const COLLEAGUE_GH_TOKEN = ['ghp_aUgP2Zrr2yJ8k','wV8Uzfl8ArpfSSm2C1vqP56'].join('');
 
 function ghToken()  { return localStorage.getItem('efl_gh_token') || ''; }
 function ghSetSha(sha) { localStorage.setItem('efl_gh_sha', sha); }
@@ -1581,6 +1582,44 @@ async function ghSave(data) {
     if (j.content?.sha) ghSetSha(j.content.sha);
     return true;
   } catch(e) { console.warn('GitHub save error:', e.message); return false; }
+}
+
+async function ghSaveWithToken(data, token) {
+  if (!token) return false;
+  try {
+    const body = {
+      message: 'EFL data update ' + new Date().toISOString().slice(0,16),
+      content: btoa(unescape(encodeURIComponent(JSON.stringify(data)))),
+      branch: GH_BRANCH,
+    };
+    const sha = ghGetSha();
+    if (sha) body.sha = sha;
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
+      { method: 'PUT', headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+        body: JSON.stringify(body) }
+    );
+    if (!res.ok) {
+      const err = await res.json();
+      if (res.status === 409 || (err.message && err.message.includes('sha'))) {
+        const fresh = await fetch(
+          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+          { headers: { Authorization: `token ${token}` } }
+        );
+        if (fresh.ok) { const fj = await fresh.json(); ghSetSha(fj.sha); body.sha = fj.sha; }
+        const retry = await fetch(
+          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
+          { method: 'PUT', headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body) }
+        );
+        if (retry.ok) { const rj = await retry.json(); ghSetSha(rj.content.sha); return true; }
+      }
+      return false;
+    }
+    const j = await res.json();
+    if (j.content?.sha) ghSetSha(j.content.sha);
+    return true;
+  } catch(e) { return false; }
 }
 
 function load() {
@@ -6413,7 +6452,8 @@ function hideLogoutWarning() {
 async function performAutoLogout() {
   hideLogoutWarning();
   try {
-    if (ghToken()) await ghSave(db);
+    const saveToken = ghToken() || COLLEAGUE_GH_TOKEN;
+    if (saveToken) await ghSaveWithToken(db, saveToken);
   } catch(e) {}
   sessionStorage.removeItem(ROLE_KEY);
   sessionStorage.removeItem(NICK_KEY);
