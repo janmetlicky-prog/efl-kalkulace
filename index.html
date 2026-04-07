@@ -1686,19 +1686,22 @@ let currentYear = 2026;
 
 // Při startu — načti z GitHub pokud je token
 async function initFromGitHub() {
-  if (!ghToken()) return;
+  if (!ghToken()) return false;
   showGhStatus('⟳ Načítám data z GitHub...', '');
-  const ghData = await ghLoad();
-  if (ghData) {
-    db = migrateData(ghData);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    renderSidebar();
-    showView(currentView);
-    showGhStatus('✓ Data načtena z GitHub', 'ok');
-    setTimeout(() => showGhStatus('', ''), 3000);
-  } else {
-    showGhStatus('', '');
-  }
+  try {
+    const ghData = await ghLoad();
+    if (ghData) {
+      db = migrateData(ghData);
+      // GitHub je vždy zdrojem pravdy — přepíše localStorage
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      showGhStatus('✓ Data načtena z GitHub', 'ok');
+      setTimeout(() => showGhStatus('', ''), 3000);
+      return true;
+    }
+  } catch(e) {}
+  showGhStatus('⚠️ GitHub nedostupný — používám lokální data', 'warn');
+  setTimeout(() => showGhStatus('', ''), 5000);
+  return false;
 }
 let editingTripId = null;
 
@@ -5862,7 +5865,11 @@ function checkPin() {
   }
 }
 
-function initApp() {
+async function initApp() {
+  // GitHub je vždy zdrojem pravdy — načti před renderováním
+  // Tím zabráníme přepsání dobrých dat z GitHubu starými daty z localStorage
+  await initFromGitHub();
+
   loadSampleData();
   injectImportedTrips();
   injectImportedClients();
@@ -6404,8 +6411,7 @@ function executeCleanup() {
 const _origSyncPull = syncPull;
 const _origSyncFromGitHub = syncFromGitHub;
 
-// Spusť GitHub init při startu
-initFromGitHub();
+// GitHub init je nyní součástí initApp() — volání zde odstraněno
 
 
 // ═══════════════════════════════════════════════
