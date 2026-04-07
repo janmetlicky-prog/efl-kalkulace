@@ -1679,7 +1679,7 @@ function showGhStatus(msg, type) {
 }
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
-let db = migrateData(load());
+let db = migrateData({ trips: [], manualClients: [], instructors: [], destinations: [] }); // Data se načtou z GitHub v initApp()
 let currentView = 'overview';
 let currentTripId = null;
 let currentYear = 2026;
@@ -1692,15 +1692,14 @@ async function initFromGitHub() {
     const ghData = await ghLoad();
     if (ghData) {
       db = migrateData(ghData);
-      // GitHub je vždy zdrojem pravdy — přepíše localStorage
+      // GitHub je jediný zdroj pravdy — vždy přepíše localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       showGhStatus('✓ Data načtena z GitHub', 'ok');
       setTimeout(() => showGhStatus('', ''), 3000);
       return true;
     }
   } catch(e) {}
-  showGhStatus('⚠️ GitHub nedostupný — používám lokální data', 'warn');
-  setTimeout(() => showGhStatus('', ''), 5000);
+  // GitHub nedostupný — zablokuj appku, nedovol práci s lokálními daty
   return false;
 }
 let editingTripId = null;
@@ -5866,9 +5865,24 @@ function checkPin() {
 }
 
 async function initApp() {
-  // GitHub je vždy zdrojem pravdy — načti před renderováním
-  // Tím zabráníme přepsání dobrých dat z GitHubu starými daty z localStorage
-  await initFromGitHub();
+  // GitHub je JEDINÝ zdroj dat — bez něj appka nefunguje
+  const ghOk = await initFromGitHub();
+  if (!ghOk && ghToken()) {
+    // Token je nastaven ale GitHub selhal — zablokuj UI, nedovol práci s daty
+    document.getElementById('app').innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:16px;font-family:Jost,sans-serif;">
+        <div style="font-size:48px;">⚠️</div>
+        <div style="font-size:20px;font-weight:600;color:#b03a2e;">Nepodařilo se načíst data z GitHub</div>
+        <div style="color:#6b7280;text-align:center;max-width:400px;">
+          Zkontroluj připojení k internetu a zkus to znovu.<br>
+          <strong>Aplikace je záměrně zablokována</strong> — práce s lokálními daty by mohla přepsat správná data jiných uživatelů.
+        </div>
+        <button onclick="location.reload()" style="margin-top:8px;padding:12px 32px;background:#03989E;color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:600;cursor:pointer;">
+          🔄 Zkusit znovu
+        </button>
+      </div>`;
+    return;
+  }
 
   loadSampleData();
   injectImportedTrips();
