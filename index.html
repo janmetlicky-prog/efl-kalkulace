@@ -1662,8 +1662,13 @@ function migrateData(data) {
 }
 function save(data) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-  // Async zápis na GitHub — nezablokuje UI
+  // Async zápis na GitHub — jen pokud byla data v této session načtena z GitHub
+  // Ochrana: bez _ghSessionLoaded=true se nikdy nezapisuje na GitHub
   if (ghToken()) {
+    if (!_ghSessionLoaded) {
+      showGhStatus('⚠️ Data nebyla načtena z GitHub — ukládání zablokováno', 'warn');
+      return;
+    }
     ghSave(data).then(ok => {
       if (!ok) showGhStatus('⚠️ GitHub sync selhal', 'warn');
       else showGhStatus('', '');
@@ -1680,6 +1685,7 @@ function showGhStatus(msg, type) {
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
 
 let db = migrateData({ trips: [], manualClients: [], instructors: [], destinations: [] }); // Data se načtou z GitHub v initApp()
+let _ghSessionLoaded = false; // true až po úspěšném načtení z GitHub v této session
 let currentView = 'overview';
 let currentTripId = null;
 let currentYear = 2026;
@@ -1694,6 +1700,7 @@ async function initFromGitHub() {
       db = migrateData(ghData);
       // GitHub je jediný zdroj pravdy — vždy přepíše localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      _ghSessionLoaded = true; // Od teď je povoleno ukládat na GitHub
       showGhStatus('✓ Data načtena z GitHub', 'ok');
       setTimeout(() => showGhStatus('', ''), 3000);
       return true;
