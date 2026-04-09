@@ -3254,15 +3254,15 @@ function renderInstrGrid(filter, pipelineFilter) {
         <div style="display:flex;gap:6px;flex-wrap:wrap;padding-top:6px;border-top:1px solid var(--border)">
           ${ins.email ? `
             <div style="display:inline-flex;align-items:center;border:1px solid #bfdbfe;border-radius:6px;overflow:hidden;background:#eff6ff">
-              <button onclick="oslovitLektora('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#2563eb;font-size:11px;font-weight:600;background:transparent;border:none;cursor:pointer">📧 Oslovit</button>
+              <button onclick="oslovitLektora('${ins.id}');event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;color:#2563eb;font-size:11px;font-weight:600;background:transparent;border:none;cursor:pointer">📧 Oslovit</button>
               <div style="display:flex;border-left:1px solid #bfdbfe">
                 <button onclick="setInstrType('${ins.id}','region');event.stopPropagation()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType!=='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType!=='remote'?'#fff':'#93c5fd'}">Region</button>
                 <button onclick="setInstrType('${ins.id}','remote');event.stopPropagation()" style="padding:5px 7px;font-size:10px;font-weight:700;border:none;cursor:pointer;background:${ins.instrType==='remote'?'#2563eb':'#eff6ff'};color:${ins.instrType==='remote'?'#fff':'#93c5fd'}">Vzdálený</button>
               </div>
             </div>` : ''}
-          <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
-          ${ins.email ? `<a href="mailto:${ins.email}?subject=${encodeURIComponent('Essence for Life — pojďme se potkat!')}&body=${encodeURIComponent(CALL_EMAIL_TEMPLATE(ins.name.split(' ')[0]))}" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;text-decoration:none">📅 Call</a>` : '<button onclick="copyToClipboard(\'https://cal.eu/essence-for-life/konzultace-s-adelou\',\'Cal.com link zkopírován!\')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>'}
-          <button onclick="quickPipelineAdvance('${ins.id}')" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
+          <button onclick="copyToClipboard('https://essenceforlife.cz/podpora-pro-lektory/','Odkaz na dotazník zkopírován!');event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#f5f3ff;color:#7c3aed;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #ddd8fe;cursor:pointer">📋 Dotazník</button>
+          ${ins.email ? `<a href="mailto:${ins.email}?subject=${encodeURIComponent('Essence for Life — pojďme se potkat!')}&body=${encodeURIComponent(CALL_EMAIL_TEMPLATE(ins.name.split(' ')[0]))}" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;text-decoration:none">📅 Call</a>` : '<button onclick="copyToClipboard(\'https://cal.eu/essence-for-life/konzultace-s-adelou\',\'Cal.com link zkopírován!\');event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:#ecfeff;color:#0891b2;border-radius:6px;font-size:11px;font-weight:600;border:1px solid #a5f3fc;cursor:pointer">📅 Call</button>'}
+          <button onclick="quickPipelineAdvance('${ins.id}');event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;padding:5px 10px;background:var(--success-bg);color:var(--success);border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);cursor:pointer" title="Posuň do další fáze">→ Další fáze</button>
         </div>
       </div>`;
     }).join('')}
@@ -4187,7 +4187,6 @@ function addScoutedDestinations(dests) {
   }, 100);
 }
 
-const OSLOVIT_POST_URL = 'https://script.google.com/macros/s/AKfycbyd-5D6AjMltWgi2wo27f-a9Fp8KcvmeB6zh3898uiNeH0hqH8Ud_c945yMQ4xhlLcN/exec';
 async function oslovitLektora(id) {
   const ins = (db.instructors||[]).find(i => i.id === id);
   if (!ins) return;
@@ -6044,6 +6043,7 @@ function hideNoteTooltip(input) {
 
 // ─── PARTICIPANT MODAL ───
 const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbz2_mgzxaTPmvhNvLYbYS8EHl9gz_BrYDZUgilm8uqhWjPFkhsnY5HO4uPgTYTzYEY5/exec';
+const OSLOVIT_POST_URL = 'https://script.google.com/macros/s/AKfycbyd-5D6AjMltWgi2wo27f-a9Fp8KcvmeB6zh3898uiNeH0hqH8Ud_c945yMQ4xhlLcN/exec';
 let pModalTripId = null;
 let pModalIdx = null;
 
