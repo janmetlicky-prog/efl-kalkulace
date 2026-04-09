@@ -4187,6 +4187,7 @@ function addScoutedDestinations(dests) {
   }, 100);
 }
 
+const OSLOVIT_POST_URL = 'https://script.google.com/macros/s/AKfycbyd-5D6AjMltWgi2wo27f-a9Fp8KcvmeB6zh3898uiNeH0hqH8Ud_c945yMQ4xhlLcN/exec';
 async function oslovitLektora(id) {
   const ins = (db.instructors||[]).find(i => i.id === id);
   if (!ins) return;
@@ -6043,7 +6044,6 @@ function hideNoteTooltip(input) {
 
 // ─── PARTICIPANT MODAL ───
 const PARTICIPANT_POST_URL = 'https://script.google.com/macros/s/AKfycbz2_mgzxaTPmvhNvLYbYS8EHl9gz_BrYDZUgilm8uqhWjPFkhsnY5HO4uPgTYTzYEY5/exec';
-const OSLOVIT_POST_URL = 'https://script.google.com/macros/s/AKfycbyd-5D6AjMltWgi2wo27f-a9Fp8KcvmeB6zh3898uiNeH0hqH8Ud_c945yMQ4xhlLcN/exec';
 let pModalTripId = null;
 let pModalIdx = null;
 
