@@ -4404,6 +4404,7 @@ function renderTripDetail() {
           Vyúčtováno MP
         </label>` : ''}
         <button class="btn btn-secondary admin-only" onclick="editTrip('${trip.id}')">✏️ Upravit info</button>
+        <button class="btn btn-secondary admin-only" onclick="duplicateTrip('${trip.id}')" title="Duplikovat cestu (bez účastníků)">📋 Duplikovat</button>
         <button class="btn btn-danger btn-sm admin-only" onclick="deleteTrip('${trip.id}')">🗑️ Smazat</button>
       </div>
     </div>
@@ -4972,6 +4973,28 @@ function deleteTrip(tripId) {
   if (!confirm('Opravdu smazat tento zájezd? Akce nelze vrátit.')) return;
   db.trips = db.trips.filter(t => t.id !== tripId);
   save(db); currentTripId = null; showView('overview');
+}
+
+function duplicateTrip(tripId) {
+  const src = db.trips.find(t => t.id === tripId);
+  if (!src) return;
+  const newYear = (src.year || currentYear) + 1;
+  const newTrip = JSON.parse(JSON.stringify(src)); // deep copy
+  newTrip.id = uid();
+  newTrip.name = 'Kopie — ' + src.name;
+  newTrip.year = newYear;
+  newTrip.participants = [];
+  newTrip.status = 'kalkulace';
+  newTrip.notes = '';
+  newTrip.accountingDone = false;
+  delete newTrip.stornoDate;
+  db.trips.push(newTrip);
+  save(db);
+  renderSidebar();
+  // Otevři edit modal nové cesty rovnou
+  editingTripId = newTrip.id;
+  currentTripId = newTrip.id;
+  openEditModal(newTrip.id);
 }
 
 function editTrip(tripId) { editingTripId = tripId; openEditModal(tripId); }
