@@ -2332,7 +2332,7 @@ function parseNoteToTrips(note) {
       const anyYear = part.match(/(20[12][0-9])/);
       if (anyYear) year = parseInt(anyYear[1]);
     }
-    if (!year) return; // Bez roku nezahrnujeme
+    // Rok neznáme, ale cestu přesto zahrneme (year zůstane null)
     // Název = text bez roku/měsíce, zkrácený
     let name = part
       .replace(/\(20[12][0-9]\)/g, '')
