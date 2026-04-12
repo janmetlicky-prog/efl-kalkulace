@@ -5101,7 +5101,7 @@ function openNewClientModal() {
 
 function openEditClientModal(clientId) {
   const mc = (db.manualClients || []).find(c => c.id === clientId);
-  console.log('[EditModal] clientId:', clientId, '→ mc:', mc ? JSON.stringify({name:mc.name, passport:mc.passport, birthDate:mc.birthDate}) : 'NE');
+
   if (!mc) return;
   editingClientId = clientId;
   document.getElementById('clientModalTitle').textContent = 'Upravit klienta';
@@ -5849,9 +5849,21 @@ function loadSampleData() {
 // ═══════════════════════════════════════════════
 // ROLE & PIN SYSTEM
 // ═══════════════════════════════════════════════
-const PINS = { '2168': 'admin', '120788': 'admin', '1234': 'colleague' };
-const PIN_NICKS = { '2168': 'Honza', '120788': 'Adela', '1234': 'Darja' };
-const PIN_DISPLAY = { '2168': 'Honza', '120788': 'Adéla', '1234': 'Darja' };
+const PINS = {
+  '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'admin',
+  'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'admin',
+  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4': 'colleague'
+};
+const PIN_NICKS = {
+  '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'Honza',
+  'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'Adela',
+  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4': 'Darja'
+};
+const PIN_DISPLAY = {
+  '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'Honza',
+  'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'Adéla',
+  '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4': 'Darja'
+};
 const ROLE_KEY = 'efl_role';
 const NICK_KEY = 'efl_nick';
 function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
@@ -5878,8 +5890,12 @@ function showPinScreen() {
   setTimeout(() => document.getElementById('pinInput').focus(), 100);
 }
 
-function checkPin() {
-  const pin = document.getElementById('pinInput').value.trim();
+async function checkPin() {
+  const raw = document.getElementById('pinInput').value.trim();
+  const msgBuffer = new TextEncoder().encode(raw);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const pin = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
   const role = PINS[pin];
   if (role) {
     sessionStorage.setItem(ROLE_KEY, role);
