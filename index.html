@@ -1506,6 +1506,75 @@
       <button class="btn btn-primary" onclick="saveInstructorModal()">Uložit</button>
     </div>
   </div>
+<div class="modal-overlay hidden" id="createSheetModal">
+  <div class="modal" style="max-width:580px;max-height:92vh;overflow-y:auto">
+    <h2>📄 Vygenerovat list smlouvy</h2>
+    <div style="display:grid;gap:10px;margin-top:16px">
+      <div>
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Název listu (= název zájezdu)</label>
+        <input id="csNazevListu" type="text" style="width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Datum od (DD.MM.RRRR) *</label>
+          <input id="csDatumOd" type="text" placeholder="15.05.2026" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Datum do (DD.MM.RRRR) *</label>
+          <input id="csDatumDo" type="text" placeholder="22.05.2026" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Destinace</label>
+          <input id="csDestinace" type="text" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Hotel</label>
+          <input id="csHotel" type="text" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Druh pokoje</label>
+          <input id="csDruhPokoje" type="text" placeholder="Dvojlůžkový pokoj" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Počet nocí</label>
+          <input id="csPocetNoci" type="number" placeholder="7" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Stravování</label>
+          <input id="csStravovani" type="text" placeholder="Snídaně" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Služby (řádky 22–27 smlouvy)</label>
+        <input id="csSluzba22" type="text" placeholder="Řádek 22" style="width:100%;box-sizing:border-box;margin-bottom:4px">
+        <input id="csSluzba23" type="text" placeholder="Řádek 23" style="width:100%;box-sizing:border-box;margin-bottom:4px">
+        <input id="csSluzba24" type="text" placeholder="Řádek 24 (nepovinné)" style="width:100%;box-sizing:border-box;margin-bottom:4px">
+        <input id="csSluzba25" type="text" placeholder="Řádek 25 (nepovinné)" style="width:100%;box-sizing:border-box;margin-bottom:4px">
+        <input id="csSluzba26" type="text" placeholder="Řádek 26 (nepovinné)" style="width:100%;box-sizing:border-box;margin-bottom:4px">
+        <input id="csSluzba27" type="text" placeholder="Řádek 27 (nepovinné)" style="width:100%;box-sizing:border-box">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Celková cena Kč (I28)</label>
+          <input id="csCenaCelkem" type="number" placeholder="0" style="width:100%;box-sizing:border-box">
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-muted);display:block;margin-bottom:4px">Název smlouvy C17 (nepovinné)</label>
+          <input id="csNazevSmlouva" type="text" placeholder="auto z destinace" style="width:100%;box-sizing:border-box">
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer" style="margin-top:16px">
+      <button class="btn btn-secondary" onclick="closeCreateSheetModal()">Zrušit</button>
+      <button id="csSubmitBtn" class="btn btn-primary" onclick="submitCreateSheet()">📄 Vytvořit list</button>
+    </div>
+  </div>
+</div>
+
 </div>
 
 <script>
@@ -4274,6 +4343,78 @@ function copyToClipboard(text, msg) {
   }).catch(() => alert('Zkopíruj: ' + text));
 }
 
+// ─── CREATE SHEET MODAL ───
+function openCreateSheetModal(tripId) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  window._createSheetTripId = tripId;
+  document.getElementById('csNazevListu').value  = trip.name        || '';
+  document.getElementById('csDestinace').value   = trip.destination || '';
+  document.getElementById('csHotel').value        = trip.hotelName   || '';
+  document.getElementById('csPocetNoci').value   = trip.nights      || 7;
+  document.getElementById('csDatumOd').value     = '';
+  document.getElementById('csDatumDo').value     = '';
+  document.getElementById('csDruhPokoje').value  = '';
+  document.getElementById('csStravovani').value  = '';
+  ['csSluzba22','csSluzba23','csSluzba24','csSluzba25','csSluzba26','csSluzba27'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('csCenaCelkem').value  = '';
+  document.getElementById('csNazevSmlouva').value = '';
+  const btn = document.getElementById('csSubmitBtn');
+  btn.textContent = '📄 Vytvořit list'; btn.disabled = false;
+  document.getElementById('createSheetModal').classList.remove('hidden');
+}
+
+function closeCreateSheetModal() {
+  document.getElementById('createSheetModal').classList.add('hidden');
+}
+
+async function submitCreateSheet() {
+  const url = getSyncUrl();
+  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  const nazevListu = document.getElementById('csNazevListu').value.trim();
+  if (!nazevListu) { alert('Zadejte název listu.'); return; }
+  const datumOd = document.getElementById('csDatumOd').value.trim();
+  const datumDo = document.getElementById('csDatumDo').value.trim();
+  if (!datumOd || !datumDo) { alert('Zadejte datum od a do.'); return; }
+  const btn = document.getElementById('csSubmitBtn');
+  btn.textContent = '⏳ Vytvářím...'; btn.disabled = true;
+  const payload = {
+    action: 'createTripSheet',
+    nazevListu,
+    datumOd,
+    datumDo,
+    destinace: document.getElementById('csDestinace').value.trim(),
+    hotel:     document.getElementById('csHotel').value.trim(),
+    druhPokoje: document.getElementById('csDruhPokoje').value.trim(),
+    pocetNoci:  document.getElementById('csPocetNoci').value,
+    stravovani: document.getElementById('csStravovani').value.trim(),
+    sluzba22:   document.getElementById('csSluzba22').value.trim(),
+    sluzba23:   document.getElementById('csSluzba23').value.trim(),
+    sluzba24:   document.getElementById('csSluzba24').value.trim(),
+    sluzba25:   document.getElementById('csSluzba25').value.trim(),
+    sluzba26:   document.getElementById('csSluzba26').value.trim(),
+    sluzba27:   document.getElementById('csSluzba27').value.trim(),
+    cenaCelkem: document.getElementById('csCenaCelkem').value,
+    nazevSmlouva: document.getElementById('csNazevSmlouva').value.trim(),
+  };
+  try {
+    await fetch(url, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    btn.textContent = '✅ Odesláno — zkontroluj tabulku';
+    setTimeout(() => closeCreateSheetModal(), 3000);
+  } catch(e) {
+    btn.textContent = '❌ Chyba';
+    alert('Chyba při odesílání: ' + e.message);
+    btn.disabled = false;
+  }
+}
+
 // ─── TRIP DETAIL ───
 function renderTripDetail() {
   const trip = db.trips.find(t => t.id === currentTripId);
@@ -4405,6 +4546,7 @@ function renderTripDetail() {
         </label>` : ''}
         <button class="btn btn-secondary admin-only" onclick="editTrip('${trip.id}')">✏️ Upravit info</button>
         <button class="btn btn-secondary admin-only" onclick="duplicateTrip('${trip.id}')" title="Duplikovat cestu (bez účastníků)">📋 Duplikovat</button>
+        ${(trip.status === 'active' || trip.status === 'ongoing') ? `<button class="btn btn-secondary admin-only" onclick="openCreateSheetModal('${trip.id}')">📄 Vygenerovat list</button>` : ''}
         <button class="btn btn-danger btn-sm admin-only" onclick="deleteTrip('${trip.id}')">🗑️ Smazat</button>
       </div>
     </div>
