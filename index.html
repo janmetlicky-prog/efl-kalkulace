@@ -5125,6 +5125,7 @@ function duplicateTrip(tripId) {
   newTrip.name = 'Kopie — ' + src.name;
   newTrip.year = newYear;
   newTrip.participants = [];
+  newTrip.totalPersons = 0;
   newTrip.status = 'kalkulace';
   newTrip.notes = '';
   newTrip.accountingDone = false;
