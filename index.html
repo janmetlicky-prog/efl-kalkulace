@@ -4523,7 +4523,7 @@ function renderTripDetail() {
           ${trip.instructor ? `<div class="info-chip">👤 ${trip.instructor}</div>` : ''}
           ${trip.hotelName ? `<div class="info-chip" style="background:#f0f7f7;border-color:#c8e4e5">🏨 ${trip.hotelName}${trip.hotelUrl ? ` <a href="${trip.hotelUrl}" target="_blank" style="margin-left:5px;color:var(--teal);text-decoration:none;font-weight:700" title="Otevřít web hotelu">↗</a>` : ''}</div>` : (trip.hotelUrl ? `<a href="${trip.hotelUrl}" target="_blank" class="info-chip" style="background:#f0f7f7;border-color:#c8e4e5;color:var(--teal);text-decoration:none;font-weight:600">🔗 Ubytování</a>` : '')}
           <div class="info-chip">🌙 ${trip.nights||'?'} nocí</div>
-          <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${(trip.participants||[]).filter(p=>!p.isCancelled).length || trip.totalPersons||0} os.</div>
+          <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${(trip.participants != null ? (trip.participants||[]).filter(p=>!p.isCancelled).length : (trip.totalPersons||0))} os.</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
