@@ -4348,8 +4348,8 @@ let _marcopoloResult = null;
 async function sendToMarcopolo(tripId) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
-  const url = getSyncUrl();
-  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  const url = (localStorage.getItem('efl_payment_sync_url') || '').trim();
+  if (!url) { alert('Nastavte Smluvní data URL v sekci Sync.'); return; }
   const btn = event.target;
   btn.textContent = '⏳ Načítám...'; btn.disabled = true;
   const participantCount = (trip.participants||[]).filter(p => !p.isCancelled).length;
