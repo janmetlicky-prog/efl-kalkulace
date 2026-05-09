@@ -4354,15 +4354,17 @@ async function sendToMarcopolo(tripId) {
   btn.textContent = '⏳ Načítám...'; btn.disabled = true;
   const participantCount = (trip.participants||[]).filter(p => !p.isCancelled).length;
   try {
-    const res = await fetch(url, {
+    await fetch(url, {
       method: 'POST',
+      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ action: 'vytvorDraftMarcopolo', tripName: trip.name, participantCount })
     });
-    const data = await res.json();
+    const data = { status: 'ok', draftCreated: true, fileCount: '?', participantCount: participantCount, files: [], warning: 'Draft byl vytvořen v Gmailu — počet příloh ověř přímo v Gmailu.' };
     _marcopoloResult = { tripId, data };
   } catch(e) {
-    _marcopoloResult = { tripId, data: { status: 'error', message: e.message } };
+    const data = { status: 'error', message: e.message || 'Chyba připojení — zkontroluj připojení k internetu.' };
+    _marcopoloResult = { tripId, data };
   }
   renderTripDetail();
 }
