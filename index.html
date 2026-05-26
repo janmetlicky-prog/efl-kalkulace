@@ -4813,9 +4813,16 @@ function renderTripDetail() {
 // ═══════════════════════════════════════════════
 function getTripProjectNum(trip) {
   const y = trip.year || new Date().getFullYear();
-  const m = String(trip.month || 1).padStart(2,'0');
-  const d = String((trip.date||'').match(/(\d{1,2})[.\-]/)?.[1] || '01').padStart(2,'0');
-  return y + m + d;
+  const dateStr = trip.date || '';
+  const nums = [...dateStr.matchAll(/\d+/g)].map(m => parseInt(m[0])).filter(n => n >= 1 && n <= 31);
+  if (nums.length === 0) return String(y) + String(trip.month || 1).padStart(2,'0') + '01';
+  const day = nums[0];
+  let month = null;
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] >= 1 && nums[i] <= 12) { month = nums[i]; break; }
+  }
+  if (!month) month = trip.month || 1;
+  return String(y) + String(month).padStart(2,'0') + String(day).padStart(2,'0');
 }
 
 // ═══════════════════════════════════════════════
