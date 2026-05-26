@@ -1197,9 +1197,9 @@
     </div>
 
     <div class="form-group" style="margin-bottom:14px">
-      <label>iDoklad URL <span style="font-size:10px;color:var(--text-muted)">(kontrola plateb podle VS)</span></label>
+      <label>Fio / Platby URL <span style="font-size:10px;color:var(--text-muted)">(kontrola plateb podle VS)</span></label>
       <input type="url" id="idokladSyncUrl" placeholder="https://script.google.com/macros/s/..."
-        style="font-size:12px;" oninput="localStorage.setItem('efl_idoklad_url',this.value)">
+        style="font-size:12px;" oninput="localStorage.setItem('efl_fio_url',this.value)">
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
@@ -4307,6 +4307,14 @@ function toggleDarkMode() {
   if (localStorage.getItem('efl_dark_mode') === '1') {
     document.body.classList.add('dark-mode');
     document.addEventListener('DOMContentLoaded', () => {
+  // Migrate efl_idoklad_url → efl_fio_url
+  (function() {
+    var old = localStorage.getItem('efl_idoklad_url');
+    if (old && !localStorage.getItem('efl_fio_url')) {
+      localStorage.setItem('efl_fio_url', old);
+    }
+  })();
+
       const btn = document.getElementById('darkToggle');
       if (btn) btn.textContent = '☀️';
     });
@@ -4769,7 +4777,7 @@ function renderTripDetail() {
       <div class="card-header">
         <div class="card-title">👥 Účastníci <span style="font-size:14px;font-weight:400;color:var(--text-muted)">(${(trip.participants||[]).filter(p=>!p.isCancelled).length} aktivních / ${(trip.participants||[]).length} celkem)</span></div>
         <div style="display:flex;gap:6px;align-items:center">
-          <button class="btn btn-secondary btn-sm admin-only" onclick="checkIdokladPayments('${trip.id}')" title="Zkontrolovat platby v iDokladu podle VS" style="background:#f0fafa;border-color:#03989E;color:#03989E">🔍 iDoklad</button>
+          <button class="btn btn-secondary btn-sm admin-only" onclick="checkIdokladPayments('${trip.id}')" title="Zkontrolovat platby ve Fio bance podle VS" style="background:#f0fafa;border-color:#03989E;color:#03989E">🏦 Fio</button>
           <button class="btn btn-secondary btn-sm admin-only" onclick="addParticipant('${trip.id}')">+ Přidat účastníka</button>
         </div>
       </div>
@@ -5915,9 +5923,9 @@ function exportClientsCSV() {
 // iDOKLAD — kontrola plateb podle VS
 // ═══════════════════════════════════════════════
 async function checkIdokladPayments(tripId) {
-  const url = (localStorage.getItem('efl_idoklad_url') || '').trim();
+  const url = (localStorage.getItem('efl_fio_url') || '').trim();
   if (!url) {
-    alert('Nastavte iDoklad URL v sekci Sync (⚙️ → Sync → iDoklad URL).');
+    alert('Nastavte Fio / Platby URL v sekci Sync (⚙️ → Sync → Fio / Platby URL).');
     return;
   }
 
@@ -6058,7 +6066,7 @@ function openSyncModal() {
   const ghInp = document.getElementById('ghTokenInput');
   if (ghInp) ghInp.value = ghToken();
   const idokladInp = document.getElementById('idokladSyncUrl');
-  if (idokladInp) idokladInp.value = localStorage.getItem('efl_idoklad_url') || '';
+  if (idokladInp) idokladInp.value = localStorage.getItem('efl_fio_url') || '';
   const eurInp = document.getElementById('eurRateInput');
   if (eurInp) eurInp.value = getEurRate();
   if (syncUrlEl) checkSyncUrl(url);
