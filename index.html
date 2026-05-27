@@ -5945,7 +5945,7 @@ async function checkIdokladPayments(tripId) {
 
   try {
     const fetchUrl = url + '?action=checkPayments&vs=' + encodeURIComponent(vsArr.join(','));
-    const res = await fetch(fetchUrl);
+    const res = await fetch(fetchUrl, { credentials: 'omit', cache: 'no-store', redirect: 'follow' });
     const json = await res.json();
 
     if (!json.ok) throw new Error(json.error || 'Neznámá chyba');
