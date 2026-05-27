@@ -1634,19 +1634,10 @@ async function ghSave(data) {
     );
     if (!res.ok) {
       const err = await res.json();
-      // SHA conflict — refresh sha and retry once
+      // SHA conflict — someone else saved first. NEVER force-overwrite their data.
       if (res.status === 409 || (err.message && err.message.includes('sha'))) {
-        const fresh = await fetch(
-          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
-          { headers: { Authorization: `token ${token}` } }
-        );
-        if (fresh.ok) { const fj = await fresh.json(); ghSetSha(fj.sha); body.sha = fj.sha; }
-        const retry = await fetch(
-          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
-          { method: 'PUT', headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body) }
-        );
-        if (retry.ok) { const rj = await retry.json(); ghSetSha(rj.content.sha); return true; }
+        showGhConflictWarning();
+        return false;
       }
       console.warn('GitHub save failed:', err.message);
       return false;
@@ -1655,6 +1646,42 @@ async function ghSave(data) {
     if (j.content?.sha) ghSetSha(j.content.sha);
     return true;
   } catch(e) { console.warn('GitHub save error:', e.message); return false; }
+}
+
+let _ghConflictShown = false;
+function showGhConflictWarning() {
+  if (_ghConflictShown) return;
+  _ghConflictShown = true;
+  let bar = document.getElementById('ghConflictBar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'ghConflictBar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;color:#fff;padding:10px 16px;font-size:13px;font-weight:600;text-align:center;';
+    bar.innerHTML = '⚠️ Data byla změněna jiným zařízením nebo uživatelem. Tvé poslední změny NEBYLY uloženy na GitHub. <button onclick="location.reload()" style="margin-left:12px;padding:4px 12px;background:#fff;color:#c0392b;border:none;border-radius:4px;cursor:pointer;font-weight:700;">Znovu načíst</button>';
+    document.body.prepend(bar);
+  }
+}
+
+// Background SHA polling — every 60s detects if remote SHA changed (another user saved)
+let _ghPollInterval = null;
+function startGhShaPolling() {
+  if (_ghPollInterval || !ghToken()) return;
+  _ghPollInterval = setInterval(async () => {
+    if (!ghToken() || !_ghSessionLoaded) return;
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
+        { headers: { Authorization: `token ${ghToken()}` } }
+      );
+      if (!res.ok) return;
+      const j = await res.json();
+      if (j.sha && ghGetSha() && j.sha !== ghGetSha()) {
+        showGhConflictWarning();
+        clearInterval(_ghPollInterval);
+        _ghPollInterval = null;
+      }
+    } catch(e) {}
+  }, 60000);
 }
 
 async function ghSaveWithToken(data, token) {
@@ -1774,6 +1801,7 @@ async function initFromGitHub() {
       // GitHub je jediný zdroj pravdy — vždy přepíše localStorage
       localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
       _ghSessionLoaded = true; // Od teď je povoleno ukládat na GitHub
+      startGhShaPolling(); // Sleduj změny od jiných zařízení/uživatelů
       showGhStatus('✓ Data načtena z GitHub', 'ok');
       setTimeout(() => showGhStatus('', ''), 3000);
       return true;
