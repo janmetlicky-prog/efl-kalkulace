@@ -1676,9 +1676,16 @@ function startGhShaPolling() {
       if (!res.ok) return;
       const j = await res.json();
       if (j.sha && ghGetSha() && j.sha !== ghGetSha()) {
-        showGhConflictWarning();
-        clearInterval(_ghPollInterval);
-        _ghPollInterval = null;
+        // SHA changed (trigger or other device) — silent reload, no banner
+        const freshData = await ghLoad();
+        if (freshData) {
+          db = migrateData(freshData);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+          renderSidebar();
+          if (typeof renderTripDetail === 'function') try { renderTripDetail(); } catch(e) {}
+          showGhStatus('📥 Data aktualizována ze serveru', 'ok');
+          setTimeout(() => showGhStatus('', ''), 3000);
+        }
       }
     } catch(e) {}
   }, 60000);
