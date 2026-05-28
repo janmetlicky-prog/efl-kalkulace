@@ -4877,28 +4877,22 @@ function renderPL(trip) {
   if (!trip.expenses) trip.expenses = [];
   const marker = getTripProjectNum(trip);
 
-  // Příjmy z účastníků
+  // Progress zálohy/doplatky — jen pro progress bary
   const activeP = (trip.participants||[]).filter(p => !p.isCancelled);
-  let totalIncome = 0;
-  activeP.forEach(p => {
-    if (p.firstPayment) totalIncome += Number(p.payment1Amount||0);
-    if (p.fullPayment)  totalIncome += Number(p.payment2Amount||0);
-  });
-  const paidDeposit  = activeP.filter(p => p.firstPayment).length;
-  const paidFull     = activeP.filter(p => p.fullPayment).length;
-  const totalActive  = activeP.length;
+  const paidDeposit = activeP.filter(p => p.firstPayment).length;
+  const paidFull    = activeP.filter(p => p.fullPayment).length;
+  const totalActive = activeP.length;
 
-  // Výdaje (záporné částky) a příjmy z banky (kladné)
+  // P&L počítáme POUZE z expenses[] — příjmy kladné, výdaje záporné
+  let totalIncome = 0;
   let totalExpenses = 0;
-  let totalBankIncome = 0;
   (trip.expenses||[]).forEach(e => {
     const amt = Number(e.amount||0);
+    if (amt > 0) totalIncome   += amt;
     if (amt < 0) totalExpenses += Math.abs(amt);
-    else totalBankIncome += amt;
   });
-  const totalCombinedIncome = totalIncome + totalBankIncome;
-  const profit = totalCombinedIncome - totalExpenses;
-  const margin = totalCombinedIncome > 0 ? ((profit / totalCombinedIncome)*100).toFixed(1) : '—';
+  const profit = totalIncome - totalExpenses;
+  const margin = totalIncome > 0 ? ((profit / totalIncome)*100).toFixed(1) : '—';
 
   // Kategorie souhrn — jen výdaje
   const catTotals = {};
