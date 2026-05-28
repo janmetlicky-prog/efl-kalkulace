@@ -4881,18 +4881,26 @@ function renderPL(trip) {
   const paidFull     = activeP.filter(p => p.fullPayment).length;
   const totalActive  = activeP.length;
 
-  // Výdaje
+  // Výdaje (záporné částky) a příjmy z banky (kladné)
   let totalExpenses = 0;
-  (trip.expenses||[]).forEach(e => totalExpenses += Number(e.amount||0));
-  const profit = totalIncome - totalExpenses;
-  const margin = totalIncome > 0 ? ((profit / totalIncome)*100).toFixed(1) : '—';
+  let totalBankIncome = 0;
+  (trip.expenses||[]).forEach(e => {
+    const amt = Number(e.amount||0);
+    if (amt < 0) totalExpenses += Math.abs(amt);
+    else totalBankIncome += amt;
+  });
+  const totalCombinedIncome = totalIncome + totalBankIncome;
+  const profit = totalCombinedIncome - totalExpenses;
+  const margin = totalCombinedIncome > 0 ? ((profit / totalCombinedIncome)*100).toFixed(1) : '—';
 
-  // Kategorie souhrn
+  // Kategorie souhrn — jen výdaje
   const catTotals = {};
   EXPENSE_CATEGORIES.forEach(c => catTotals[c] = 0);
   (trip.expenses||[]).forEach(e => {
-    if (catTotals[e.category] !== undefined) catTotals[e.category] += Number(e.amount||0);
-    else catTotals['Ostatní'] += Number(e.amount||0);
+    const amt = Number(e.amount||0);
+    if (amt >= 0) return; // příjmy do kategorií nezahrnujeme
+    if (catTotals[e.category] !== undefined) catTotals[e.category] += Math.abs(amt);
+    else catTotals['Ostatní'] += Math.abs(amt);
   });
   const maxCat = Math.max(...Object.values(catTotals), 1);
 
@@ -4919,11 +4927,12 @@ function renderPL(trip) {
       <td style="padding:7px 8px 7px 0;font-size:13px;color:var(--text-muted)">${e.date||'—'}</td>
       <td style="padding:7px 8px;font-size:13px">${esc(e.label||'')}</td>
       <td style="padding:7px 8px">
-        <select onchange="updateExpense('${trip.id}',${idx},'category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--navy);font-family:'Jost',sans-serif">
-          ${catOptions}
-        </select>
+        ${Number(e.amount||0) >= 0
+            ? '<span style="font-size:12px;color:#1a7a5e;font-weight:500">Příjem</span>'
+            : `<select onchange="updateExpense('${trip.id}',${idx},'category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--navy);font-family:'Jost',sans-serif">${catOptions}</select>`
+          }
       </td>
-      <td style="padding:7px 8px;font-size:13px;text-align:right;color:#c0392b;font-weight:500">−${fmt(Number(e.amount||0))}</td>
+      <td style="padding:7px 8px;font-size:13px;text-align:right;color:${Number(e.amount||0)>=0?'#1a7a5e':'#c0392b'};font-weight:500">${Number(e.amount||0)>=0?'+ '+fmt(Number(e.amount||0)):'−'+fmt(Math.abs(Number(e.amount||0)))}</td>
       <td style="padding:7px 8px;font-size:12px;color:var(--text-muted);text-align:center">${e.source==='cash'?'💵 Cash':'🏦 Fio'}</td>
       <td style="padding:7px 0;text-align:right">
         <button onclick="deleteExpense('${trip.id}',${idx})" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);line-height:1" title="Smazat">×</button>
