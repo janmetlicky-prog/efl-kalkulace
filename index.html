@@ -4920,7 +4920,7 @@ function renderPL(trip) {
     </div>`;
   }).join('');
 
-  const expenseRows = (trip.expenses||[]).map((e, idx) => {
+  const expenseRows = (trip.expenses||[]).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((e, idx) => {
     const catOptions = EXPENSE_CATEGORIES.map(c =>
       `<option value="${c}" ${e.category===c?'selected':''}>${c}</option>`
     ).join('');
