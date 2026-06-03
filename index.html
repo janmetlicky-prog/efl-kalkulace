@@ -5081,7 +5081,9 @@ function deleteExpense(tripId, eid) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.expenses) return;
   if (!confirm('Smazat tento výdaj?')) return;
-  trip.expenses = trip.expenses.filter(e => e.id !== eid);
+  const idx = trip.expenses.findIndex(e => e.id === eid);
+  if (idx === -1) return;
+  trip.expenses.splice(idx, 1);
   save(db); renderTripDetail();
 }
 
