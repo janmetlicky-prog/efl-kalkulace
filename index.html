@@ -4920,7 +4920,7 @@ function renderPL(trip) {
     </div>`;
   }).join('');
 
-  const expenseRows = (trip.expenses||[]).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((e, idx) => {
+  const expenseRows = (trip.expenses||[]).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((e) => {
     const catOptions = EXPENSE_CATEGORIES.map(c =>
       `<option value="${c}" ${e.category===c?'selected':''}>${c}</option>`
     ).join('');
@@ -4930,13 +4930,13 @@ function renderPL(trip) {
       <td style="padding:7px 8px">
         ${Number(e.amount||0) >= 0
             ? '<span style="font-size:12px;color:#1a7a5e;font-weight:500">Příjem</span>'
-            : `<select onchange="updateExpense('${trip.id}',${idx},'category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--navy);font-family:'Jost',sans-serif">${catOptions}</select>`
+            : `<select onchange="updateExpense('${trip.id}','${e.id}','category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--navy);font-family:'Jost',sans-serif">${catOptions}</select>`
           }
       </td>
       <td style="padding:7px 8px;font-size:13px;text-align:right;color:${Number(e.amount||0)>=0?'#1a7a5e':'#c0392b'};font-weight:500">${Number(e.amount||0)>=0?'+ '+fmt(Number(e.amount||0)):'−'+fmt(Math.abs(Number(e.amount||0)))}</td>
       <td style="padding:7px 8px;font-size:12px;color:var(--text-muted);text-align:center">${e.source==='cash'?'💵 Cash':'🏦 Fio'}</td>
       <td style="padding:7px 0;text-align:right">
-        <button onclick="deleteExpense('${trip.id}',${idx})" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);line-height:1" title="Smazat">×</button>
+        <button onclick="deleteExpense('${trip.id}','${e.id}')" style="background:none;border:none;cursor:pointer;font-size:16px;color:var(--text-muted);line-height:1" title="Smazat">×</button>
       </td>
     </tr>`;
   }).join('');
@@ -5077,18 +5077,20 @@ function saveExpense(tripId) {
   renderTripDetail();
 }
 
-function deleteExpense(tripId, idx) {
+function deleteExpense(tripId, eid) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.expenses) return;
   if (!confirm('Smazat tento výdaj?')) return;
-  trip.expenses.splice(idx, 1);
+  trip.expenses = trip.expenses.filter(e => e.id !== eid);
   save(db); renderTripDetail();
 }
 
-function updateExpense(tripId, idx, field, value) {
+function updateExpense(tripId, eid, field, value) {
   const trip = db.trips.find(t => t.id === tripId);
-  if (!trip || !trip.expenses || !trip.expenses[idx]) return;
-  trip.expenses[idx][field] = value;
+  if (!trip || !trip.expenses) return;
+  const exp = trip.expenses.find(e => e.id === eid);
+  if (!exp) return;
+  exp[field] = value;
   save(db); renderTripDetail();
 }
 
