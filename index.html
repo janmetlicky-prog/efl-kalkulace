@@ -2133,12 +2133,23 @@ function renderOverview() {
 
   // KPI celkem
   let totalRevenue=0, totalCosts=0, totalProfit=0, totalPersons=0;
+  let totalActRevenue=0, totalActCosts=0, totalActProfit=0;
   const tripCalcs = trips.map(t => { const c=calcTripReal(t); return {t,c}; });
+  // Skutečné P&L per cesta — čteno z expenses[] (kladné=příjem, záporné=výdaj)
+  const calcActual = (t) => {
+    let inc=0, exp=0; const list = t.expenses||[];
+    list.forEach(e => { const a = Number(e.amountCZK!=null ? e.amountCZK : (e.amount||0)); if (a>0) inc+=a; else if (a<0) exp+=Math.abs(a); });
+    return { revenue:inc, costs:exp, profit:inc-exp, hasPL:list.length>0 };
+  };
   tripCalcs.forEach(({t,c}) => {
     totalRevenue += c.revenue;
     totalCosts   += c.totalCosts;
     totalProfit  += c.profit;
     totalPersons += (t.participants != null ? (t.participants||[]).filter(p=>!p.isCancelled).length : (t.totalPersons||0));
+    const a = calcActual(t);
+    totalActRevenue += a.revenue;
+    totalActCosts   += a.costs;
+    totalActProfit  += a.profit;
   });
   const margin = totalRevenue > 0 ? Math.round(totalProfit/totalRevenue*100) : 0;
 
@@ -2180,6 +2191,8 @@ function renderOverview() {
     const pCnt = t.participants != null ? (t.participants||[]).filter(p=>!p.isCancelled).length : (t.totalPersons||0);
     const fill = t.minPersons > 0 ? Math.min(100,Math.round(pCnt/t.minPersons*100)) : 0;
     const profCls = c.profit>=0 ? 'color:var(--success)' : 'color:var(--danger)';
+    const a = calcActual(t);
+    const actProfCls = a.hasPL ? (a.profit>=c.profit ? 'color:var(--success)' : 'color:var(--danger)') : 'color:var(--text-muted)';
     const statusLabel = {active:'Aktivní',ongoing:'Probíhá',done:'Dokončeno'}[t.status]||t.status;
     return `<tr onclick="openTrip('${t.id}')" style="cursor:pointer">
       <td>
@@ -2196,6 +2209,9 @@ function renderOverview() {
       <td style="text-align:right;font-size:13px">${fmt(c.totalCosts)}</td>
       <td style="text-align:right;font-size:13px">${fmt(c.revenue)}</td>
       <td style="text-align:right;font-size:13px;font-weight:700;${profCls}">${fmt(c.profit)}</td>
+      <td style="text-align:right;font-size:13px;background:rgba(3,152,158,.05)">${a.hasPL?fmt(a.costs):'—'}</td>
+      <td style="text-align:right;font-size:13px;background:rgba(3,152,158,.05)">${a.hasPL?fmt(a.revenue):'—'}</td>
+      <td style="text-align:right;font-size:13px;font-weight:700;background:rgba(3,152,158,.05);${actProfCls}">${a.hasPL?fmt(a.profit):'—'}</td>
       <td><span class="status-pill status-${t.status}">${statusLabel}</span></td>
     </tr>`;
   }).join('');
@@ -2277,21 +2293,33 @@ function renderOverview() {
         ${trips.length === 0
           ? '<div class="empty-state"><div class="es-icon">🏖️</div><h3>Žádné aktivní cesty</h3></div>'
           : `<table>
-              <thead><tr>
-                <th>Název</th>
-                <th style="text-align:center">Měsíc</th>
-                <th style="text-align:center">Obsazenost</th>
-                <th style="text-align:right" class="col-financial">Náklady</th>
-                <th style="text-align:right" class="col-financial">Obrat</th>
-                <th style="text-align:right" class="col-financial">Zisk</th>
-                <th>Status</th>
-              </tr></thead>
+              <thead>
+                <tr>
+                  <th rowspan="2">Název</th>
+                  <th rowspan="2" style="text-align:center">Měsíc</th>
+                  <th rowspan="2" style="text-align:center">Obsazenost</th>
+                  <th colspan="3" class="col-financial" style="text-align:center;border-left:1px solid var(--border)">Kalkulované</th>
+                  <th colspan="3" class="col-financial" style="text-align:center;color:var(--teal);background:rgba(3,152,158,.06);border-left:1px solid var(--border)">Skutečné</th>
+                  <th rowspan="2">Status</th>
+                </tr>
+                <tr>
+                  <th class="col-financial" style="text-align:right;border-left:1px solid var(--border)">Náklady</th>
+                  <th style="text-align:right" class="col-financial">Obrat</th>
+                  <th style="text-align:right" class="col-financial">Zisk</th>
+                  <th class="col-financial" style="text-align:right;color:var(--teal);background:rgba(3,152,158,.06);border-left:1px solid var(--border)">Náklady</th>
+                  <th class="col-financial" style="text-align:right;color:var(--teal);background:rgba(3,152,158,.06)">Obrat</th>
+                  <th class="col-financial" style="text-align:right;color:var(--teal);background:rgba(3,152,158,.06)">Zisk</th>
+                </tr>
+              </thead>
               <tbody>${tRows}</tbody>
               <tfoot><tr>
                 <td colspan="3" style="font-weight:700">CELKEM</td>
                 <td style="text-align:right;font-weight:700" class="col-financial">${fmt(totalCosts)}</td>
                 <td style="text-align:right;font-weight:700" class="col-financial">${fmt(totalRevenue)}</td>
                 <td style="text-align:right;font-weight:700;color:${totalProfit>=0?'var(--success)':'var(--danger)'}" class="col-financial">${fmt(totalProfit)}</td>
+                <td style="text-align:right;font-weight:700;background:rgba(3,152,158,.06)" class="col-financial">${fmt(totalActCosts)}</td>
+                <td style="text-align:right;font-weight:700;background:rgba(3,152,158,.06)" class="col-financial">${fmt(totalActRevenue)}</td>
+                <td style="text-align:right;font-weight:700;background:rgba(3,152,158,.06);color:${totalActProfit>=totalProfit?'var(--success)':'var(--danger)'}" class="col-financial">${fmt(totalActProfit)}</td>
                 <td></td>
               </tr></tfoot>
             </table>`
