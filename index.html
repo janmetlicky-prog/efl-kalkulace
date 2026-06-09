@@ -5138,6 +5138,7 @@ function generateTripPDF(tripId) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
 
+  // Barvy EFL
   const TEAL      = [3, 152, 158];
   const TEAL_DARK = [2, 109, 114];
   const BG_LIGHT  = [240, 247, 247];
@@ -5153,16 +5154,30 @@ function generateTripPDF(tripId) {
   const ML = 15, MR = 15, CW = W - ML - MR;
   let y = 0;
 
-  const fmt = n => {
-    const num = Math.round(Number(n) || 0);
-    return num.toLocaleString('cs-CZ') + ' Kč';
-  };
+  // Odstraneni diakritiky pro jsPDF (helvetica nepodporuje UTF-8)
+  const d = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0110/g,'D').replace(/\u0111/g,'d');
+  const fmt = n => { const num = Math.round(Number(n)||0); return num.toLocaleString('cs-CZ') + ' Kc'; };
+  const fmtSigned = n => { const num = Math.round(Number(n)||0); return (num >= 0 ? '+' : '') + num.toLocaleString('cs-CZ') + ' Kc'; };
 
-  // ── Hlavička (teal pruh) ──────────────────────
+  // P&L pouze z expenses[] — shodne s renderPL
+  const expenses = trip.expenses || [];
+  let totalIncome = 0, totalExpenses = 0;
+  expenses.forEach(e => {
+    const amt = Number(e.amount || 0);
+    if (amt > 0) totalIncome   += amt;
+    if (amt < 0) totalExpenses += Math.abs(amt);
+  });
+  const profit = totalIncome - totalExpenses;
+  const margin = totalIncome > 0 ? (profit / totalIncome * 100).toFixed(1) : '0.0';
+
+  // Progress z ucastniku
+  const activeP = (trip.participants || []).filter(p => !p.isCancelled);
+  const depositPaid = activeP.filter(p => p.firstPayment).length;
+  const fullPaid    = activeP.filter(p => p.fullPayment).length;
+
+  // ── Hlavicka ─────────────────────────────────
   doc.setFillColor(...TEAL_DARK);
   doc.rect(0, 0, W, 18, 'F');
-
-  // Logo text (EFL logo jako text — jsPDF nepodporuje remote img snadno)
   doc.setTextColor(...WHITE);
   doc.setFontSize(13);
   doc.setFont('helvetica', 'bold');
@@ -5170,49 +5185,38 @@ function generateTripPDF(tripId) {
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
   doc.setTextColor(200, 228, 229);
-  doc.text('P&L Report — Financni prehled cesty', W - MR, 11, { align: 'right' });
+  doc.text('P&L Report - Financni prehled cesty', W - MR, 11, { align: 'right' });
   y = 25;
 
-  // ── Název cesty ──────────────────────────────
+  // ── Nazev cesty ──────────────────────────────
   const marker = getTripProjectNum(trip);
   doc.setTextColor(...TEAL_DARK);
-  doc.setFontSize(16);
+  doc.setFontSize(14);
   doc.setFont('helvetica', 'bold');
-  doc.text(trip.name || 'Cesta', ML, y);
-  y += 6;
+  // Rozdeleni dlouheho nazvu
+  const tripName = d(trip.name || 'Cesta');
+  const nameLines = doc.splitTextToSize(tripName, CW);
+  doc.text(nameLines, ML, y);
+  y += nameLines.length * 6;
 
   doc.setTextColor(...MUTED);
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  const lektor = (trip.participants || []).find(p => p.isInstructor)?.name || trip.instructor || '—';
-  doc.text(`Termin: ${trip.date || ''}   Marker: ${marker}`, ML, y);
+  doc.text(`Termin: ${d(trip.date || '')}   Marker: ${marker}`, ML, y);
   y += 5;
 
-  // HR
   doc.setDrawColor(...TEAL);
   doc.setLineWidth(0.5);
   doc.line(ML, y, W - MR, y);
   y += 5;
 
   // ── KPI karty ────────────────────────────────
-  const activeP = (trip.participants || []).filter(p => !p.isCancelled);
-  let incomeTotal = 0;
-  activeP.forEach(p => {
-    if (p.firstPayment) incomeTotal += Number(p.payment1Amount || 0);
-    if (p.fullPayment)  incomeTotal += Number(p.payment2Amount || 0);
-  });
-  const expensesTotal = (trip.expenses || []).reduce((s, e) => s + Number(e.amount || 0), 0);
-  const profit  = incomeTotal - expensesTotal;
-  const margin  = incomeTotal > 0 ? (profit / incomeTotal * 100).toFixed(1) : '0.0';
-  const depositPaid = activeP.filter(p => p.firstPayment).length;
-  const fullPaid    = activeP.filter(p => p.fullPayment).length;
-
   const kpiW = CW / 4;
   const kpis = [
-    { label: 'PRIJMY CELKEM',  value: fmt(incomeTotal),         color: NAVY },
-    { label: 'VYDAJE CELKEM',  value: '-' + fmt(expensesTotal), color: RED  },
-    { label: 'ZISK',           value: (profit >= 0 ? '+' : '') + fmt(profit), color: profit >= 0 ? GREEN : RED },
-    { label: 'MARZE',          value: margin + ' %',            color: profit >= 0 ? GREEN : RED },
+    { label: 'PRIJMY CELKEM',  value: fmt(totalIncome),                             color: NAVY  },
+    { label: 'VYDAJE CELKEM',  value: '-' + fmt(totalExpenses),                     color: RED   },
+    { label: 'ZISK',           value: fmtSigned(profit),                            color: profit >= 0 ? GREEN : RED },
+    { label: 'MARZE',          value: margin + ' %',                                color: profit >= 0 ? GREEN : RED },
   ];
   kpis.forEach((k, i) => {
     const x = ML + i * kpiW;
@@ -5226,13 +5230,13 @@ function generateTripPDF(tripId) {
     doc.setFont('helvetica', 'normal');
     doc.text(k.label, x + 3, y + 5);
     doc.setTextColor(...k.color);
-    doc.setFontSize(11);
+    doc.setFontSize(10);
     doc.setFont('helvetica', 'bold');
     doc.text(k.value, x + 3, y + 13);
   });
   y += 20;
 
-  // Progress zálohy / doplatky
+  // Progress zalohy / doplatky
   doc.setTextColor(...MUTED);
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
@@ -5240,86 +5244,80 @@ function generateTripPDF(tripId) {
   doc.text(`Doplatky uhrazeny: ${fullPaid} / ${activeP.length}`, ML + 60, y);
   y += 7;
 
-  // ── Příjmy ───────────────────────────────────
+  // ── Prijmy z banky ────────────────────────────
+  const incomeRows = expenses.filter(e => Number(e.amount||0) > 0);
+  if (incomeRows.length > 0) {
+    doc.setTextColor(...TEAL_DARK);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Prijmy', ML, y);
+    y += 3;
+
+    const incHead = [['Datum', 'Popis', 'VS', 'Castka', 'Zdroj']];
+    const incBody = incomeRows.map(e => [
+      e.date || '—',
+      d(e.label || '—').substring(0, 55),
+      d(e.vs || '—'),
+      '+' + fmt(Math.abs(Number(e.amount||0))),
+      e.source === 'cash' ? 'Cash' : 'Fio',
+    ]);
+    const incTotal = incomeRows.reduce((s, e) => s + Number(e.amount||0), 0);
+    incBody.push(['CELKEM', '', '', '+' + fmt(incTotal), '']);
+
+    doc.autoTable({
+      startY: y,
+      head: incHead,
+      body: incBody,
+      margin: { left: ML, right: MR },
+      styles: { fontSize: 7, cellPadding: 2, textColor: NAVY, font: 'helvetica' },
+      headStyles: { fillColor: TEAL, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
+      alternateRowStyles: { fillColor: BG_LIGHT },
+      columnStyles: {
+        0: { cellWidth: 22 },
+        1: { cellWidth: 80 },
+        2: { cellWidth: 28 },
+        3: { halign: 'right', cellWidth: 26, textColor: GREEN },
+        4: { cellWidth: 14 },
+      },
+      didParseCell(data) {
+        if (data.row.index === incBody.length - 1) {
+          data.cell.styles.fillColor = BG_LIGHT;
+          data.cell.styles.fontStyle = 'bold';
+          data.cell.styles.lineWidth = { top: 0.5 };
+          data.cell.styles.lineColor = TEAL;
+          if (data.column.index === 3) data.cell.styles.textColor = GREEN;
+        }
+      },
+      tableLineColor: BORDER,
+      tableLineWidth: 0.3,
+    });
+    y = doc.lastAutoTable.finalY + 5;
+  }
+
+  // ── Vydaje ────────────────────────────────────
+  const expenseRows = expenses.filter(e => Number(e.amount||0) < 0);
   doc.setTextColor(...TEAL_DARK);
   doc.setFontSize(10);
   doc.setFont('helvetica', 'bold');
-  doc.text('Prijmy — ucastnici', ML, y);
-  y += 3;
-
-  const incHead = [['Jmeno a prijmeni', 'VS', 'Zaloha', 'Doplatek', 'Celkem', 'Stav']];
-  const incBody = activeP.map((p, i) => {
-    const z = p.firstPayment ? fmt(p.payment1Amount || 0) : '—';
-    const d = p.fullPayment  ? fmt(p.payment2Amount || 0) : '—';
-    const total = (p.firstPayment ? Number(p.payment1Amount || 0) : 0) +
-                  (p.fullPayment  ? Number(p.payment2Amount || 0) : 0);
-    const stav = p.firstPayment && p.fullPayment ? 'Uhrazeno' : (p.firstPayment ? 'Zaloha' : '—');
-    return [p.name || '—', p.variableSymbol || '—', z, d, fmt(total), stav];
-  });
-  incBody.push(['CELKEM', '', '', '', fmt(incomeTotal), '']);
-
-  doc.autoTable({
-    startY: y,
-    head: incHead,
-    body: incBody,
-    margin: { left: ML, right: MR },
-    styles: { fontSize: 7, cellPadding: 2, textColor: NAVY, font: 'helvetica' },
-    headStyles: { fillColor: TEAL, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
-    alternateRowStyles: { fillColor: BG_LIGHT },
-    columnStyles: {
-      0: { cellWidth: 48 },
-      1: { cellWidth: 28 },
-      2: { halign: 'right', cellWidth: 22 },
-      3: { halign: 'right', cellWidth: 22 },
-      4: { halign: 'right', cellWidth: 24, fontStyle: 'bold' },
-      5: { cellWidth: 22 },
-    },
-    didParseCell(data) {
-      if (data.row.index === incBody.length - 1) {
-        data.cell.styles.fillColor = BG_LIGHT;
-        data.cell.styles.fontStyle = 'bold';
-        data.cell.styles.lineWidth = { top: 0.5 };
-        data.cell.styles.lineColor = TEAL;
-      }
-      if (data.section === 'body' && data.column.index === 5) {
-        const val = data.cell.raw;
-        data.cell.styles.textColor = val === 'Uhrazeno' ? GREEN : GOLD;
-      }
-    },
-    tableLineColor: BORDER,
-    tableLineWidth: 0.3,
-  });
-  y = doc.lastAutoTable.finalY + 5;
-
-  // ── Výdaje ───────────────────────────────────
-  doc.setTextColor(...TEAL_DARK);
-  doc.setFontSize(10);
-  doc.setFont('helvetica', 'bold');
-  doc.text('Vydaje — transakce', ML, y);
+  doc.text('Vydaje', ML, y);
   y += 3;
 
   const expHead = [['Datum', 'Popis', 'Kategorie', 'Castka', 'Zdroj']];
-  const expBody = (trip.expenses || []).map(e => [
+  const expBody = expenseRows.map(e => [
     e.date || '—',
-    e.label || '—',
-    e.category || '—',
-    '-' + fmt(e.amount || 0),
+    d(e.label || '—').substring(0, 55),
+    d(e.category || '—'),
+    '-' + fmt(Math.abs(Number(e.amount||0))),
     e.source === 'cash' ? 'Cash' : 'Fio',
   ]);
-  expBody.push(['CELKEM', '', '', '-' + fmt(expensesTotal), '']);
-
-  // Kategorie souhrn
-  const catTotals = {};
-  (trip.expenses || []).forEach(e => {
-    catTotals[e.category] = (catTotals[e.category] || 0) + Number(e.amount || 0);
-  });
+  expBody.push(['CELKEM', '', '', '-' + fmt(totalExpenses), '']);
 
   doc.autoTable({
     startY: y,
     head: expHead,
     body: expBody,
     margin: { left: ML, right: MR },
-    styles: { fontSize: 7, cellPadding: 2, textColor: NAVY },
+    styles: { fontSize: 7, cellPadding: 2, textColor: NAVY, font: 'helvetica' },
     headStyles: { fillColor: TEAL, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
     alternateRowStyles: { fillColor: BG_LIGHT },
     columnStyles: {
@@ -5343,7 +5341,12 @@ function generateTripPDF(tripId) {
   });
   y = doc.lastAutoTable.finalY + 3;
 
-  // Kategorie souhrn
+  // ── Souhrn po kategoriich (jen vydaje) ────────
+  const catTotals = {};
+  expenseRows.forEach(e => {
+    const cat = d(e.category || 'Ostatni');
+    catTotals[cat] = (catTotals[cat] || 0) + Math.abs(Number(e.amount||0));
+  });
   if (Object.keys(catTotals).length > 0) {
     doc.setTextColor(...MUTED);
     doc.setFontSize(7);
@@ -5351,7 +5354,7 @@ function generateTripPDF(tripId) {
     doc.text('Vydaje podle kategorii:', ML, y + 4);
     doc.autoTable({
       startY: y + 5,
-      body: Object.entries(catTotals).map(([cat, total]) => [cat, '-' + fmt(total)]),
+      body: Object.entries(catTotals).sort((a,b) => b[1]-a[1]).map(([cat, total]) => [cat, '-' + fmt(total)]),
       margin: { left: ML, right: MR },
       styles: { fontSize: 7, cellPadding: 2, textColor: NAVY },
       alternateRowStyles: { fillColor: BG_LIGHT },
@@ -5365,7 +5368,7 @@ function generateTripPDF(tripId) {
     y = doc.lastAutoTable.finalY + 4;
   }
 
-  // ── Výsledek ─────────────────────────────────
+  // ── Vysledek ──────────────────────────────────
   doc.setDrawColor(...TEAL);
   doc.setLineWidth(0.5);
   doc.line(ML, y, W - MR, y);
@@ -5378,10 +5381,10 @@ function generateTripPDF(tripId) {
   doc.roundedRect(ML, y, CW, 12, 2, 2, 'S');
 
   const cols = [
-    { label: 'Cisty prijem', value: fmt(incomeTotal), color: NAVY },
-    { label: 'Celkove vydaje', value: '-' + fmt(expensesTotal), color: RED },
-    { label: 'ZISK', value: (profit >= 0 ? '+' : '') + fmt(profit), color: profit >= 0 ? GREEN : RED },
-    { label: 'MARZE', value: margin + ' %', color: profit >= 0 ? GREEN : RED },
+    { label: 'Prijmy celkem',  value: fmt(totalIncome),    color: NAVY  },
+    { label: 'Vydaje celkem',  value: '-' + fmt(totalExpenses), color: RED   },
+    { label: 'ZISK',           value: fmtSigned(profit),   color: profit >= 0 ? GREEN : RED },
+    { label: 'MARZE',          value: margin + ' %',        color: profit >= 0 ? GREEN : RED },
   ];
   const colW = CW / cols.length;
   cols.forEach((c, i) => {
@@ -5397,7 +5400,7 @@ function generateTripPDF(tripId) {
   });
   y += 18;
 
-  // ── Patička ───────────────────────────────────
+  // ── Paticka ───────────────────────────────────
   const now = new Date().toLocaleString('cs-CZ');
   doc.setDrawColor(...BORDER);
   doc.setLineWidth(0.3);
@@ -5405,10 +5408,9 @@ function generateTripPDF(tripId) {
   doc.setTextColor(...MUTED);
   doc.setFontSize(6);
   doc.setFont('helvetica', 'normal');
-  doc.text(`Generovano: ${now}  ·  Essence for Life  ·  System EFL Kalkulace`, W / 2, H - 6, { align: 'center' });
+  doc.text(d(`Generovano: ${now}  ·  Essence for Life  ·  System EFL Kalkulace`), W / 2, H - 6, { align: 'center' });
 
-  // Stažení
-  const filename = `EFL_PL_${marker}_${(trip.name || 'report').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30)}.pdf`;
+  const filename = `EFL_PL_${marker}_${d(trip.name || 'report').replace(/[^a-zA-Z0-9]/g,'_').substring(0,30)}.pdf`;
   doc.save(filename);
 }
 
