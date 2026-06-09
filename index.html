@@ -5294,7 +5294,9 @@ function generateTripPDF(tripId) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
-  // ── Vydaje ────────────────────────────────────
+  // ── Vydaje — vzdy nova stranka ─────────────────
+  doc.addPage();
+  y = 15;
   const expenseRows = expenses.filter(e => Number(e.amount||0) < 0);
   doc.setTextColor(...TEAL_DARK);
   doc.setFontSize(10);
@@ -5320,7 +5322,6 @@ function generateTripPDF(tripId) {
     styles: { fontSize: 7, cellPadding: 2, textColor: NAVY, font: 'helvetica' },
     headStyles: { fillColor: TEAL, textColor: WHITE, fontStyle: 'bold', fontSize: 7 },
     alternateRowStyles: { fillColor: BG_LIGHT },
-    showHead: 'everyPage',
     columnStyles: {
       0: { cellWidth: 22 },
       1: { cellWidth: 72 },
@@ -5342,9 +5343,7 @@ function generateTripPDF(tripId) {
   });
   y = doc.lastAutoTable.finalY + 3;
 
-  // ── Souhrn po kategoriich — nova stranka ────────
-  doc.addPage();
-  y = 15;
+  // ── Souhrn po kategoriich (jen vydaje) ────────
   const catTotals = {};
   expenseRows.forEach(e => {
     const cat = d(e.category || 'Ostatni');
