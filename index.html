@@ -4916,8 +4916,8 @@ function renderPL(trip) {
   let totalExpenses = 0;
   (trip.expenses||[]).forEach(e => {
     const amt = Number(e.amountCZK != null ? e.amountCZK : (e.amount || 0));
-    if (amt > 0) totalIncome   += amt;
-    if (amt < 0) totalExpenses += Math.abs(amt);
+    if (amt > 0) totalIncome   += Number(e.amountCZK || e.amount || 0);
+    if (amt < 0) totalExpenses += Math.abs(Number(e.amountCZK || e.amount || 0));
   });
   const profit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? ((profit / totalIncome)*100).toFixed(1) : '—';
@@ -5156,7 +5156,7 @@ function generateTripPDF(tripId) {
 
   // Odstraneni diakritiky pro jsPDF (helvetica nepodporuje UTF-8)
   const d = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0110/g,'D').replace(/\u0111/g,'d');
-  const fmt = n => { const num = Math.round(parseFloat(String(n).replace(',','.'))||0); return num.toLocaleString('cs-CZ') + ' Kc'; };
+  const fmt = n => { const num = Math.round(Number(n)||0); return num.toLocaleString('cs-CZ') + ' Kc'; };
   const fmtSigned = n => { const num = Math.round(Number(n)||0); return (num >= 0 ? '+' : '') + num.toLocaleString('cs-CZ') + ' Kc'; };
 
   // P&L pouze z expenses[] — shodne s renderPL
@@ -5164,8 +5164,8 @@ function generateTripPDF(tripId) {
   let totalIncome = 0, totalExpenses = 0;
   expenses.forEach(e => {
     const amt = Number(e.amount || 0);
-    if (amt > 0) totalIncome   += amt;
-    if (amt < 0) totalExpenses += Math.abs(amt);
+    if (amt > 0) totalIncome   += Number(e.amountCZK || e.amount || 0);
+    if (amt < 0) totalExpenses += Math.abs(Number(e.amountCZK || e.amount || 0));
   });
   const profit = totalIncome - totalExpenses;
   const margin = totalIncome > 0 ? (profit / totalIncome * 100).toFixed(1) : '0.0';
@@ -5294,9 +5294,7 @@ function generateTripPDF(tripId) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
-  // ── Vydaje — nova stranka ──────────────────────
-  doc.addPage();
-  y = 15;
+  // ── Vydaje ────────────────────────────────────
   const expenseRows = expenses.filter(e => Number(e.amount||0) < 0);
   doc.setTextColor(...TEAL_DARK);
   doc.setFontSize(10);
@@ -5309,7 +5307,7 @@ function generateTripPDF(tripId) {
     e.date || '—',
     d(e.label || '—').substring(0, 55),
     d(e.category || '—'),
-    '-' + fmt(Math.abs(Number(e.amount||0))),
+    '-' + fmt(Math.abs(Number(e.amountCZK || e.amount || 0))) + (e.currency && e.currency !== 'CZK' ? ' (' + Math.abs(Number(e.amount||0)) + ' ' + e.currency + ')' : ''),
     e.source === 'cash' ? 'Cash' : 'Fio',
   ]);
   expBody.push(['CELKEM', '', '', '-' + fmt(totalExpenses), '']);
