@@ -5156,7 +5156,7 @@ function generateTripPDF(tripId) {
 
   // Odstraneni diakritiky pro jsPDF (helvetica nepodporuje UTF-8)
   const d = s => (s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/\u0110/g,'D').replace(/\u0111/g,'d');
-  const fmt = n => { const num = Math.round(Number(n)||0); return num.toLocaleString('cs-CZ') + ' Kc'; };
+  const fmt = n => { const num = Math.round(parseFloat(String(n).replace(',','.'))||0); return num.toLocaleString('cs-CZ') + ' Kc'; };
   const fmtSigned = n => { const num = Math.round(Number(n)||0); return (num >= 0 ? '+' : '') + num.toLocaleString('cs-CZ') + ' Kc'; };
 
   // P&L pouze z expenses[] — shodne s renderPL
@@ -5294,7 +5294,9 @@ function generateTripPDF(tripId) {
     y = doc.lastAutoTable.finalY + 5;
   }
 
-  // ── Vydaje ────────────────────────────────────
+  // ── Vydaje — nova stranka ──────────────────────
+  doc.addPage();
+  y = 15;
   const expenseRows = expenses.filter(e => Number(e.amount||0) < 0);
   doc.setTextColor(...TEAL_DARK);
   doc.setFontSize(10);
