@@ -4899,7 +4899,8 @@ function getTripProjectNum(trip) {
 // ═══════════════════════════════════════════════
 // P&L — VÝDAJE & PŘEHLED
 // ═══════════════════════════════════════════════
-const EXPENSE_CATEGORIES = ['Ubytování','Letenka','Transfery','Doprava','Strava','Pojištění','Lektorné / delegát','MarcoPolo','Ostatní'];
+const EXPENSE_CATEGORIES = ['Ubytování','Letenka','Transfery','Doprava','Strava','Pojištění','Lektorné / delegát','MarcoPolo','Vratka','Ostatní'];
+const INCOME_CATEGORIES = ['Příjem','Smlouva','Doplatek','Letenka','Vratka','Pojištění'];
 
 function renderPL(trip) {
   if (!trip.expenses) trip.expenses = [];
@@ -4948,6 +4949,9 @@ function renderPL(trip) {
     </div>`;
   }).join('');
 
+  const incomeCatOptions = (cur) => INCOME_CATEGORIES.map(c =>
+    `<option value="${c}" ${(cur||'Příjem')===c?'selected':''}>${c}</option>`
+  ).join('');
   const expenseRows = (trip.expenses||[]).slice().sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((e) => {
     const catOptions = EXPENSE_CATEGORIES.map(c =>
       `<option value="${c}" ${e.category===c?'selected':''}>${c}</option>`
@@ -4957,7 +4961,7 @@ function renderPL(trip) {
       <td style="padding:7px 8px;font-size:13px">${esc(e.label||'')}</td>
       <td style="padding:7px 8px">
         ${Number(e.amount||0) >= 0
-            ? '<span style="font-size:12px;color:#1a7a5e;font-weight:500">Příjem</span>'
+            ? `<select onchange="updateExpense('${trip.id}','${e.id}','category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:#1a7a5e;font-weight:500;font-family:'Jost',sans-serif">${incomeCatOptions(e.category)}</select>`
             : `<select onchange="updateExpense('${trip.id}','${e.id}','category',this.value)" style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--white);color:var(--navy);font-family:'Jost',sans-serif">${catOptions}</select>`
           }
       </td>
