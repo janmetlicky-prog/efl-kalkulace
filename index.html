@@ -4984,10 +4984,12 @@ function renderPL(trip) {
         <div style="font-size:11px;font-weight:600;letter-spacing:1px;color:var(--text-muted);background:var(--bg-subtle,#f0f7f7);border:1px solid var(--border);border-radius:6px;padding:3px 8px">
           Marker: ${marker}
         </div>
-        <button onclick="generateTripPDF('${trip.id}')" style="font-size:12px;padding:5px 12px;border:1.5px solid var(--teal);border-radius:8px;background:var(--teal);color:#fff;cursor:pointer;font-weight:600">📄 PDF report</button>
+        <button class="admin-only" onclick="generateTripPDF('${trip.id}')" style="font-size:12px;padding:5px 12px;border:1.5px solid var(--teal);border-radius:8px;background:var(--teal);color:#fff;cursor:pointer;font-weight:600">📄 PDF report</button>
       </div>
     </div>
 
+    <!-- Souhrn P&L (skryto pro kolegu) -->
+    <div class="admin-only">
     <!-- KPI karty -->
     <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
       <div style="background:var(--bg-subtle,#f0f7f7);border-radius:8px;padding:12px 14px">
@@ -5028,6 +5030,9 @@ function renderPL(trip) {
 
     <!-- Kategorie -->
     ${catBars ? `<div style="font-size:11px;font-weight:600;letter-spacing:.5px;color:var(--text-muted);text-transform:uppercase;margin-bottom:10px">Výdaje podle kategorií</div>${catBars}<hr style="border:none;border-top:1px solid var(--border);margin:14px 0">` : ''}
+
+    </div>
+    <!-- /Souhrn P&L -->
 
     <!-- Tabulka výdajů -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -6649,17 +6654,17 @@ function loadSampleData() {
 const PINS = {
   '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'admin',
   'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'admin',
-  '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab': 'colleague'
+  'e101f890232038419566f0743710557f43ff37ee05ba0ee7b3c1b68dcf524e99': 'colleague'
 };
 const PIN_NICKS = {
   '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'Honza',
   'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'Adela',
-  '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab': 'Darja'
+  'e101f890232038419566f0743710557f43ff37ee05ba0ee7b3c1b68dcf524e99': 'Pavla'
 };
 const PIN_DISPLAY = {
   '59933d776452c8a5a00db247871079d8ae1e273192afd2075cb917cb5bbe402f': 'Honza',
   'f317cf1323fbcb5cc23d59db247cadf23b478cc89186a8464f6305d975a44279': 'Adéla',
-  '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab': 'Darja'
+  'e101f890232038419566f0743710557f43ff37ee05ba0ee7b3c1b68dcf524e99': 'Pavla'
 };
 const ROLE_KEY = 'efl_role';
 const NICK_KEY = 'efl_nick';
