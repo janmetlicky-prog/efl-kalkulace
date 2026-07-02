@@ -1272,6 +1272,15 @@
       <div style="font-size:11px;color:var(--text-muted)">Zadej URL a klikni Stáhnout klienty níže</div>
     </div>
 
+    <!-- Apps Script Sync URL (smlouvy + platby) -->
+    <div style="margin-bottom:12px">
+      <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Apps Script Sync URL (smlouvy)</label>
+      <input type="url" id="colleagueSyncUrl" placeholder="https://script.google.com/macros/s/.../exec"
+        style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
+      <button class="btn btn-primary btn-sm" onclick="saveColleagueSyncUrl()">💾 Uložit Sync URL</button>
+      <div id="colleagueSyncStatus" style="font-size:11px;min-height:16px;margin-top:4px;color:var(--text-muted)"></div>
+    </div>
+
     <div style="height:1px;background:var(--border);margin:12px 0"></div>
 
     <!-- Akce -->
@@ -7054,6 +7063,10 @@ function openColleagueSettings() {
   if (inp) inp.value = ghToken();
   const csvInp = document.getElementById('colleagueCsvUrl');
   if (csvInp) csvInp.value = localStorage.getItem('efl_sheet_csv_url') || '';
+  const syncInp = document.getElementById('colleagueSyncUrl');
+  if (syncInp) syncInp.value = getSyncUrl();
+  const syncStatus = document.getElementById('colleagueSyncStatus');
+  if (syncStatus) { syncStatus.textContent = getSyncUrl() ? '\u2713 Sync URL je uložena' : '\u26a0 Sync URL není nastavena'; syncStatus.style.color = getSyncUrl() ? 'var(--success)' : '#e09c3a'; }
   document.getElementById('colleagueSettingsStatus').innerHTML = '&nbsp;';
   const tokenStatus = document.getElementById('colleagueTokenStatus');
   if (tokenStatus) tokenStatus.textContent = ghToken() ? '✓ Token je uložen' : '⚠ Token není uložen';
@@ -7066,6 +7079,14 @@ function setColleagueStatus(msg, type) {
   if (!el) return;
   el.textContent = msg;
   el.style.color = type === 'ok' ? 'var(--success,#2ecc71)' : type === 'err' ? 'var(--danger,#e74c3c)' : 'var(--text-muted)';
+}
+
+function saveColleagueSyncUrl() {
+  const val = document.getElementById('colleagueSyncUrl').value.trim();
+  if (!val) { alert('Zadejte Apps Script Sync URL.'); return; }
+  localStorage.setItem(SYNC_URL_KEY, val);
+  const el = document.getElementById('colleagueSyncStatus');
+  if (el) { el.textContent = '\u2713 Sync URL uložena'; el.style.color = 'var(--success)'; }
 }
 
 async function colleagueAction(action) {
