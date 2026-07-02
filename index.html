@@ -1277,7 +1277,10 @@
       <label style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px">Apps Script Sync URL (smlouvy)</label>
       <input type="url" id="colleagueSyncUrl" placeholder="https://script.google.com/macros/s/.../exec"
         style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:inherit;box-sizing:border-box;margin-bottom:8px">
-      <button class="btn btn-primary btn-sm" onclick="saveColleagueSyncUrl()">💾 Uložit Sync URL</button>
+      <div style="display:flex;gap:8px;margin-bottom:4px">
+        <button class="btn btn-primary btn-sm" onclick="saveColleagueSyncUrl()">💾 Uložit Sync URL</button>
+        <button class="btn btn-secondary btn-sm" onclick="testColleagueSyncUrl()">🔍 Otestuj</button>
+      </div>
       <div id="colleagueSyncStatus" style="font-size:11px;min-height:16px;margin-top:4px;color:var(--text-muted)"></div>
     </div>
 
@@ -7087,6 +7090,23 @@ function saveColleagueSyncUrl() {
   localStorage.setItem(SYNC_URL_KEY, val);
   const el = document.getElementById('colleagueSyncStatus');
   if (el) { el.textContent = '\u2713 Sync URL uložena'; el.style.color = 'var(--success)'; }
+}
+
+function testColleagueSyncUrl() {
+  const url = (document.getElementById('colleagueSyncUrl').value.trim() || getSyncUrl());
+  const el = document.getElementById('colleagueSyncStatus');
+  if (!el) return;
+  if (!url) { el.textContent = '\u26a0 Nejprve zadejte Sync URL'; el.style.color = '#e09c3a'; return; }
+  if (url.includes('script.google.com') && url.includes('/exec')) {
+    el.textContent = '\u2713 URL form\u00e1t OK (spojen\u00ed nelze ov\u011b\u0159it \u2014 no-cors)';
+    el.style.color = 'var(--success)';
+  } else if (url.includes('script.google.com')) {
+    el.textContent = '\u26a0 Chyb\u00ed /exec na konci URL?';
+    el.style.color = '#e09c3a';
+  } else {
+    el.textContent = '\u2717 Nevypad\u00e1 jako Apps Script adresa';
+    el.style.color = 'var(--danger)';
+  }
 }
 
 async function colleagueAction(action) {
