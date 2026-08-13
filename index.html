@@ -6793,9 +6793,13 @@ function applyColleagueMode() {
 // ═══════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════
-// Nastav výchozí URL pro platební sync
-if (!localStorage.getItem('efl_payment_sync_url')) {
-  localStorage.setItem('efl_payment_sync_url', 'https://script.google.com/macros/s/AKfycbxzGEu_4VLeKRJhkBfu5sFHaRZCWX7dgIPZKasa-KYcESnR7rCLWYw1qrPlCwdzUL0T/exec');
+// Nastav výchozí URL pro platební sync (+ migrace ze staré AKfycbxz URL, která míří na starý odpojený skript)
+{
+  const PAYMENT_SYNC_URL = 'https://script.google.com/macros/s/AKfycbyVNHJyxQpjsc8HeeEvreXvsrBoHymHlXSWyE-EogF29oWmN4ljAgu9ytXYM-q8fO28/exec';
+  const cur = localStorage.getItem('efl_payment_sync_url') || '';
+  if (!cur || cur.includes('AKfycbxzGEu')) {
+    localStorage.setItem('efl_payment_sync_url', PAYMENT_SYNC_URL);
+  }
 }
 
 if (getRole()) {
