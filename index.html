@@ -3348,6 +3348,7 @@ function renderInstrGrid(filter, pipelineFilter) {
               ${ins.pipelineChangedAt ? `<div style="font-size:10px;color:var(--text-muted);margin-top:1px">🕐 ${esc(ins.pipeline||'')} · ${esc(ins.pipelineChangedAt)}</div>` : ''}
                 ${ins.type ? `<div style="font-size:11px;color:var(--teal);margin-top:1px">${esc(ins.type)}</div>` : ''}
                 ${sl ? `<div style="font-size:11px;color:${sl.color};margin-top:2px">${sl.emoji} ${ins.score}/100</div>` : ''}
+                ${ins.calEmailSentAt ? `<div style="font-size:10px;color:#059669;margin-top:2px" title="Cal.com email s termíny odeslán ${esc(ins.calEmailSentAt)}">📅 Termíny odeslány</div>` : ''}
                 ${ins.nextAction ? `<div style="font-size:10px;color:#b8860b;margin-top:3px;border-top:1px solid var(--border);padding-top:3px">→ ${esc(ins.nextAction.substring(0,40))}</div>` : ''}
               </div>`;
             }).join('') : `<div style="font-size:12px;color:var(--text-muted);text-align:center;padding:12px 0">Prázdné</div>`}
@@ -3374,6 +3375,7 @@ function renderInstrGrid(filter, pipelineFilter) {
               ${ins.type ? `<span style="font-size:10px;font-weight:600;background:#e0f4f5;color:var(--teal);padding:2px 7px;border-radius:10px">${esc(ins.type)}</span>` : ''}
               ${ins.city ? `<span style="font-size:11px;color:var(--text-muted)">📍 ${esc(ins.city)}</span>` : ''}
               ${sl ? `<span style="font-size:11px;font-weight:700;color:${sl.color};background:${sl.bg};padding:2px 8px;border-radius:10px;border:1px solid ${sl.color}33">${sl.emoji} ${ins.score}/100</span>` : ''}
+              ${ins.calEmailSentAt ? `<span style="font-size:10px;font-weight:600;color:#059669;background:#ecfdf5;padding:2px 7px;border-radius:10px;border:1px solid #05966933" title="Cal.com email s termíny odeslán ${esc(ins.calEmailSentAt)}">📅 Termíny odeslány</span>` : ''}
             </div>
           </div>
           <div style="display:flex;gap:4px;align-items:center;flex-shrink:0;margin-left:8px">
@@ -3477,6 +3479,13 @@ function openInstrPreview(id) {
       ${row('Zápis z callu', ins.callNotes, true)}
       ${ins.lastContact ? row('Datum oslovení', ins.lastContact) : ''}
       ${ins.source ? row('Zdroj leadu', ins.source) : ''}
+      ${ins.calEmailSentAt ? `<div style="grid-column:1/-1;background:#ecfdf5;border:1px solid #05966933;border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:#059669;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Email s termíny (cal.com)</div>
+        <div style="font-size:13px;color:#065f46;font-weight:600">📅 Odesláno ${esc(ins.calEmailSentAt)}</div>
+      </div>` : (ins.questionnaire ? `<div style="grid-column:1/-1;background:#fff7ed;border:1px solid #fb923c33;border-radius:10px;padding:10px 14px">
+        <div style="font-size:10px;font-weight:600;color:#c2410c;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Email s termíny (cal.com)</div>
+        <div style="font-size:13px;color:#9a3412">⚠️ Neevidováno — odesláno před zavedením sledování, nebo neodesláno</div>
+      </div>` : '')}
       ${tripStats ? `<div style="grid-column:1/-1;border:1px solid var(--border);border-radius:10px;padding:10px 14px">
         <div style="font-size:10px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Cesty s EFL</div>
         <div style="display:flex;gap:20px;align-items:center">
