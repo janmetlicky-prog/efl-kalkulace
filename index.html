@@ -5587,14 +5587,14 @@ async function updateParticipantAndSync(tripId, idx, field, val) {
   const url = getSyncUrl();
   if (!url) return;
   const p = trip.participants[idx];
-  if (!p.email) return;
+  if (!p.email && !p.vs && !p.name) return;
   const paymentType = field === 'firstPayment' ? '1st' : 'full';
   try {
     fetch(url, {
       method: 'POST',
       mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'markPayment', clientEmail: p.email, tripName: trip.name, paymentType })
+      body: JSON.stringify({ action: 'markPayment', clientEmail: p.email, clientName: p.name || '', vs: p.vs || '', tripName: trip.name, paymentType })
     }).catch(err => console.warn('markPayment error:', err.message));
   } catch(e) {
     console.warn('markPayment error:', e.message);
@@ -6177,7 +6177,7 @@ async function syncPayments() {
   setSyncing(true);
   showSyncLog('Stahuji platební data...');
   let updated = 0, errors = 0;
-  const trips = db.trips.filter(t => t.participants && t.participants.length > 0 && ['active','ongoing'].includes(t.status));
+  const trips = db.trips.filter(t => t.participants && t.participants.length > 0 && ['active','ongoing','accounting'].includes(t.status));
   console.log('[syncPayments] cest ke stažení:', trips.length, trips.map(t=>t.name));
   for (const trip of trips) {
     try {
@@ -6191,13 +6191,21 @@ async function syncPayments() {
       if (!Array.isArray(data) || !data.length) continue;
       data.forEach(pd => {
         if (!pd.email && !pd.name) return;
-        const p = trip.participants.find(p =>
-          (pd.email && p.email && p.email.toLowerCase() === pd.email.toLowerCase()) ||
-          (pd.name && p.name && p.name.toLowerCase() === pd.name.toLowerCase()) ||
-          (pd.name && p.name && pd.name.split(' ').length > 1 &&
-           p.name.toLowerCase().includes(pd.name.split(' ')[1].toLowerCase()))
-        );
-        if (!p) { console.log('[syncPayments] účastník nenalezen:', pd.name, pd.email); return; }
+        const norm = s => (s || '').trim().toLowerCase();
+        // 1) přesná shoda celého jména (nejspolehlivější — email může být sdílený)
+        let p = trip.participants.find(x => pd.name && x.name && norm(x.name) === norm(pd.name));
+        // 2) shoda emailu — jen pokud je email v cestě unikátní
+        if (!p && pd.email) {
+          const byEmail = trip.participants.filter(x => x.email && norm(x.email) === norm(pd.email));
+          if (byEmail.length === 1) p = byEmail[0];
+        }
+        // 3) příjmení — jen pokud odpovídá právě jeden účastník
+        if (!p && pd.name && pd.name.trim().split(/\s+/).length > 1) {
+          const last = norm(pd.name.trim().split(/\s+/)[1]);
+          const byLast = trip.participants.filter(x => x.name && norm(x.name).includes(last));
+          if (byLast.length === 1) p = byLast[0];
+        }
+        if (!p) { console.log('[syncPayments] účastník nenalezen (nejednoznačný match):', pd.name, pd.email); return; }
         if (pd.payment1Date) p.payment1Date = pd.payment1Date;
         if (pd.payment1Amount) p.payment1Amount = pd.payment1Amount;
         if (pd.payment2Date) p.payment2Date = pd.payment2Date;
