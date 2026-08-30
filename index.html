@@ -2511,7 +2511,7 @@ function buildClientMap() {
       if (!clientMap[key].nationality && p.nationality) clientMap[key].nationality = p.nationality;
       if (!clientMap[key].passport && p.passport) clientMap[key].passport = p.passport;
       if (!clientMap[key].city && p.city) clientMap[key].city = p.city;
-      clientMap[key].trips.push({ name: trip.name, year: trip.year, month: trip.month || 1, status: trip.status });
+      clientMap[key].trips.push({ name: trip.name, year: trip.year, month: trip.month || 1, status: trip.status, vs: (p.vs || '').trim() });
       clientMap[key].totalTrips++;
     });
   });
@@ -2709,7 +2709,7 @@ function buildClientRows(clients) {
     const tripTags = c.trips.length
       ? c.trips.map(t => t.isNoteTrip
           ? `<span class="client-trip-tag" style="opacity:0.7;font-style:italic;background:var(--sand-dark,#f0ebe0)">${t.name} ${t.year}</span>`
-          : `<span class="client-trip-tag">${t.name} ${t.year}</span>`
+          : `<span class="client-trip-tag">${t.name} ${t.year}${t.vs ? ` <span style="font-family:monospace;font-size:10px;opacity:0.75" title="Variabilní symbol pro tuto cestu">(VS ${t.vs})</span>` : ''}</span>`
         ).join('')
       : '<span style="font-size:11px;color:var(--text-muted);font-style:italic">Pouze v databázi</span>';
     const manualBadge = c.isManual && c.trips.length === 0
@@ -4618,17 +4618,9 @@ function renderTripDetail() {
   const participantsHtml = (trip.participants || []).map((p, idx) => `
     <tr data-pidx="${idx}" class="${p.isCancelled ? 'participant-cancelled' : p.pendingReview ? 'participant-pending' : ''}">
       <td>${isColleague() ? `<span style="min-width:130px;display:inline-block;padding:6px 4px">${p.name||''}</span>` : `<input type="text" value="${p.name||''}" onchange="updateParticipant('${trip.id}',${idx},'name',this.value)" placeholder="Jméno příjmení" style="min-width:130px;border:none;background:transparent;outline:none;padding:6px 4px;font-size:inherit;color:inherit;cursor:default${p.isCancelled ? ';text-decoration:line-through;color:#e53935' : ''}" onfocus="this.style.cursor='text';this.style.background='#f0f7f7';this.style.borderRadius='6px'" onblur="this.style.cursor='default';this.style.background='transparent';autofillParticipantFromClient('${trip.id}',${idx},this.value)">`}</td>
-      <td style="position:relative">
-        <div style="position:relative">
-          <input type="text" value="${(p.notes||'').replace(/"/g,'&quot;')}"
-            onchange="updateParticipant('${trip.id}',${idx},'notes',this.value)"
-            placeholder="Poznámka..."
-            title="${esc(p.notes||'')}"
-            style="width:130px;cursor:text"
-            onfocus="showNoteTooltip(this)"
-            onblur="hideNoteTooltip(this)">
-        </div>
-      </td>
+      <td>${isOwner()
+        ? `<input type="text" value="${p.vs||''}" onchange="confirmVsChange('${trip.id}',${idx},this)" placeholder="VS" style="width:90px;font-family:monospace;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 6px">`
+        : `<span style="font-family:monospace;font-size:12px;display:inline-block;min-width:90px;padding:6px 4px;color:${p.vs?'inherit':'#ccc'}">${p.vs||'—'}</span>`}</td>
       <td style="font-size:11px;color:var(--text-muted);line-height:1.7;min-width:150px;padding:4px 8px;vertical-align:middle;white-space:nowrap">
         ${(p.payment1Date || p.payment1Amount) ? `<div><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
         ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
@@ -4641,6 +4633,7 @@ function renderTripDetail() {
           <input type="checkbox" ${p.contractSent?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSent',this.checked)">
           <button onclick="generateContract('${trip.id}',${idx})" title="Generovat smlouvu" style="font-size:11px;padding:1px 4px;border:1px solid #c8e4e5;border-radius:4px;background:#f0f7f7;cursor:pointer;line-height:1.4">📄</button>
           <button onclick="generateAndSendContract('${trip.id}',${idx})" title="Generovat + odeslat smlouvu" style="font-size:11px;padding:1px 4px;border:1px solid #03989E;border-radius:4px;background:#e6f7f7;cursor:pointer;line-height:1.4">📨</button>
+          <button onclick="openContractLink('${trip.id}',${idx},this)" title="Otevřít smlouvu v Drive" style="font-size:11px;padding:1px 4px;border:1px solid #c8b060;border-radius:4px;background:#fdf8ec;cursor:pointer;line-height:1.4">🔗</button>
         </div>
       </td>
       <td class="check-cell"><input type="checkbox" ${p.contractSigned?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSigned',this.checked)"></td>
@@ -4648,6 +4641,17 @@ function renderTripDetail() {
       <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'firstPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'fullPayment',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
+      <td style="position:relative;min-width:260px">
+        <div style="position:relative">
+          <input type="text" value="${(p.notes||'').replace(/"/g,'&quot;')}"
+            onchange="updateParticipant('${trip.id}',${idx},'notes',this.value)"
+            placeholder="Poznámka..."
+            title="${esc(p.notes||'')}"
+            style="width:100%;min-width:260px;cursor:text"
+            onfocus="showNoteTooltip(this)"
+            onblur="hideNoteTooltip(this)">
+        </div>
+      </td>
       <td class="check-cell"><input type="checkbox" ${p.isCancelled?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'isCancelled',this.checked);renderTripDetail()" title="Storno"></td>
 
       <td style="display:flex;gap:4px;align-items:center">
@@ -4901,7 +4905,7 @@ function renderTripDetail() {
         <table class="participants-table">
           <thead><tr>
             <th style="min-width:140px">Jméno a příjmení</th>
-            <th style="min-width:140px">Poznámky</th>
+            <th style="min-width:95px" title="Variabilní symbol / číslo smlouvy">VS</th>
             <th style="min-width:160px">Platby</th>
             <th>Telefon</th>
             <th>Email</th>
@@ -4911,11 +4915,12 @@ function renderTripDetail() {
             <th title="1. platba">💳 1. pl.</th>
             <th title="Kompletní platba">✅ Kompl.</th>
             <th title="Pojištění zaplaceno">🛡 Poj.</th>
+            <th style="min-width:260px">Poznámky</th>
             <th title="Storno">🚫</th>
             <th></th>
           </tr></thead>
           <tbody id="participantBody">
-            ${participantsHtml || '<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text-muted)">Zatím žádní účastníci</td></tr>'}
+            ${participantsHtml || '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text-muted)">Zatím žádní účastníci</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -5642,6 +5647,107 @@ async function updateParticipantAndSync(tripId, idx, field, val) {
   }
 }
 
+// ─── VS: editace jen pro Honzu, zápis nejdřív do Sheetu, pak do db ───
+function isOwner() { return getNick() === 'Honza'; }
+
+async function confirmVsChange(tripId, idx, inputEl) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  const p = trip.participants[idx];
+  const newVs = inputEl.value.trim();
+  const oldVs = p.vs || '';
+  if (newVs === oldVs) return;
+
+  let warn = '';
+  if (newVs && !/^\d{8,12}$/.test(newVs)) {
+    warn += '\n\nPOZOR: VS neodpovídá očekávanému formátu (8–12 číslic).';
+  }
+  const dup = trip.participants.find((x, i) => i !== idx && !x.isCancelled && (x.vs||'').trim() === newVs && newVs);
+  if (dup) {
+    warn += `\n\nPOZOR: stejné VS už má ${dup.name}. Duplicitní VS způsobí, že se platby spárují chybně.`;
+  }
+
+  const ok = confirm(
+    `⚠️ ZMĚNA ČÍSLA SMLOUVY\n\n` +
+    `Měníte VS účastníka ${p.name} z „${oldVs || '—'}" na „${newVs || '—'}".\n\n` +
+    `VS je variabilní symbol uvedený v podepsané smlouvě. Změnou se údaj v aplikaci a v Google Sheetu ` +
+    `rozejde s tím, co má klient ve smlouvě — platby se nemusí spárovat a upomínky mohou odejít chybně.` +
+    warn + `\n\nOpravdu pokračovat?`
+  );
+  if (!ok) { inputEl.value = oldVs; return; }
+
+  inputEl.disabled = true;
+  try {
+    const res = await pushVsToSheet(trip.name, p.name || '', p.email || '', oldVs, newVs);
+    if (res && res.ok) {
+      p.vs = newVs;                 // commit až PO úspěšném zápisu do Sheetu
+      save(db);
+      renderTripDetail();
+      showSyncLog(`✓ VS změněno: ${p.name} → ${newVs} (Sheet ř. ${res.row})`);
+    } else {
+      inputEl.value = oldVs;
+      const cand = ((res && res.candidates) || [])
+        .map(c => `  ř.${c.row}: ${c.name} | ${c.email} | VS ${c.vs || '—'}`).join('\n');
+      alert(`VS NEBYLO změněno (Sheet: ${(res && res.reason) || 'chyba'}).\n` +
+            (cand ? `Kandidáti:\n${cand}\n` : '') + `V aplikaci zůstává původní hodnota.`);
+    }
+  } catch(e) {
+    inputEl.value = oldVs;
+    alert('VS NEBYLO změněno — síťová chyba: ' + e.message + '\nV aplikaci zůstává původní hodnota.');
+  } finally {
+    inputEl.disabled = false;
+  }
+}
+
+async function pushVsToSheet(tripName, name, email, oldVs, newVs) {
+  const base = (localStorage.getItem('efl_payment_sync_url') || '').trim();
+  if (!base) throw new Error('Není nastavena payment-sync URL');
+  const url = base + '?action=setVS'
+    + '&trip='  + encodeURIComponent(tripName)
+    + '&name='  + encodeURIComponent(name)
+    + '&email=' + encodeURIComponent(email)
+    + '&oldVs=' + encodeURIComponent(oldVs)
+    + '&newVs=' + encodeURIComponent(newVs);
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), 15000);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    return await res.json();
+  } finally { clearTimeout(t); }
+}
+
+// ─── Prolink na vygenerovanou smlouvu v Drive ───
+async function openContractLink(tripId, idx, btnEl) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip || !trip.participants[idx]) return;
+  const p = trip.participants[idx];
+  if (p.contractUrl) { window.open(p.contractUrl, '_blank'); return; }
+
+  const base = (localStorage.getItem('efl_payment_sync_url') || '').trim();
+  if (!base) { alert('Není nastavena payment-sync URL.'); return; }
+  const orig = btnEl.textContent;
+  btnEl.textContent = '⏳'; btnEl.disabled = true;
+  try {
+    const url = base + '?action=findContract'
+      + '&vs='   + encodeURIComponent(p.vs || '')
+      + '&name=' + encodeURIComponent(p.name || '')
+      + '&trip=' + encodeURIComponent(trip.name);
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.ok && json.url) {
+      p.contractUrl = json.url;
+      save(db);
+      window.open(json.url, '_blank');
+    } else {
+      alert(`Smlouva pro ${p.name} nebyla v Drive nalezena.`);
+    }
+  } catch(e) {
+    alert('Hledání smlouvy selhalo: ' + e.message);
+  } finally {
+    btnEl.textContent = orig; btnEl.disabled = false;
+  }
+}
+
 // Generovat smlouvu (bez odeslání)
 async function generateContract(tripId, idx) {
   const trip = db.trips.find(t => t.id === tripId);
@@ -6045,7 +6151,7 @@ function exportClientsCSV() {
         c.name, c.email, c.phone, c.birthDate, c.city,
         c.totalTrips,
         lastLabel,
-        c.trips.map(t => t.name + ' ' + t.year).join(' | '),
+        c.trips.map(t => t.name + ' ' + t.year + (t.vs ? ' (VS ' + t.vs + ')' : '')).join(' | '),
         c.note
       ]);
     });
