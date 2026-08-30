@@ -3132,6 +3132,7 @@ function saveDestModal() {
 }
 
 function deleteDest(id) {
+  if (!isAdmin()) return;
   if (!confirm('Smazat toto centrum?')) return;
   db.destinations = db.destinations.filter(x => x.id !== id);
   save(db);
@@ -5821,6 +5822,7 @@ function updateNotes(tripId, val) {
 }
 
 function deleteTrip(tripId) {
+  if (!isAdmin()) return;
   if (!confirm('Opravdu smazat tento zájezd? Akce nelze vrátit.')) return;
   db.trips = db.trips.filter(t => t.id !== tripId);
   save(db); currentTripId = null; showView('overview');
@@ -6016,6 +6018,7 @@ document.getElementById('instructorModal').addEventListener('click', e => {
 
 // ── CSV Export ────────────────────────────────────────────────────────────────
 function exportClientsCSV() {
+  if (!isAdmin()) return;
   // Použij buildClientMap + aplikuj stejné filtry jako zobrazení
   const clientMap = buildClientMap();
   const searchVal = (document.getElementById('clientSearchInput') || {}).value || '';
@@ -6232,18 +6235,25 @@ async function syncPayments() {
       data.forEach(pd => {
         if (!pd.email && !pd.name) return;
         const norm = s => (s || '').trim().toLowerCase();
+        // storno účastníci nesmí ukrást match živému (kroky 1–3 je přeskakují,
+        // krok 4 na ně spadne jen když žádný živý nesedí)
+        const alive = trip.participants.filter(x => !x.isCancelled);
         // 1) přesná shoda celého jména (nejspolehlivější — email může být sdílený)
-        let p = trip.participants.find(x => pd.name && x.name && norm(x.name) === norm(pd.name));
+        let p = alive.find(x => pd.name && x.name && norm(x.name) === norm(pd.name));
         // 2) shoda emailu — jen pokud je email v cestě unikátní
         if (!p && pd.email) {
-          const byEmail = trip.participants.filter(x => x.email && norm(x.email) === norm(pd.email));
+          const byEmail = alive.filter(x => x.email && norm(x.email) === norm(pd.email));
           if (byEmail.length === 1) p = byEmail[0];
         }
         // 3) příjmení — jen pokud odpovídá právě jeden účastník
         if (!p && pd.name && pd.name.trim().split(/\s+/).length > 1) {
           const last = norm(pd.name.trim().split(/\s+/)[1]);
-          const byLast = trip.participants.filter(x => x.name && norm(x.name).includes(last));
+          const byLast = alive.filter(x => x.name && norm(x.name).includes(last));
           if (byLast.length === 1) p = byLast[0];
+        }
+        // 4) fallback: přesné jméno mezi storno účastníky (ať dostanou aspoň VS)
+        if (!p) {
+          p = trip.participants.find(x => x.isCancelled && pd.name && x.name && norm(x.name) === norm(pd.name));
         }
         if (!p) { console.log('[syncPayments] účastník nenalezen (nejednoznačný match):', pd.name, pd.email); return; }
         if (pd.payment1Date) p.payment1Date = pd.payment1Date;
@@ -6631,13 +6641,14 @@ function copyScript() {
 // EXPORT / IMPORT
 // ═══════════════════════════════════════════════
 function exportData() {
+  if (!isAdmin()) return;
   const blob = new Blob([JSON.stringify(db, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
   a.download = `kalkulace_zajezdu_${new Date().toISOString().slice(0,10)}.json`;
   a.click();
 }
-function importData() { document.getElementById('importFile').click(); }
+function importData() { if (!isAdmin()) return; document.getElementById('importFile').click(); }
 function handleImport(e) {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
@@ -7202,6 +7213,7 @@ function closeColleagueSettings() {
 // ═══════════════════════════════════════════════
 
 function openCleanupModal() {
+  if (!isAdmin()) return;
   const results = detectCleanupCandidates();
   renderCleanupModal(results);
   document.getElementById('cleanupModal').classList.remove('hidden');
