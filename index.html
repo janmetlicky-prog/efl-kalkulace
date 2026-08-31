@@ -33,6 +33,7 @@
     --storno-bg: #f0ebe5;
     --sidebar-w: 290px;
     --accent: #cdaa3a;
+    --gold: #cdaa3a;
     --package-price: #03989e;
     --bg-main: #fbfefe;
     --bg-sidebar: #026d72;
@@ -59,6 +60,7 @@
     --bg-main: #0d1117;
     --bg-sidebar: #0a1520;
     --accent: #cdaa3a;
+    --gold: #cdaa3a;
   }
   body.dark-mode { background: #0d1117 !important; color: #e2e8f0; }
 
@@ -676,6 +678,24 @@
   .participant-pending td:first-child::before { content:'🟡 '; font-size:10px; }
   .participant-cancelled td input[type="text"] { color:#e53935; text-decoration:line-through; }
   .participant-cancelled td input[type="checkbox"] { opacity:0.5; }
+
+  /* ═══ FINANCE (BĚH 1) ═══ */
+  .fin-header { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
+  .fin-header h2 { font-family:'Cormorant Garamond',serif; font-size:26px; color:var(--navy); margin:0; }
+  .fin-tabs { display:flex; gap:4px; border-bottom:1.5px solid var(--border); margin-bottom:18px; overflow-x:auto; }
+  .fin-tab { background:none; border:none; border-bottom:2.5px solid transparent; padding:9px 14px; font-family:'Jost',sans-serif;
+             font-size:13px; font-weight:500; color:var(--text-muted); cursor:pointer; white-space:nowrap; }
+  .fin-tab:hover { color:var(--navy); }
+  .fin-tab.active { color:var(--teal); border-bottom-color:var(--teal); }
+  .fin-kpi-grid { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; margin-bottom:16px; }
+  .fin-kpi { background:var(--bg-subtle,#f0f7f7); border:1px solid var(--border); border-radius:10px; padding:12px 14px; }
+  body.dark-mode .fin-kpi { background:var(--sand); }
+  .fin-kpi.hero { border-color:var(--gold); box-shadow:0 0 0 2px rgba(205,170,58,.18); }
+  .fin-table { width:100%; border-collapse:collapse; font-size:13px; }
+  .fin-table th, .fin-table td { padding:7px 8px; border-bottom:1px solid var(--border); text-align:left; }
+  .fin-table td.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .fin-row-unmatched { border-left:3px solid var(--gold); }
+  #financeStatus { font-size:12px; min-height:16px; }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
@@ -730,6 +750,7 @@
       <button class="topbar-nav-btn" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
       <button class="topbar-nav-btn" onclick="showView('destinations')" id="btnDestinations">📍 Destinace</button>
+      <button class="topbar-nav-btn" onclick="showView('finance')" id="btnFinance" style="display:none">💰 Finance</button>
 
     </div>
     <div class="gear-wrap" id="gearWrap">
@@ -1202,6 +1223,18 @@
         style="font-size:12px;" oninput="localStorage.setItem('efl_fio_url',this.value)">
     </div>
 
+    <div class="form-group admin-only" style="margin-bottom:14px">
+      <label>Finance URL <span style="font-size:10px;color:var(--text-muted)">(Fio výpis — GAS EFL Finance)</span></label>
+      <input type="url" id="financeUrlInput" placeholder="https://script.google.com/macros/s/..."
+        style="font-size:12px;" oninput="localStorage.setItem('efl_finance_url',this.value)">
+    </div>
+
+    <div class="form-group admin-only" style="margin-bottom:14px">
+      <label>Finance secret <span style="font-size:10px;color:var(--text-muted)">(sdílené tajemství endpointu)</span></label>
+      <input type="password" id="financeSecretInput" placeholder="48 znaků" autocomplete="off"
+        style="font-size:12px;" oninput="localStorage.setItem('efl_finance_secret',this.value)">
+    </div>
+
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
       <button class="btn btn-secondary" onclick="syncPull()">⬇️ Stáhnout klienty z formuláře</button>
       <button class="btn btn-secondary" onclick="syncPayments()">💳 Stáhnout platební data</button>
@@ -1606,6 +1639,154 @@ const COLLEAGUE_GH_TOKEN = ['ghp_aUgP2Zrr2yJ8k','wV8Uzfl8ArpfSSm2C1vqP56'].join(
 function ghToken()  { return localStorage.getItem('efl_gh_token') || ''; }
 function ghSetSha(sha) { localStorage.setItem('efl_gh_sha', sha); }
 function ghGetSha()    { return localStorage.getItem('efl_gh_sha') || ''; }
+
+// ═══ GH VRSTVA — obecné funkce pro více souborů (FINANCE BĚH 0) ═══
+// Rozhodnutí dle balíčku 1 kap. 5.2: stávající ghLoad()/ghSave() zůstávají NETKNUTÉ.
+// Nové funkce používá výhradně Finance modul (loadFinance/saveFinance/saveAwait).
+function ghShaKey(path) {
+  // jediné místo, kde se sestavuje klíč SHA cache
+  if (path === GH_FILE) return 'efl_gh_sha';            // zpětná kompatibilita
+  return 'efl_gh_sha__' + String(path).replace(/[^a-z0-9]/gi, '_');
+}
+function ghGetShaFor(path)      { return localStorage.getItem(ghShaKey(path)) || ''; }
+function ghSetShaFor(path, sha) { if (sha) localStorage.setItem(ghShaKey(path), sha); }
+
+function _ghDecodeContentB64(b64raw) {
+  // stejná dekódovací cesta jako ghLoad(): atob → Uint8Array → TextDecoder UTF-8
+  const b64 = String(b64raw || '').replace(/\n/g, '');
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
+function _ghValidateKeys(data, requiredKeys) {
+  if (!requiredKeys) return true;
+  if (!data || typeof data !== 'object') return false;
+  for (const k in requiredKeys) {
+    const want = requiredKeys[k];
+    const v = data[k];
+    if (want === 'array') { if (!Array.isArray(v)) return false; }
+    else if (typeof v !== want) return false;
+  }
+  return true;
+}
+
+/**
+ * Načte soubor z repa. Vrací { status, data, sha, size, error }.
+ * status: 'OK' | 'ABSENT' | 'UNREADABLE' | 'UNREADABLE_TOO_LARGE'  (master 7.1 + 7.2)
+ * ABSENT pouze po pozitivním ověření výpisem adresáře. Z chybové cesty NIKDY nevrací data.
+ */
+async function ghLoadFile(path, requiredKeys) {
+  const token = ghToken();
+  if (!token) return { status: 'UNREADABLE', error: 'no_token' };
+  const H = { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' };
+  let res;
+  try {
+    res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: H }
+    );
+  } catch (e) { return { status: 'UNREADABLE', error: 'network: ' + e.message }; }
+
+  if (res.status === 404) {
+    // 404 vrací GitHub i při chybějícím oprávnění / vypršelém tokenu (master 7.1)
+    try {
+      const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/')) : '';
+      const dres = await fetch(
+        `https://api.github.com/repos/${GH_REPO}/contents/${dir}?ref=${GH_BRANCH}&t=${Date.now()}`,
+        { headers: H }
+      );
+      if (!dres.ok) return { status: 'UNREADABLE', error: 'dir_list_' + dres.status };
+      const list = await dres.json();
+      if (!Array.isArray(list)) return { status: 'UNREADABLE', error: 'dir_list_shape' };
+      const base = path.slice(path.lastIndexOf('/') + 1);
+      if (list.some(f => f && f.name === base)) return { status: 'UNREADABLE', error: 'listed_but_404' };
+      return { status: 'ABSENT' };
+    } catch (e) { return { status: 'UNREADABLE', error: 'dir_list: ' + e.message }; }
+  }
+  if (!res.ok) return { status: 'UNREADABLE', error: 'http_' + res.status };
+
+  let json;
+  try { json = await res.json(); } catch (e) { return { status: 'UNREADABLE', error: 'json_body' }; }
+
+  let text;
+  if (json.size > 0 && (!json.content || json.encoding === 'none')) {
+    // 1MB limit Contents API (7.2) — fallback na download_url; selže-li, zápis zůstane zablokován
+    try {
+      const raw = await fetch(json.download_url, { headers: { Authorization: `token ${token}` } });
+      if (!raw.ok) return { status: 'UNREADABLE_TOO_LARGE', sha: json.sha, size: json.size };
+      text = await raw.text();
+    } catch (e) { return { status: 'UNREADABLE_TOO_LARGE', sha: json.sha, size: json.size }; }
+  } else {
+    try { text = _ghDecodeContentB64(json.content); }
+    catch (e) { return { status: 'UNREADABLE', error: 'base64' }; }
+  }
+
+  let data;
+  try { data = JSON.parse(text); } catch (e) { return { status: 'UNREADABLE', error: 'json_parse' }; }
+  if (!_ghValidateKeys(data, requiredKeys)) return { status: 'UNREADABLE', error: 'schema' };
+
+  ghSetShaFor(path, json.sha);
+  return { status: 'OK', data, sha: json.sha, size: json.size };
+}
+
+/**
+ * Zapíše soubor. Vrací { ok, sha, conflict, warning, error }.
+ * Před PUT VŽDY čerstvá SHA z API (master 7.4). 409/konflikt NIKDY nepřepisuje (Z9).
+ */
+async function ghSaveFile(path, data, opts) {
+  opts = opts || {};
+  const token = ghToken();
+  if (!token) return { ok: false, error: 'no_token' };
+
+  const jsonStr = JSON.stringify(data);
+  if (jsonStr.length > 900000) return { ok: false, error: 'too_large' };   // 7.2 — bez PUT
+  const warning = jsonStr.length > 700000 ? 'size' : null;
+
+  const H = { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' };
+  let freshSha = null;
+  try {
+    const sres = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/contents/${path}?ref=${GH_BRANCH}&t=${Date.now()}`,
+      { headers: H }
+    );
+    if (sres.ok) { const sj = await sres.json(); freshSha = sj.sha || null; }
+    else if (sres.status === 404) {
+      if (!opts.absentOk) return { ok: false, error: 'sha_fetch_404' };   // nový soubor jen po ověřeném ABSENT
+    }
+    else return { ok: false, error: 'sha_fetch_' + sres.status };
+  } catch (e) { return { ok: false, error: 'sha_fetch: ' + e.message }; }
+
+  if (opts.expectSha && freshSha && opts.expectSha !== freshSha) {
+    return { ok: false, conflict: true, remoteSha: freshSha };   // cizí změna — rozhodne volající
+  }
+
+  const body = {
+    message: opts.message || ('EFL update ' + new Date().toISOString().slice(0, 16)),
+    content: btoa(unescape(encodeURIComponent(jsonStr))),
+    branch: GH_BRANCH,
+  };
+  if (freshSha) body.sha = freshSha;
+
+  let res;
+  try {
+    res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${path}`,
+      { method: 'PUT', headers: { ...H, 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (e) { return { ok: false, error: 'network: ' + e.message }; }
+
+  if (res.status === 409) return { ok: false, conflict: true };
+  if (!res.ok) {
+    let msg = 'http_' + res.status;
+    try { const err = await res.json(); if (err.message) msg = err.message; } catch (e) {}
+    if (res.status === 422 && /sha/i.test(msg)) return { ok: false, conflict: true };
+    return { ok: false, error: msg };
+  }
+  const j = await res.json();
+  const newSha = j.content && j.content.sha;
+  ghSetShaFor(path, newSha);
+  return { ok: true, sha: newSha, warning };
+}
 
 async function ghLoad() {
   const token = ghToken();
@@ -2046,7 +2227,7 @@ document.addEventListener('click', e => {
 
 function updateNavActive(view) {
   document.querySelectorAll('.topbar-nav-btn').forEach(b => b.classList.remove('active'));
-  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations' };
+  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations', finance: 'btnFinance' };
   if (map[view]) {
     const el = document.getElementById(map[view]);
     if (el) el.classList.add('active');
@@ -2107,6 +2288,289 @@ function setYear(y) { currentYear = y; renderSidebar(); if (currentView === 'ove
 // ═══════════════════════════════════════════════
 // VIEWS
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// FINANCE DATA (BĚH 0)
+// ═══════════════════════════════════════════════
+let financeDb = null;
+let _financeLoaded = false;          // true pouze po OK nebo pozitivně ověřeném ABSENT
+let _financeLoadStatus = null;       // poslední status z ghLoadFile
+let _financeSessionSha = '';         // SHA finance souboru z posledního načtení v této session
+let _financeLoadedTxCount = 0;       // pojistka proti vyprázdnění (master 7.3)
+
+const FINANCE_DEFAULT_ACCOUNTS = [
+  { id: 'fio-czk', name: 'Fio CZK', currency: 'CZK', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null },
+  { id: 'fio-eur', name: 'Fio EUR', currency: 'EUR', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null }
+];
+
+// Prvních 12 názvů se PŘESNĚ shoduje s EXPENSE_CATEGORIES (master 3.2)
+const FINANCE_DEFAULT_CATEGORIES = [
+  { id: 'ubytovani',       name: 'Ubytování',            type: 'cost',    direct: true  },
+  { id: 'letenka',         name: 'Letenka',              type: 'cost',    direct: true  },
+  { id: 'transfery',       name: 'Transfery',            type: 'cost',    direct: true  },
+  { id: 'doprava',         name: 'Doprava',              type: 'cost',    direct: true  },
+  { id: 'strava',          name: 'Strava',               type: 'cost',    direct: true  },
+  { id: 'vylet',           name: 'Výlet',                type: 'cost',    direct: true  },
+  { id: 'vstupy',          name: 'Vstupy',               type: 'cost',    direct: true  },
+  { id: 'pojisteni',       name: 'Pojištění',            type: 'cost',    direct: true  },
+  { id: 'lektorne',        name: 'Lektorné / delegát',   type: 'cost',    direct: true  },
+  { id: 'marcopolo',       name: 'MarcoPolo',            type: 'cost',    direct: true  },
+  { id: 'vratka',          name: 'Vratka',               type: 'cost',    direct: true  },
+  { id: 'ostatni',         name: 'Ostatní',              type: 'cost',    direct: true  },
+  { id: 'rezie-marketing', name: 'Marketing',            type: 'cost',    direct: false },
+  { id: 'rezie-software',  name: 'Software a služby',    type: 'cost',    direct: false },
+  { id: 'rezie-ucetni',    name: 'Účetní a poradenství', type: 'cost',    direct: false },
+  { id: 'rezie-bankovni',  name: 'Bankovní poplatky',    type: 'cost',    direct: false },
+  { id: 'rezie-ostatni',   name: 'Ostatní režie',        type: 'cost',    direct: false },
+  { id: 'prijem-klient',   name: 'Platba klienta',       type: 'revenue', direct: true  },
+  { id: 'prijem-ostatni',  name: 'Ostatní příjem',       type: 'revenue', direct: false },
+  { id: 'interni-prevod',  name: 'Interní převod',       type: 'neutral', direct: false }
+];
+
+function financeFilePath(year) { return 'data/finance-' + year + '.json'; }
+
+function financeEmptySchema(year) {
+  return {
+    year: year,
+    updatedAt: null,
+    accounts: JSON.parse(JSON.stringify(FINANCE_DEFAULT_ACCOUNTS)),
+    transactions: [],
+    categories: JSON.parse(JSON.stringify(FINANCE_DEFAULT_CATEGORIES)),
+    rules: [],
+    settlements: [],
+    closings: []
+  };
+}
+
+function migrateFinance(data) {
+  // POUZE přidává chybějící klíče; nic nemaže, nic nepřepisuje; idempotentní (master 7.12)
+  if (!data || typeof data !== 'object') throw new Error('migrateFinance: neplatná data');
+  const before = Array.isArray(data.transactions) ? data.transactions.length : 0;
+  const tpl = financeEmptySchema(typeof data.year === 'number' ? data.year : currentYear);
+  for (const k in tpl) {
+    if (data[k] === undefined || data[k] === null) data[k] = tpl[k];
+    else if (Array.isArray(tpl[k]) && !Array.isArray(data[k])) {
+      console.warn('migrateFinance: klíč "' + k + '" má nečekaný typ — ponechán beze změny');
+    }
+  }
+  const after = Array.isArray(data.transactions) ? data.transactions.length : 0;
+  if (after !== before) throw new Error('migrateFinance: počet transakcí se změnil (' + before + ' → ' + after + ')');
+  return data;
+}
+
+async function loadFinance(year) {
+  const r = await ghLoadFile(financeFilePath(year), { year: 'number', transactions: 'array' });
+  _financeLoadStatus = r.status;
+  if (r.status === 'OK') {
+    financeDb = migrateFinance(r.data);
+    _financeSessionSha = r.sha;
+    _financeLoadedTxCount = financeDb.transactions.length;
+    _financeLoaded = true;
+    return true;
+  }
+  if (r.status === 'ABSENT') {
+    financeDb = migrateFinance(financeEmptySchema(year));
+    _financeSessionSha = '';
+    _financeLoadedTxCount = 0;
+    _financeLoaded = true;   // zápis povolen — vytvoří nový soubor (7.1)
+    return true;
+  }
+  financeDb = null; _financeLoaded = false;   // UNREADABLE* → zápis ZAKÁZÁN (7.1)
+  return false;
+}
+
+async function saveFinance() {
+  if (!_financeLoaded || !financeDb) {
+    showFinanceStatus('⛔ Data nebyla načtena — ukládání zablokováno', 'warn');
+    return false;
+  }
+  // pojistka proti vyprázdnění (7.3) — nesmí jít vypnout
+  if (_financeLoadedTxCount > 0 && (financeDb.transactions || []).length === 0) {
+    console.error('saveFinance: odmítnuto — pokus zapsat 0 transakcí přes ' + _financeLoadedTxCount);
+    showFinanceStatus('⛔ Zápis odmítnut: soubor by přišel o všechny transakce', 'warn');
+    return false;
+  }
+  financeDb.updatedAt = new Date().toISOString();
+  const path = financeFilePath(financeDb.year);
+  const r = await ghSaveFile(path, stripNulls(financeDb), {
+    expectSha: _financeSessionSha,
+    absentOk: _financeLoadStatus === 'ABSENT' && !_financeSessionSha,
+    message: 'finance: update ' + new Date().toISOString()
+  });
+  if (r.ok) {
+    _financeSessionSha = r.sha;
+    _financeLoadStatus = 'OK';
+    _financeLoadedTxCount = financeDb.transactions.length;
+    if (r.warning === 'size') showFinanceStatus('⚠️ Finance soubor přes 700 kB — blíží se limitu', 'warn');
+    return true;
+  }
+  if (r.conflict) {
+    showFinanceStatus('⚠️ Soubor byl mezitím změněn jiným uživatelem — načti znovu', 'warn');
+    return false;
+  }
+  // pending zápis (7.11)
+  try {
+    localStorage.setItem('efl_pending_write_' + Date.now(), JSON.stringify({ path: path, data: financeDb }));
+    prunePendingWrites(3);
+  } catch (e) {}
+  showFinanceStatus('⛔ Zápis selhal: ' + (r.error || '?'), 'warn');
+  return false;
+}
+
+async function saveAwait(data) {
+  // awaitable zápis db.json (master 7.5). Stávající save() se NEMĚNÍ (Z13).
+  // V BĚHU 0 stačí detekce zastaralé session SHA — reaplikaci atomické operace dodá BĚH 4.
+  const sessionSha = ghGetSha();
+  const r = await ghSaveFile(GH_FILE, data, {
+    expectSha: sessionSha || undefined,
+    message: 'EFL data update ' + new Date().toISOString().slice(0, 16)
+  });
+  if (r.ok) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    return { ok: true, sha: r.sha };
+  }
+  if (r.conflict) return { ok: false, stale: true, remoteSha: r.remoteSha };
+  return { ok: false, error: r.error };
+}
+
+function stripNulls(obj) {
+  // rekurzivně vynechá klíče s hodnotou null při serializaci (master 3.1, úspora místa)
+  if (Array.isArray(obj)) return obj.map(stripNulls);
+  if (obj && typeof obj === 'object') {
+    const out = {};
+    for (const k in obj) { if (obj[k] !== null) out[k] = stripNulls(obj[k]); }
+    return out;
+  }
+  return obj;
+}
+
+function prunePendingWrites(keep) {
+  const keys = Object.keys(localStorage).filter(k => k.indexOf('efl_pending_write_') === 0).sort();
+  while (keys.length > keep) localStorage.removeItem(keys.shift());
+}
+
+function showFinanceStatus(msg, type) {
+  const el = document.getElementById('financeStatus');
+  if (el) {
+    el.textContent = msg || '';
+    el.style.color = type === 'warn' ? '#c0392b' : 'var(--text-muted)';
+  } else if (msg && typeof showGhStatus === 'function') {
+    showGhStatus(msg, type === 'warn' ? 'error' : 'ok');
+  }
+  if (msg) console.log('[finance] ' + msg);
+}
+
+// ═══════════════════════════════════════════════
+// FINANCE VIEW (BĚH 1)
+// ═══════════════════════════════════════════════
+const FINANCE_TABS = [
+  { id: 'dashboard',   label: 'Dashboard',   perm: 'dashboard'   },
+  { id: 'banka',       label: 'Banka',       perm: 'banka'       },
+  { id: 'naklady',     label: 'Náklady',     perm: 'naklady'     },
+  { id: 'pohledavky',  label: 'Pohledávky',  perm: 'pohledavky'  },
+  { id: 'cashflow',    label: 'Cashflow',    perm: 'cashflow'    },
+  { id: 'rentabilita', label: 'Rentabilita', perm: 'rentabilita' },
+  { id: 'uzaverka',    label: 'Uzávěrka',    perm: 'uzaverka'    },
+  { id: 'nastaveni',   label: 'Nastavení',   perm: 'nastaveni'   }
+];
+let currentFinanceTab = null;
+let currentFinanceYear = null;   // default = currentYear
+
+async function renderFinance() {
+  const main = document.getElementById('content');
+  if (!main) return;
+  if (!financeAnyPerm()) { main.innerHTML = ''; return; }
+  currentFinanceYear = currentFinanceYear || currentYear;
+
+  main.innerHTML = financeHeaderHtml('⟳ Načítám finanční data…');
+
+  if (!_financeLoaded || (financeDb && financeDb.year !== currentFinanceYear)) {
+    const ok = await loadFinance(currentFinanceYear);
+    if (!ok) {
+      main.innerHTML = financeHeaderHtml('') + financeBlockedHtml(_financeLoadStatus);
+      return;   // ZABLOKOVÁNO — žádné taby, žádná editace (7.1)
+    }
+  }
+  const allowed = FINANCE_TABS.filter(t => financePerm(t.perm));
+  if (!allowed.length) { main.innerHTML = ''; return; }
+  if (!currentFinanceTab || !allowed.some(t => t.id === currentFinanceTab)) currentFinanceTab = allowed[0].id;
+  main.innerHTML = financeHeaderHtml('') + financeTabsHtml(allowed) + '<div id="financeTabContent"></div>';
+  renderFinanceTabContent();
+}
+
+function showFinanceTab(tab) {
+  const def = FINANCE_TABS.find(t => t.id === tab);
+  if (!def || !financePerm(def.perm)) {   // nepovolený tab → první povolený
+    const first = FINANCE_TABS.find(t => financePerm(t.perm));
+    currentFinanceTab = first ? first.id : null;
+  } else {
+    currentFinanceTab = tab;
+  }
+  renderFinance();
+}
+
+function renderFinanceTabContent() {
+  const el = document.getElementById('financeTabContent');
+  if (!el) return;
+  const map = {
+    dashboard: renderFinanceDashboard, banka: renderFinanceBanka,
+    naklady: renderFinanceNaklady, pohledavky: renderFinancePohledavky,
+    cashflow: renderFinanceCashflow, rentabilita: renderFinanceRentabilita,
+    uzaverka: renderFinanceUzaverka, nastaveni: renderFinanceNastaveni
+  };
+  el.innerHTML = (map[currentFinanceTab] || (() => ''))();
+}
+
+// každý placeholder: kontrola oprávnění → '' (obsah nevznikne v DOMu — master 4.2)
+function renderFinanceDashboard()   { if (!financePerm('dashboard'))   return ''; return financePlaceholder('Dashboard'); }
+function renderFinanceBanka()       { if (!financePerm('banka'))       return ''; return financePlaceholder('Banka'); }
+function renderFinanceNaklady()     { if (!financePerm('naklady'))     return ''; return financePlaceholder('Náklady'); }
+function renderFinancePohledavky()  { if (!financePerm('pohledavky'))  return ''; return financePlaceholder('Pohledávky'); }
+function renderFinanceCashflow()    { if (!financePerm('cashflow'))    return ''; return financePlaceholder('Cashflow'); }
+function renderFinanceRentabilita() { if (!financePerm('rentabilita')) return ''; return financePlaceholder('Rentabilita'); }
+function renderFinanceUzaverka()    { if (!financePerm('uzaverka'))    return ''; return financePlaceholder('Uzávěrka'); }
+function renderFinanceNastaveni()   { if (!financePerm('nastaveni'))   return ''; return financePlaceholder('Nastavení'); }
+
+function financeHeaderHtml(statusMsg) {
+  const years = [2025, 2026, 2027];   // stejný zdroj jako yearTabs v renderSidebar()
+  const yearOpts = years.map(y =>
+    `<option value="${y}" ${y === currentFinanceYear ? 'selected' : ''}>${y}</option>`).join('');
+  return `<div class="fin-header">
+    <h2>💰 Finance</h2>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span id="financeStatus">${esc(statusMsg || '')}</span>
+      <select onchange="setFinanceYear(parseInt(this.value,10))" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:var(--white);color:var(--text)">${yearOpts}</select>
+      <button class="btn btn-secondary" disabled title="Dostupné v dalším balíčku" style="opacity:.55;cursor:not-allowed">⟳ Načíst z banky</button>
+    </div>
+  </div>`;
+}
+
+function setFinanceYear(y) {
+  currentFinanceYear = y;
+  _financeLoaded = false;   // vynutí načtení souboru zvoleného roku
+  financeDb = null;
+  renderFinance();
+}
+
+function financeTabsHtml(allowed) {
+  // id tabu je literál z FINANCE_TABS, ne data (Z18)
+  return '<div class="fin-tabs">' + allowed.map(t =>
+    `<button class="fin-tab ${t.id === currentFinanceTab ? 'active' : ''}" onclick="showFinanceTab('${t.id}')">${esc(t.label)}</button>`
+  ).join('') + '</div>';
+}
+
+function financePlaceholder(name) {
+  return `<div class="card"><div class="card-header"><div class="card-title">${esc(name)}</div></div>
+          <div style="padding:24px;color:var(--text-muted);font-style:italic">Připravuje se v dalším balíčku.</div></div>`;
+}
+
+function financeBlockedHtml(status) {
+  const why = status === 'UNREADABLE_TOO_LARGE'
+    ? 'Soubor je příliš velký pro načtení.'
+    : 'Soubor se nepodařilo bezpečně načíst (oprávnění, síť nebo poškozená data).';
+  return `<div class="card" style="border-color:#c0392b"><div class="card-header"><div class="card-title" style="color:#c0392b">⛔ Finanční data nelze načíst</div></div>
+          <div style="padding:16px 24px">${esc(why)}<br><b>Změny nelze ukládat.</b> Zkus obnovit stránku; pokud problém trvá, kontaktuj správce.</div></div>`;
+}
+
 function showView(view, tripId) {
   currentView = view;
   if (tripId) currentTripId = tripId;
@@ -2131,6 +2595,11 @@ function showView(view, tripId) {
     currentTripId = null;
     renderSidebar();
     renderDestinations();
+  } else if (view === 'finance') {
+    if (!financeAnyPerm()) { showView('overview'); return; }
+    currentTripId = null;
+    renderSidebar();
+    renderFinance();
   }
 }
 
@@ -6315,6 +6784,10 @@ function openSyncModal() {
   if (ghInp) ghInp.value = ghToken();
   const idokladInp = document.getElementById('idokladSyncUrl');
   if (idokladInp) idokladInp.value = localStorage.getItem('efl_fio_url') || '';
+  const finUrlInp = document.getElementById('financeUrlInput');
+  if (finUrlInp) finUrlInp.value = localStorage.getItem('efl_finance_url') || '';
+  const finSecInp = document.getElementById('financeSecretInput');
+  if (finSecInp) finSecInp.value = localStorage.getItem('efl_finance_secret') || '';
   const eurInp = document.getElementById('eurRateInput');
   if (eurInp) eurInp.value = getEurRate();
   if (syncUrlEl) checkSyncUrl(url);
@@ -6844,6 +7317,25 @@ const PIN_DISPLAY = {
   'e101f890232038419566f0743710557f43ff37ee05ba0ee7b3c1b68dcf524e99': 'Pavla'
 };
 const ROLE_KEY = 'efl_role';
+
+// ═══ FINANCE — profil oprávnění pro roli 'colleague' (BĚH 1) ═══
+// 'B2' = Pavla vidí provoz, ne závěry | 'B1' = plný přístup
+const FINANCE_ROLE = 'B2';
+
+const FINANCE_PERMS = {
+  B1: { dashboard:true,  banka:true, naklady:true, pohledavky:true, cashflow:true,  rentabilita:true,  uzaverka:true, nastaveni:true,  seesProfit:true  },
+  B2: { dashboard:false, banka:true, naklady:true, pohledavky:true, cashflow:false, rentabilita:false, uzaverka:true, nastaveni:false, seesProfit:false }
+};
+
+function financePerm(section) {
+  if (isAdmin()) return true;
+  if (!isColleague()) return false;
+  const profile = FINANCE_PERMS[FINANCE_ROLE] || FINANCE_PERMS.B2;
+  return !!profile[section];
+}
+function financeAnyPerm() {
+  return ['dashboard','banka','naklady','pohledavky','cashflow','rentabilita','uzaverka','nastaveni'].some(financePerm);
+}
 const NICK_KEY = 'efl_nick';
 function getRole() { return sessionStorage.getItem(ROLE_KEY) || null; }
 function getNick() { return sessionStorage.getItem(NICK_KEY) || 'Admin'; }
@@ -6916,6 +7408,10 @@ async function initApp() {
   injectImportedTrips();
   injectImportedClients();
   applyAutoStatuses();
+
+  // Viditelnost karty Finance dle role (JS, ne CSS — master 4.2)
+  const _btnFin = document.getElementById('btnFinance');
+  if (_btnFin) _btnFin.style.display = financeAnyPerm() ? '' : 'none';
 
   renderSidebar();
   if (isColleague()) {
