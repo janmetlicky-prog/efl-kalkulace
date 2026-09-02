@@ -2298,8 +2298,8 @@ let _financeSessionSha = '';         // SHA finance souboru z posledního načte
 let _financeLoadedTxCount = 0;       // pojistka proti vyprázdnění (master 7.3)
 
 const FINANCE_DEFAULT_ACCOUNTS = [
-  { id: 'fio-czk', name: 'Fio CZK', currency: 'CZK', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null },
-  { id: 'fio-eur', name: 'Fio EUR', currency: 'EUR', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null }
+  { id: 'fio-czk', name: 'Fio CZK', currency: 'CZK', accountNumber: '2101470297/2010', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null },
+  { id: 'fio-eur', name: 'Fio EUR', currency: 'EUR', accountNumber: '2003034651/2010', openingBalance: 0, openingDate: '2026-01-01', balance: 0, lastSyncAt: null }
 ];
 
 // Prvních 12 názvů se PŘESNĚ shoduje s EXPENSE_CATEGORIES (master 3.2)
@@ -2351,6 +2351,14 @@ function migrateFinance(data) {
     else if (Array.isArray(tpl[k]) && !Array.isArray(data[k])) {
       console.warn('migrateFinance: klíč "' + k + '" má nečekaný typ — ponechán beze změny');
     }
+  }
+  if (Array.isArray(data.accounts)) {
+    data.accounts.forEach(acc => {
+      if (acc && typeof acc === 'object' && acc.accountNumber === undefined) {
+        const def = FINANCE_DEFAULT_ACCOUNTS.find(d => d.id === acc.id);
+        acc.accountNumber = def ? def.accountNumber : '';
+      }
+    });
   }
   const after = Array.isArray(data.transactions) ? data.transactions.length : 0;
   if (after !== before) throw new Error('migrateFinance: počet transakcí se změnil (' + before + ' → ' + after + ')');
@@ -2495,9 +2503,11 @@ async function renderFinance() {
   if (!currentFinanceTab || !allowed.some(t => t.id === currentFinanceTab)) currentFinanceTab = allowed[0].id;
   main.innerHTML = financeHeaderHtml('') + financeTabsHtml(allowed) + '<div id="financeTabContent"></div>';
   renderFinanceTabContent();
+  startFinancePolling();   // detekce cizích změn finance souboru (6.7)
 }
 
 function showFinanceTab(tab) {
+  if (typeof financeSaveFlush === 'function' && _finSaveTimer) financeSaveFlush();   // 6.7
   const def = FINANCE_TABS.find(t => t.id === tab);
   if (!def || !financePerm(def.perm)) {   // nepovolený tab → první povolený
     const first = FINANCE_TABS.find(t => financePerm(t.perm));
@@ -2522,7 +2532,7 @@ function renderFinanceTabContent() {
 
 // každý placeholder: kontrola oprávnění → '' (obsah nevznikne v DOMu — master 4.2)
 function renderFinanceDashboard()   { if (!financePerm('dashboard'))   return ''; return financePlaceholder('Dashboard'); }
-function renderFinanceBanka()       { if (!financePerm('banka'))       return ''; return financePlaceholder('Banka'); }
+function renderFinanceBanka()       { if (!financePerm('banka'))       return ''; return financeBankaHtml(); }
 function renderFinanceNaklady()     { if (!financePerm('naklady'))     return ''; return financePlaceholder('Náklady'); }
 function renderFinancePohledavky()  { if (!financePerm('pohledavky'))  return ''; return financePlaceholder('Pohledávky'); }
 function renderFinanceCashflow()    { if (!financePerm('cashflow'))    return ''; return financePlaceholder('Cashflow'); }
@@ -2530,16 +2540,553 @@ function renderFinanceRentabilita() { if (!financePerm('rentabilita')) return ''
 function renderFinanceUzaverka()    { if (!financePerm('uzaverka'))    return ''; return financePlaceholder('Uzávěrka'); }
 function renderFinanceNastaveni()   { if (!financePerm('nastaveni'))   return ''; return financePlaceholder('Nastavení'); }
 
+// ═══════════════════════════════════════════════
+// FINANCE IMPORT — BANKA (BĚH 3a)
+// ═══════════════════════════════════════════════
+let financeBankaFilters = { account: 'all', dir: 'all', status: 'all', month: 'all', category: 'all', trip: 'all', q: '' };
+let financeBankaSel = new Set();
+let _finSaveTimer = null;
+let _finQTimer = null;
+let _finPollTimer = null;
+let _financeChangedRemote = false;
+let _finImportWarn = {};        // accountId → rozdíl kontrolního součtu posledního importu
+
+// interní id transakce smí do onclick handleru jen v uid() formátu (Z18; data souboru jsou nedůvěryhodná)
+function _finIdOk(id) { return /^[a-z0-9_-]{1,40}$/i.test(String(id || '')); }
+
+// ── 6.1 Normalizace — jediné místo ──
+function normalizeFioTx(raw, accountId) {
+  const vsRaw = String(raw.vs || '').trim();
+  const isCard = /kartou/i.test(String(raw.type || ''));
+  const cp = String(raw.counterparty || '').trim();
+  return {
+    id: uid(),
+    fioId: String(raw.fioId || '').trim(),          // 7.9 — vždy string
+    accountId,
+    date: raw.date,
+    amount: Number(raw.amount) || 0,                 // znaménko z banky (Z21)
+    currency: raw.currency || (accountId === 'fio-eur' ? 'EUR' : 'CZK'),
+    direction: (Number(raw.amount) || 0) < 0 ? 'out' : 'in',
+    counterparty: cp || String(raw.userIdentification || '').trim() || String(raw.comment || '').trim(),
+    counterpartyReal: '',
+    counterpartyAccount: raw.counterpartyAccount || '',
+    counterpartyBank: raw.counterpartyBank || '',
+    vs: (isCard || vsRaw === '0') ? '' : vsRaw,      // karetní VS = koncovka karty; '0' = prázdné
+    ks: raw.ks || '', ss: raw.ss || '',
+    type: raw.type || '', message: raw.message || '',
+    comment: raw.comment || '', userIdentification: raw.userIdentification || '',
+    userNote: '', categoryId: null, tripId: null, participantVs: null, expenseId: null,
+    docUrl: '', docStatus: 'chybi',
+    matchStatus: 'unmatched', matchedBy: null,
+    isInternalTransfer: false, needsDetail: false,
+    rate: null, amountCZK: null,                     // doplní se u EUR (6.3)
+    lockedByClosing: false
+  };
+}
+
+// ── 6.2 Automatická detekce ──
+function financeOwnAccountNumbers() {
+  return ((financeDb && financeDb.accounts) || [])
+    .map(a => String(a.accountNumber || '').trim()).filter(Boolean);
+}
+function _finCpAccount(tx) {
+  const a = String(tx.counterpartyAccount || '').trim();
+  if (!a) return '';
+  if (a.includes('/')) return a;
+  const b = String(tx.counterpartyBank || '').trim();
+  return b ? a + '/' + b : a;
+}
+function buildFinanceVsIndex() {
+  // VS index přes VŠECHNY cesty vč. status 'storno' (dodatek 1 — platba se spáruje);
+  // vylučují se pouze storno ÚČASTNÍCI (isCancelled). String().trim() kvůli skrytým Unicode znakům (dodatek 3).
+  const idx = {};
+  ((typeof db !== 'undefined' && db.trips) || []).forEach(trip => {
+    (trip.participants || []).forEach(p => {
+      if (p.isCancelled) return;
+      const v = String(p.vs || '').trim();
+      if (!v) return;
+      if (!idx[v]) idx[v] = new Set();
+      idx[v].add(trip.id);
+    });
+  });
+  return idx;
+}
+function detectFioTx(tx, vsIndex) {
+  // pořadí = priorita, první výhra (6.2)
+  const own = financeOwnAccountNumbers();
+  const cp = _finCpAccount(tx);
+  if (cp && own.indexOf(cp) >= 0) {
+    tx.isInternalTransfer = true; tx.matchStatus = 'ignored'; tx.matchedBy = 'auto'; return tx;
+  }
+  const v = String(tx.vs || '').trim();
+  if (v && tx.direction === 'in' && vsIndex[v]) {
+    if (vsIndex[v].size > 1) { tx.matchStatus = 'unmatched'; tx.userNote = 'VS ve více cestách'; return tx; }
+    tx.categoryId = 'prijem-klient';
+    tx.tripId = Array.from(vsIndex[v])[0];
+    tx.participantVs = v;
+    tx.matchStatus = 'matched'; tx.matchedBy = 'auto'; return tx;
+  }
+  if (/wise/i.test(String(tx.counterparty || ''))) { tx.needsDetail = true; tx.matchStatus = 'needs_detail'; return tx; }
+  if (/kartou/i.test(String(tx.type || '')) || !String(tx.counterparty || '').trim()) {
+    tx.needsDetail = true; tx.matchStatus = 'needs_detail'; return tx;
+  }
+  tx.matchStatus = 'unmatched'; return tx;
+}
+
+// ── 6.4 Import ──
+function financeChecksum(stmt) {
+  // Σ částek − (konečný − počáteční zůstatek) (7.10)
+  const sum = (stmt.transactions || []).reduce((s, t) => s + (Number(t.amount) || 0), 0);
+  return Math.round((sum - ((Number(stmt.balance) || 0) - (Number(stmt.openingBalance) || 0))) * 100) / 100;
+}
+
+function importStatementIntoMemory(stmt, accountId, vsIndex) {
+  const existing = new Set(financeDb.transactions
+    .filter(t => t.accountId === accountId)
+    .map(t => String(t.fioId || '').trim()).filter(Boolean));
+  const sumDiff = financeChecksum(stmt);
+  const warn = Math.abs(sumDiff) > 0.01;
+  if (warn) _finImportWarn[accountId] = sumDiff; else delete _finImportWarn[accountId];
+  let added = 0, matched = 0, needs = 0;
+  const newIds = [];
+  (stmt.transactions || []).forEach(raw => {
+    const fid = String(raw.fioId || '').trim();
+    if (!fid || existing.has(fid)) return;
+    existing.add(fid);
+    const tx = normalizeFioTx(raw, accountId);
+    detectFioTx(tx, vsIndex);
+    if (tx.currency === 'EUR') {                 // 6.3 — kurz jen u NOVÝCH tx, nikdy zpětně (T5)
+      tx.rate = getEurRate();
+      tx.amountCZK = Math.round(tx.amount * tx.rate * 100) / 100;
+    }
+    if (warn) tx.importWarning = true;
+    financeDb.transactions.push(tx);
+    newIds.push(tx.id);
+    added++;
+    if (tx.matchStatus === 'matched') matched++;
+    if (tx.matchStatus === 'needs_detail') needs++;
+  });
+  const loaded = (stmt.transactions || []).length;
+  return { loaded, added, dupes: loaded - added, matched, needs, warn, sumDiff, newIds };
+}
+
+function _finTodayISO() { return new Date().toISOString().slice(0, 10); }
+
+function openFinanceImportModal() {
+  if (!financePerm('banka')) return;
+  const url = (localStorage.getItem('efl_finance_url') || '').trim();
+  const secret = (localStorage.getItem('efl_finance_secret') || '').trim();
+  if (!url || !secret) {
+    showFinanceStatus('⚙️ Nejdřív nastav Finance URL a secret (⚙️ → Sync)', 'warn');
+    return;
+  }
+  let overlay = document.getElementById('financeImportModal');
+  if (overlay) overlay.remove();
+  const acc = (financeDb && financeDb.accounts || []).find(a => a.id === 'fio-czk');
+  let from = (currentFinanceYear || currentYear) + '-01-01';
+  if (acc && acc.lastSyncAt) {
+    const d = new Date(acc.lastSyncAt); d.setDate(d.getDate() - 3);
+    const iso = d.toISOString().slice(0, 10);
+    if (iso > from) from = iso;
+  }
+  overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'financeImportModal';
+  overlay.innerHTML = `<div class="modal" style="max-width:420px">
+    <h3 style="margin-top:0">⟳ Načíst z banky</h3>
+    <div class="form-group" style="margin-bottom:12px">
+      <label>Účet</label>
+      <select id="finImpAccount" style="width:100%"><option value="both">Oba (CZK + EUR)</option><option value="czk">Fio CZK</option><option value="eur">Fio EUR</option></select>
+    </div>
+    <div style="display:flex;gap:10px;margin-bottom:12px">
+      <div class="form-group" style="flex:1"><label>Od</label><input type="date" id="finImpFrom" value="${esc(from)}" style="width:100%"></div>
+      <div class="form-group" style="flex:1"><label>Do</label><input type="date" id="finImpTo" value="${esc(_finTodayISO())}" style="width:100%"></div>
+    </div>
+    <div id="finImpStatus" style="font-size:12px;min-height:18px;color:var(--text-muted);margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeFinanceImportModal()">Zrušit</button>
+      <button class="btn" id="finImpGo" onclick="submitFinanceImport()">Načíst</button>
+    </div>
+  </div>`;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeFinanceImportModal(); });
+  document.body.appendChild(overlay);
+}
+function closeFinanceImportModal() {
+  const el = document.getElementById('financeImportModal');
+  if (el) el.remove();
+}
+function _finImpStatus(msg) {
+  const el = document.getElementById('finImpStatus');
+  if (el) el.textContent = msg;
+  showFinanceStatus(msg, '');
+}
+async function submitFinanceImport() {
+  const account = (document.getElementById('finImpAccount') || {}).value || 'both';
+  const from = (document.getElementById('finImpFrom') || {}).value || '';
+  const to = (document.getElementById('finImpTo') || {}).value || '';
+  if (!from || !to || from > to) { _finImpStatus('⛔ Neplatný rozsah dat'); return; }
+  if ((new Date(to) - new Date(from)) / 86400000 > 365) { _finImpStatus('⛔ Rozsah max. 365 dní'); return; }
+  const btn = document.getElementById('finImpGo');
+  if (btn) btn.disabled = true;
+  try { await runFinanceImport(account, from, to); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+async function runFinanceImport(account, from, to) {
+  const url = (localStorage.getItem('efl_finance_url') || '').trim();
+  const secret = (localStorage.getItem('efl_finance_secret') || '').trim();
+  if (!url || !secret) { showFinanceStatus('⚙️ Chybí Finance URL / secret', 'warn'); return; }
+  if (!_financeLoaded || !financeDb) { showFinanceStatus('⛔ Finanční data nejsou načtena', 'warn'); return; }
+
+  const both = account === 'both';
+  const q = both
+    ? '?action=getStatementBoth&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&secret=' + encodeURIComponent(secret)
+    : '?action=getStatement&account=' + encodeURIComponent(account) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&secret=' + encodeURIComponent(secret);
+  _finImpStatus(both ? 'Načítám CZK… poté EUR (pauza banky 30 s, celkem ~40 s)…' : 'Načítám výpis…');
+
+  const ctrl = new AbortController();
+  const tmr = setTimeout(() => ctrl.abort(), both ? 120000 : 90000);
+  let json;
+  try {
+    const res = await fetch(url + q, { redirect: 'follow', signal: ctrl.signal });
+    json = await res.json();
+  } catch (e) {
+    _finImpStatus('⛔ Endpoint nedostupný: ' + e.message);
+    return;
+  } finally { clearTimeout(tmr); }
+
+  if (!json || json.ok !== true) {
+    const err = (json && json.error) || 'neznámá chyba';
+    if (/unauthorized/i.test(err)) _finImpStatus('⛔ Endpoint odmítl secret — zkontroluj ⚙️ → Sync → Finance secret');
+    else if (/limit/i.test(err)) _finImpStatus('⏳ Fio limit — zkus znovu za 30 s');
+    else _finImpStatus('⛔ Chyba endpointu: ' + err);
+    return;
+  }
+
+  const vsIndex = buildFinanceVsIndex();
+  const stmts = both
+    ? [[json.czk, 'fio-czk'], [json.eur, 'fio-eur']]
+    : [[json, account === 'eur' ? 'fio-eur' : 'fio-czk']];
+
+  const total = { loaded: 0, added: 0, dupes: 0, matched: 0, needs: 0, warn: false, newIds: [] };
+  const today = _finTodayISO();
+  stmts.forEach(pair => {
+    const stmt = pair[0], accId = pair[1];
+    if (!stmt || stmt.ok === false) return;
+    const s = importStatementIntoMemory(stmt, accId, vsIndex);
+    total.loaded += s.loaded; total.added += s.added; total.dupes += s.dupes;
+    total.matched += s.matched; total.needs += s.needs;
+    total.warn = total.warn || s.warn;
+    total.newIds = total.newIds.concat(s.newIds);
+    const accObj = (financeDb.accounts || []).find(a => a.id === accId);
+    if (accObj) {
+      accObj.lastSyncAt = to;
+      if (to === today && typeof stmt.balance === 'number') accObj.balance = stmt.balance;   // 6.4 krok 8
+    }
+  });
+
+  closeFinanceImportModal();
+  renderFinanceTabContent();
+
+  const souhrn = 'Načteno ' + total.loaded + ', nových ' + total.added + ', duplicit ' + total.dupes +
+                 ', spárováno ' + total.matched + ', k doplnění ' + total.needs;
+  if (FINANCE_IMPORT_MODE === 'shadow') {
+    showFinanceStatus('🔬 SHADOW: ' + total.added + ' nových transakcí NEULOŽENO · ' + souhrn, 'warn');
+    return;
+  }
+  const saved = await financeImportSave(total.newIds);
+  showFinanceStatus((saved ? '✅ ' : '⛔ NEULOŽENO · ') + souhrn, saved ? '' : 'warn');
+}
+
+async function financeImportSave(newIds) {
+  // live: jeden automatický pokus o re-merge při konfliktu (6.7)
+  if (await saveFinance()) return true;
+  const snapshot = financeDb.transactions.filter(t => newIds.indexOf(t.id) >= 0)
+    .map(t => JSON.parse(JSON.stringify(t)));
+  const ok = await loadFinance(currentFinanceYear || currentYear);
+  if (!ok) { showFinanceStatus('⛔ Zápis selhal a soubor nejde znovu načíst', 'warn'); return false; }
+  const have = new Set(financeDb.transactions.map(t => String(t.fioId || '').trim()).filter(Boolean));
+  snapshot.forEach(t => { if (!have.has(String(t.fioId || '').trim())) financeDb.transactions.push(t); });
+  if (await saveFinance()) { renderFinanceTabContent(); return true; }
+  showFinanceStatus('⛔ Zápis selhal i po opakování — neukládám dál (Z9)', 'warn');
+  return false;
+}
+
+// ── ukládání s debounce (6.5) ──
+function scheduleFinanceSave() {
+  if (FINANCE_IMPORT_MODE === 'shadow') { showFinanceStatus('shadow: neuloženo', 'warn'); return; }
+  clearTimeout(_finSaveTimer);
+  _finSaveTimer = setTimeout(financeSaveFlush, 2000);
+}
+async function financeSaveFlush() {
+  clearTimeout(_finSaveTimer); _finSaveTimer = null;
+  if (FINANCE_IMPORT_MODE === 'shadow') return;
+  await saveFinance();
+}
+window.addEventListener('beforeunload', () => { if (_finSaveTimer) financeSaveFlush(); });
+
+// ── polling cizích změn (6.7) ──
+function startFinancePolling() {
+  if (_finPollTimer) return;
+  _finPollTimer = setInterval(async () => {
+    if (typeof currentView !== 'undefined' && currentView !== 'finance') return;
+    if (!_financeLoaded || !_financeSessionSha || !ghToken()) return;
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${GH_REPO}/contents/${financeFilePath(currentFinanceYear || currentYear)}?ref=${GH_BRANCH}&t=${Date.now()}`,
+        { headers: { Authorization: `token ${ghToken()}` } });
+      if (!res.ok) return;
+      const j = await res.json();
+      if (j.sha && j.sha !== _financeSessionSha && !_financeChangedRemote) {
+        _financeChangedRemote = true;
+        renderFinanceTabContent();
+      }
+    } catch (e) {}
+  }, 60000);
+}
+function financeReloadRemote() {
+  console.log('Neuložený lokální stav finance (před reloadem):', JSON.parse(JSON.stringify(financeDb || {})));
+  _financeChangedRemote = false;
+  _financeLoaded = false; financeDb = null;
+  renderFinance();
+}
+
+// ── editační akce řádků ──
+function _finTx(id) { return ((financeDb && financeDb.transactions) || []).find(t => t.id === id) || null; }
+function finSetCategory(id, val) {
+  const t = _finTx(id); if (!t || t.lockedByClosing) return;
+  t.categoryId = val || null;
+  if (val) { t.matchStatus = 'matched'; t.matchedBy = 'manual'; t.needsDetail = false; }
+  scheduleFinanceSave(); renderFinanceTabContent();
+}
+function finSetTrip(id, val) {
+  const t = _finTx(id); if (!t || t.lockedByClosing) return;
+  t.tripId = val || null;                       // POUZE pole transakce — propis do expenses = balíček 3
+  if (val) { t.matchStatus = 'matched'; t.matchedBy = 'manual'; t.needsDetail = false; }
+  scheduleFinanceSave(); renderFinanceTabContent();
+}
+function finSetField(id, field, val) {
+  const t = _finTx(id); if (!t || t.lockedByClosing) return;
+  if (['counterpartyReal', 'userNote', 'docUrl'].indexOf(field) < 0) return;
+  t[field] = String(val || '').trim();
+  scheduleFinanceSave();
+  if (field !== 'userNote') renderFinanceTabContent();
+}
+function finSetInternal(id) {
+  const t = _finTx(id); if (!t || t.lockedByClosing) return;
+  t.isInternalTransfer = true; t.matchStatus = 'ignored'; t.matchedBy = 'manual'; t.needsDetail = false;
+  scheduleFinanceSave(); renderFinanceTabContent();
+}
+function finToggleSel(id, on) {
+  if (on) financeBankaSel.add(id); else financeBankaSel.delete(id);
+  const bar = document.getElementById('finBulkBar');
+  if (bar) bar.style.display = financeBankaSel.size ? '' : 'none';
+  const cnt = document.getElementById('finBulkCount');
+  if (cnt) cnt.textContent = financeBankaSel.size;
+}
+function finClearSel() { financeBankaSel.clear(); renderFinanceTabContent(); }
+function finBulkCategory(val) { if (!val) return; financeBankaSel.forEach(id => { const t = _finTx(id); if (t && !t.lockedByClosing) { t.categoryId = val; t.matchStatus = 'matched'; t.matchedBy = 'manual'; t.needsDetail = false; } }); scheduleFinanceSave(); renderFinanceTabContent(); }
+function finBulkTrip(val) { if (!val) return; financeBankaSel.forEach(id => { const t = _finTx(id); if (t && !t.lockedByClosing) { t.tripId = val; t.matchStatus = 'matched'; t.matchedBy = 'manual'; t.needsDetail = false; } }); scheduleFinanceSave(); renderFinanceTabContent(); }
+function finBulkInternal() { financeBankaSel.forEach(id => { const t = _finTx(id); if (t && !t.lockedByClosing) { t.isInternalTransfer = true; t.matchStatus = 'ignored'; t.matchedBy = 'manual'; t.needsDetail = false; } }); scheduleFinanceSave(); renderFinanceTabContent(); }
+
+// ── filtry ──
+function finSetFilter(key, val) {
+  financeBankaFilters[key] = val;
+  renderFinanceTabContent();
+}
+function finSetQ(v) {
+  clearTimeout(_finQTimer);
+  _finQTimer = setTimeout(() => {
+    financeBankaFilters.q = String(v || '').trim();
+    renderFinanceTabContent();
+    const el = document.getElementById('finQ');
+    if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (e) {} }
+  }, 400);
+}
+function filterFinanceTxs(list, f) {
+  const q = String(f.q || '').trim().toLowerCase();
+  return list.filter(t => {
+    if (f.account !== 'all' && t.accountId !== f.account) return false;
+    if (f.dir !== 'all' && t.direction !== f.dir) return false;
+    if (f.status !== 'all' && t.matchStatus !== f.status) return false;
+    if (f.month !== 'all' && String(t.date || '').slice(0, 7) !== f.month) return false;
+    if (f.category !== 'all' && String(t.categoryId || '') !== f.category) return false;
+    if (f.trip !== 'all' && String(t.tripId || '') !== f.trip) return false;
+    if (q) {
+      const hay = [t.counterparty, t.counterpartyReal, t.message, t.vs, t.userNote, t.comment, t.userIdentification]
+        .map(x => String(x || '').trim().toLowerCase()).join(' ');
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+}
+
+// ── UI tabu Banka ──
+function financeCategoryOptions(selectedId) {
+  return '<option value=""></option>' + ((financeDb && financeDb.categories) || []).map(c =>
+    `<option value="${esc(c.id)}" ${c.id === selectedId ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
+}
+function financeTripOptions(selectedId) {
+  // cesty roku ±1; cesty s year null/nečíselným VŽDY v nabídce (dodatek 2)
+  const y = currentFinanceYear || currentYear;
+  const trips = ((typeof db !== 'undefined' && db.trips) || [])
+    .filter(t => typeof t.year !== 'number' || Math.abs(t.year - y) <= 1)
+    .slice().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'cs'));
+  return '<option value=""></option>' + trips.map(t =>
+    `<option value="${esc(t.id)}" ${t.id === selectedId ? 'selected' : ''}>${esc(String(t.name || '') + (typeof t.year === 'number' ? ' ' + t.year : ''))}</option>`).join('');
+}
+function _finAmountHtml(t) {
+  const val = Number(t.amount) || 0;
+  const color = t.direction === 'in' ? '#1a7a5e' : '#c0392b';
+  const fmt = val.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const tip = t.currency === 'EUR' && typeof t.amountCZK === 'number'
+    ? ` title="${esc(t.amountCZK.toLocaleString('cs-CZ', { minimumFractionDigits: 2 }) + ' Kč @ ' + t.rate)}"` : '';
+  return `<td class="num" style="color:${color};font-weight:600"${tip}>${esc(fmt + ' ' + (t.currency || 'CZK'))}</td>`;
+}
+function _finStatusIcon(t) {
+  if (t.matchStatus === 'matched') return '✅';
+  if (t.matchStatus === 'needs_detail') return '⚠️';
+  if (t.matchStatus === 'ignored') return '🔇';
+  return '•';
+}
+function _finDocCell(t, idOk) {
+  const u = String(t.docUrl || '').trim();
+  let view = '—';
+  if (u && u.indexOf('https://') === 0) view = `<a href="${esc(u)}" target="_blank" rel="noopener">📎</a>`;
+  else if (u) view = `<span title="${esc(u)}">📄 (text)</span>`;              // Z17 bod 3 — nikdy odkaz
+  if (t.lockedByClosing || !idOk) return `<td>${view}</td>`;
+  return `<td>${view} <input type="text" value="${esc(u)}" placeholder="https://…" onchange="finSetField('${t.id}','docUrl',this.value)" style="width:70px;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:2px 4px"></td>`;
+}
+
+function financeBankaHtml() {
+  const f = financeBankaFilters;
+  const all = ((financeDb && financeDb.transactions) || []).slice();
+  const txs = filterFinanceTxs(all, f).sort((a, b) =>
+    String(b.date || '').localeCompare(String(a.date || '')) || String(b.fioId || '').localeCompare(String(a.fioId || '')));
+
+  let html = '';
+  if (FINANCE_IMPORT_MODE === 'shadow') {
+    html += `<div style="border:2px solid var(--gold);border-radius:10px;padding:10px 16px;margin-bottom:14px;background:rgba(205,170,58,.08);font-weight:600">🔬 SHADOW REŽIM — nic se neukládá. Import, párování i editace žijí jen v paměti do obnovení stránky.</div>`;
+  }
+  if (_financeChangedRemote) {
+    html += `<div style="border:1.5px solid #c0392b;border-radius:10px;padding:10px 16px;margin-bottom:14px;color:#c0392b;font-weight:600">⚠️ Finanční data byla změněna jiným uživatelem — <button class="btn btn-secondary" onclick="financeReloadRemote()">Načíst znovu</button></div>`;
+  }
+  Object.keys(_finImportWarn).forEach(accId => {
+    html += `<div style="border:1.5px solid var(--warning);border-radius:10px;padding:8px 14px;margin-bottom:10px;background:var(--warning-bg);font-size:13px">⚠️ Kontrolní součet importu (${esc(accId)}) nesedí o ${esc(String(_finImportWarn[accId]))} — transakce označeny k ruční kontrole (7.10)</div>`;
+  });
+
+  // souhrn (Σ bez ignored)
+  const act = txs.filter(t => t.matchStatus !== 'ignored');
+  const czk = t => (t.currency === 'EUR' && typeof t.amountCZK === 'number') ? t.amountCZK : (Number(t.amount) || 0);
+  const sumIn = act.filter(t => t.direction === 'in').reduce((s, t) => s + czk(t), 0);
+  const sumOut = act.filter(t => t.direction === 'out').reduce((s, t) => s + czk(t), 0);
+  const toFix = txs.filter(t => t.matchStatus === 'unmatched' || t.matchStatus === 'needs_detail').length;
+  html += `<div style="display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin-bottom:10px">
+    <span>Zobrazeno: <b>${txs.length}</b></span>
+    <span>Σ příjmy: <b style="color:#1a7a5e">${esc(sumIn.toLocaleString('cs-CZ', { maximumFractionDigits: 0 }))} Kč</b></span>
+    <span>Σ výdaje: <b style="color:#c0392b">${esc(sumOut.toLocaleString('cs-CZ', { maximumFractionDigits: 0 }))} Kč</b></span>
+    <span>K vyřešení: <b>${toFix}</b></span>
+  </div>`;
+
+  // filtry
+  const months = Array.from(new Set(all.map(t => String(t.date || '').slice(0, 7)).filter(m => m.length === 7))).sort().reverse();
+  const selSt = 'style="padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;background:var(--white);color:var(--text)"';
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center">
+    <select ${selSt} onchange="finSetFilter('account',this.value)">
+      <option value="all" ${f.account === 'all' ? 'selected' : ''}>Účet: vše</option>
+      <option value="fio-czk" ${f.account === 'fio-czk' ? 'selected' : ''}>Fio CZK</option>
+      <option value="fio-eur" ${f.account === 'fio-eur' ? 'selected' : ''}>Fio EUR</option>
+    </select>
+    <select ${selSt} onchange="finSetFilter('dir',this.value)">
+      <option value="all" ${f.dir === 'all' ? 'selected' : ''}>Směr: vše</option>
+      <option value="in" ${f.dir === 'in' ? 'selected' : ''}>Příjmy</option>
+      <option value="out" ${f.dir === 'out' ? 'selected' : ''}>Výdaje</option>
+    </select>
+    <select ${selSt} onchange="finSetFilter('status',this.value)">
+      <option value="all" ${f.status === 'all' ? 'selected' : ''}>Stav: vše</option>
+      <option value="unmatched" ${f.status === 'unmatched' ? 'selected' : ''}>Nespárované</option>
+      <option value="needs_detail" ${f.status === 'needs_detail' ? 'selected' : ''}>K doplnění</option>
+      <option value="matched" ${f.status === 'matched' ? 'selected' : ''}>Spárované</option>
+      <option value="ignored" ${f.status === 'ignored' ? 'selected' : ''}>Interní</option>
+    </select>
+    <select ${selSt} onchange="finSetFilter('month',this.value)">
+      <option value="all">Měsíc: vše</option>
+      ${months.map(m => `<option value="${esc(m)}" ${f.month === m ? 'selected' : ''}>${esc(m)}</option>`).join('')}
+    </select>
+    <select ${selSt} onchange="finSetFilter('category',this.value)">
+      <option value="all">Kategorie: vše</option>
+      ${((financeDb && financeDb.categories) || []).map(c => `<option value="${esc(c.id)}" ${f.category === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}
+    </select>
+    <select ${selSt} onchange="finSetFilter('trip',this.value)">
+      <option value="all">Cesta: vše</option>
+      ${((typeof db !== 'undefined' && db.trips) || []).filter(t => typeof t.year !== 'number' || Math.abs(t.year - (currentFinanceYear || currentYear)) <= 1).map(t => `<option value="${esc(t.id)}" ${f.trip === t.id ? 'selected' : ''}>${esc(String(t.name || ''))}</option>`).join('')}
+    </select>
+    <input type="text" id="finQ" value="${esc(f.q)}" placeholder="Hledat…" oninput="finSetQ(this.value)" ${selSt.replace('style="', 'style="min-width:140px;')}>
+  </div>`;
+
+  // hromadné akce
+  html += `<div id="finBulkBar" style="display:${financeBankaSel.size ? '' : 'none'};gap:8px;align-items:center;margin-bottom:10px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;background:rgba(205,170,58,.06)">
+    <span>Vybraným (<b id="finBulkCount">${financeBankaSel.size}</b>):</span>
+    <select ${selSt} onchange="finBulkCategory(this.value)"><option value="">kategorie…</option>${((financeDb && financeDb.categories) || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
+    <select ${selSt} onchange="finBulkTrip(this.value)"><option value="">cesta…</option>${financeTripOptions(null).replace('<option value=""></option>', '')}</select>
+    <button class="btn btn-secondary" onclick="finBulkInternal()">🔇 Interní převod</button>
+    <button class="btn btn-secondary" onclick="finClearSel()">Zrušit výběr</button>
+  </div>`;
+  html = html.replace('id="finBulkBar" style="display:', 'id="finBulkBar" style="display:flex;display:');
+
+  // tabulka
+  if (!txs.length) {
+    html += `<div class="card"><div style="padding:24px;color:var(--text-muted);font-style:italic">Žádné transakce. Použij ⟳ Načíst z banky.</div></div>`;
+    return html;
+  }
+  html += `<div style="overflow-x:auto"><table class="fin-table"><thead><tr>
+    <th></th><th>Datum</th><th>Protistrana</th><th>VS</th><th style="text-align:right">Částka</th>
+    <th>Kategorie</th><th>Cesta</th><th>Pozn.</th><th>Doklad</th><th>Stav</th><th></th>
+  </tr></thead><tbody>`;
+  txs.forEach(t => {
+    const idOk = _finIdOk(t.id);                          // Z18 — bez validního interního id žádné handlery
+    const locked = !!t.lockedByClosing;
+    const rowCls = (t.matchStatus === 'unmatched' || t.matchStatus === 'needs_detail') ? ' class="fin-row-unmatched"' : '';
+    const warn = t.importWarning ? ` <span style="background:var(--warning-bg);color:var(--warning);border-radius:4px;padding:0 4px;font-size:10px" title="Kontrolní součet importu neseděl">Σ?</span>` : '';
+    const cpSecond = t.counterpartyReal ? `<br><i style="font-size:11px;color:var(--text-muted)">${esc(t.counterpartyReal)}</i>` : '';
+    const inSt = 'style="width:95%;font-size:11px;border:1px solid var(--border);border-radius:4px;padding:2px 4px;background:var(--white);color:var(--text)"';
+    html += `<tr${rowCls}>
+      <td>${idOk && !locked ? `<input type="checkbox" ${financeBankaSel.has(t.id) ? 'checked' : ''} onchange="finToggleSel('${t.id}',this.checked)">` : ''}</td>
+      <td style="white-space:nowrap">${esc(t.date || '')}${warn}</td>
+      <td title="${esc(t.message || '')}">${esc(t.counterparty || '—')}${cpSecond}
+        ${idOk && !locked ? `<br><input type="text" value="${esc(t.counterpartyReal || '')}" placeholder="skutečný příjemce" onchange="finSetField('${t.id}','counterpartyReal',this.value)" ${inSt}>` : ''}</td>
+      <td style="font-family:monospace;font-size:12px">${esc(t.vs || '')}</td>
+      ${_finAmountHtml(t)}
+      <td>${locked || !idOk ? esc(String(t.categoryId || '—')) : `<select onchange="finSetCategory('${t.id}',this.value)" ${inSt}>${financeCategoryOptions(t.categoryId)}</select>`}</td>
+      <td>${locked || !idOk ? esc(String(t.tripId || '—')) : `<select onchange="finSetTrip('${t.id}',this.value)" ${inSt}>${financeTripOptions(t.tripId)}</select>`}</td>
+      <td>${locked || !idOk ? esc(t.userNote || '') : `<input type="text" value="${esc(t.userNote || '')}" placeholder="pozn." onchange="finSetField('${t.id}','userNote',this.value)" ${inSt}>`}</td>
+      ${_finDocCell(t, idOk && !locked)}
+      <td style="text-align:center" title="${esc(t.matchStatus + (t.matchedBy ? ' (' + t.matchedBy + ')' : ''))}">${locked ? '🔒' : _finStatusIcon(t)}</td>
+      <td>${idOk && !locked && !t.isInternalTransfer ? `<button onclick="finSetInternal('${t.id}')" title="Označit jako interní převod" style="border:none;background:none;cursor:pointer;font-size:12px">🔇</button>` : ''}</td>
+    </tr>`;
+  });
+  html += '</tbody></table></div>';
+  return html;
+}
+
 function financeHeaderHtml(statusMsg) {
-  const years = [2025, 2026, 2027];   // stejný zdroj jako yearTabs v renderSidebar()
+  // roky odvozené z db.trips (balíček 2, kap. 4.1); null/nečíselné roky bez pádu (dodatek 2)
+  const years = Array.from(new Set(((typeof db !== 'undefined' && db.trips) || [])
+    .map(t => t.year).filter(y => typeof y === 'number')));
+  if (years.indexOf(currentYear) < 0) years.push(currentYear);
+  if (currentFinanceYear && years.indexOf(currentFinanceYear) < 0) years.push(currentFinanceYear);
+  years.sort();
   const yearOpts = years.map(y =>
     `<option value="${y}" ${y === currentFinanceYear ? 'selected' : ''}>${y}</option>`).join('');
+  const importBtn = financePerm('banka')
+    ? `<button class="btn btn-secondary" onclick="openFinanceImportModal()">⟳ Načíst z banky</button>`
+    : '';
   return `<div class="fin-header">
     <h2>💰 Finance</h2>
     <div style="display:flex;align-items:center;gap:10px">
       <span id="financeStatus">${esc(statusMsg || '')}</span>
       <select onchange="setFinanceYear(parseInt(this.value,10))" style="padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:'Jost',sans-serif;font-size:13px;background:var(--white);color:var(--text)">${yearOpts}</select>
-      <button class="btn btn-secondary" disabled title="Dostupné v dalším balíčku" style="opacity:.55;cursor:not-allowed">⟳ Načíst z banky</button>
+      ${importBtn}
     </div>
   </div>`;
 }
@@ -7321,6 +7868,7 @@ const ROLE_KEY = 'efl_role';
 // ═══ FINANCE — profil oprávnění pro roli 'colleague' (BĚH 1) ═══
 // 'B2' = Pavla vidí provoz, ne závěry | 'B1' = plný přístup
 const FINANCE_ROLE = 'B2';
+const FINANCE_IMPORT_MODE = 'shadow';   // v=172 | BĚH 3b mění na 'live' (v=173)
 
 const FINANCE_PERMS = {
   B1: { dashboard:true,  banka:true, naklady:true, pohledavky:true, cashflow:true,  rentabilita:true,  uzaverka:true, nastaveni:true,  seesProfit:true  },
@@ -7374,6 +7922,8 @@ async function checkPin() {
     document.getElementById('pinOverlay').remove();
     document.getElementById('app').style.display = 'contents';
     if (role === 'colleague') document.body.classList.add('colleague-mode');
+    const _bf2 = document.getElementById('btnFinance');
+    if (_bf2) _bf2.style.display = financeAnyPerm() ? '' : 'none';
     initApp();
     startAutoLogout();
     updatePresenceBanner();
