@@ -823,6 +823,56 @@
   </div>
 </div>
 
+<!-- MODAL: Platební podmínky smlouvy (KROK 5) -->
+<div class="modal-overlay hidden" id="contractModal">
+  <div class="modal" style="max-width:520px">
+    <h2>Platební podmínky smlouvy</h2>
+    <div id="cmClientInfo" style="font-size:13px;color:var(--text-muted);margin-bottom:14px"></div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Cena celkem (Kč) *</label>
+        <input type="number" id="cmPrice" min="0" step="1" oninput="cmRecalc()">
+      </div>
+      <div class="form-group">
+        <label>Počet splátek</label>
+        <select id="cmCount" onchange="cmCountChanged()">
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Splátka 1 — částka (Kč)</label>
+        <input type="number" id="cmAmt1" min="0" step="1" oninput="cmRecalc()">
+      </div>
+      <div class="form-group">
+        <label>Splátka 1 — termín</label>
+        <input type="date" id="cmDue1" onchange="cmRecalc()">
+      </div>
+      <div class="form-group">
+        <label>Splátka 2 — částka (Kč)</label>
+        <input type="number" id="cmAmt2" min="0" step="1" oninput="cmRecalc()">
+      </div>
+      <div class="form-group">
+        <label>Splátka 2 — termín</label>
+        <input type="date" id="cmDue2" onchange="cmRecalc()">
+      </div>
+      <div class="form-group cm-third">
+        <label>Splátka 3 — částka (Kč)</label>
+        <input type="number" id="cmAmt3" min="0" step="1" oninput="cmRecalc()">
+      </div>
+      <div class="form-group cm-third">
+        <label>Splátka 3 — termín</label>
+        <input type="date" id="cmDue3" onchange="cmRecalc()">
+      </div>
+    </div>
+    <div id="cmStatus" style="font-size:12px;margin-top:10px;min-height:18px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeContractModal()">Zrušit</button>
+      <button class="btn btn-primary" id="cmSubmitBtn" onclick="submitContractModal()">Odeslat smlouvu</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL: AI Discovery -->
 <div class="modal-overlay hidden" id="discoveryModal">
   <div class="modal" style="max-width:680px;max-height:90vh;overflow-y:auto">
@@ -6765,60 +6815,161 @@ async function openContractLink(tripId, idx, btnEl) {
 }
 
 // Generovat smlouvu (bez odeslání)
-async function generateContract(tripId, idx) {
+// ═══ KROK 5: dialog Platební podmínky + čitelná odpověď doPost ═══
+let cmCtx = null;   // {tripId, idx, send}
+
+function cmIsoFromCode(code, minusDays) {
+  const m = String(code || '').match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (!m) return '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  d.setDate(d.getDate() - (minusDays || 0));
+  return d.toISOString().slice(0, 10);
+}
+function cmIsoFromCz(txt) {
+  const m = String(txt || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  if (!m) return '';
+  return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+}
+
+function openContractModal(tripId, idx, send) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.participants[idx]) return;
   const p = trip.participants[idx];
   if (!p.name) { alert('Účastník nemá jméno.'); return; }
-  const url = getSyncUrl();
-  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
-  const btn = event.target;
-  btn.textContent = '⏳'; btn.disabled = true;
+  if (send && !p.email) { alert('Účastník nemá email — smlouvu nelze odeslat.'); return; }
+  if (!getSyncUrl()) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  cmCtx = { tripId, idx, send };
+
+  const schedSum = a => (a || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
+  const price = (p.schedule && schedSum(p.schedule)) || Number(trip.price) || '';
+  const has3 = (p.schedule && p.schedule.length === 3) ||
+    (!p.schedule && (trip.participants || []).some(x => x.schedule && x.schedule.length === 3));
+  document.getElementById('cmClientInfo').textContent = p.name + ' — ' + trip.name;
+  document.getElementById('cmPrice').value = price || '';
+  document.getElementById('cmCount').value = has3 ? '3' : '2';
+
+  const today7 = new Date(); today7.setDate(today7.getDate() + 7);
+  const dueDefault2 = cmIsoFromCode(trip.code, 30) || '';
+  if (p.schedule && p.schedule.length >= 2) {
+    document.getElementById('cmAmt1').value = p.schedule[0].amount || '';
+    document.getElementById('cmDue1').value = /^\d{4}-/.test(p.schedule[0].due || '') ? p.schedule[0].due : cmIsoFromCz(p.schedule[0].due);
+    document.getElementById('cmAmt2').value = p.schedule[1].amount || '';
+    document.getElementById('cmDue2').value = /^\d{4}-/.test(p.schedule[1].due || '') ? p.schedule[1].due : cmIsoFromCz(p.schedule[1].due);
+    document.getElementById('cmAmt3').value = p.schedule[2] ? p.schedule[2].amount : '';
+    document.getElementById('cmDue3').value = p.schedule[2] ? (/^\d{4}-/.test(p.schedule[2].due || '') ? p.schedule[2].due : cmIsoFromCz(p.schedule[2].due)) : '';
+  } else {
+    // stejná výchozí logika jako formulář listu: 1. platba = polovina, dnes+7;
+    // 2. platba měsíc před zájezdem; 3. splátka = zbytek, zájezd − 30 dní
+    const c = Number(price) || 0;
+    const s1 = Math.round(c / 2);
+    document.getElementById('cmAmt1').value = c ? s1 : '';
+    document.getElementById('cmDue1').value = today7.toISOString().slice(0, 10);
+    if (has3) {
+      const s2 = Math.round(c / 4);
+      document.getElementById('cmAmt2').value = c ? s2 : '';
+      document.getElementById('cmDue2').value = cmIsoFromCode(trip.code, 60) || dueDefault2;
+      document.getElementById('cmAmt3').value = c ? c - s1 - s2 : '';
+      document.getElementById('cmDue3').value = dueDefault2;
+    } else {
+      document.getElementById('cmAmt2').value = c ? c - s1 : '';
+      document.getElementById('cmDue2').value = dueDefault2;
+      document.getElementById('cmAmt3').value = '';
+      document.getElementById('cmDue3').value = '';
+    }
+  }
+  document.getElementById('cmSubmitBtn').textContent = send ? 'Odeslat smlouvu' : 'Generovat (bez odeslání)';
+  cmCountChanged();
+  document.getElementById('contractModal').classList.remove('hidden');
+}
+function closeContractModal() { document.getElementById('contractModal').classList.add('hidden'); cmCtx = null; }
+function cmCountChanged() {
+  const three = document.getElementById('cmCount').value === '3';
+  document.querySelectorAll('.cm-third').forEach(el => el.style.display = three ? '' : 'none');
+  cmRecalc();
+}
+function cmRecalc() {
+  const three = document.getElementById('cmCount').value === '3';
+  const price = Math.round(Number(document.getElementById('cmPrice').value) || 0);
+  const amts = [1, 2, 3].slice(0, three ? 3 : 2).map(i => Math.round(Number(document.getElementById('cmAmt' + i).value) || 0));
+  const dues = [1, 2, 3].slice(0, three ? 3 : 2).map(i => document.getElementById('cmDue' + i).value);
+  const sum = amts.reduce((s, x) => s + x, 0);
+  const st = document.getElementById('cmStatus');
+  const btn = document.getElementById('cmSubmitBtn');
+  let err = '';
+  if (!price) err = 'Zadej cenu celkem.';
+  else if (amts.some(a => a <= 0)) err = 'Každá splátka musí mít kladnou částku.';
+  else if (dues.some(d => !d)) err = 'Každá splátka musí mít termín.';
+  else if (dues.some((d, i) => i > 0 && d < dues[i - 1])) err = 'Termíny musí být vzestupně.';
+  else if (Math.abs(sum - price) > 1) err = 'Součet splátek ' + sum.toLocaleString('cs-CZ') + ' Kč ≠ cena ' + price.toLocaleString('cs-CZ') + ' Kč.';
+  if (err) { st.textContent = '⚠️ ' + err; st.style.color = '#c0392b'; btn.disabled = true; }
+  else { st.textContent = '✓ Součet sedí: ' + sum.toLocaleString('cs-CZ') + ' Kč'; st.style.color = '#03989E'; btn.disabled = false; }
+  return !err;
+}
+
+async function submitContractModal() {
+  if (!cmCtx || !cmRecalc()) return;
+  const { tripId, idx, send } = cmCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip && trip.participants[idx];
+  if (!p) return;
+  const three = document.getElementById('cmCount').value === '3';
+  const schedule = [1, 2, 3].slice(0, three ? 3 : 2).map(i => ({
+    amount: Math.round(Number(document.getElementById('cmAmt' + i).value) || 0),
+    due: document.getElementById('cmDue' + i).value
+  }));
+  const price = Math.round(Number(document.getElementById('cmPrice').value) || 0);
+  const btn = document.getElementById('cmSubmitBtn');
+  btn.disabled = true; btn.textContent = '⏳ Pracuji…';
+  const body = {
+    action: send ? 'generateAndSend' : 'generateContract',
+    clientName: p.name, tripName: trip.name,
+    price: price, schedule: schedule
+  };
+  let res = null;
   try {
-    await fetch(url, {
+    const resp = await fetch(getSyncUrl(), {
       method: 'POST',
-      mode: 'no-cors',
       headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'generateContract', clientName: p.name, tripName: trip.name })
+      body: JSON.stringify(body)
     });
-    btn.textContent = '✅';
-    setTimeout(() => { btn.textContent = '📄'; btn.disabled = false; }, 3000);
-  } catch(e) {
-    // no-cors může vyhodit chybu i při úspěchu — ignorujeme
-    btn.textContent = '✅';
-    setTimeout(() => { btn.textContent = '📄'; btn.disabled = false; }, 3000);
+    res = await resp.json();
+  } catch (e) {
+    alert('Odpověď serveru se nepodařilo přečíst (' + e.message + ').\nSmlouva MOHLA být zpracována — zkontroluj log Spuštění v Apps Scriptu, než to zkusíš znovu.');
+    closeContractModal();
+    return;
+  }
+  const processed = res && (res.ok || res.step === 'email');   // server db.json už zapsal
+  if (processed) {
+    // ŽÁDNÁ lokální mutace ani save(db) — server je zdroj pravdy.
+    // Znovu načíst db.json stejnou cestou jako initFromGitHub (ghLoad drží SHA cache).
+    closeContractModal();
+    let reloaded = false;
+    try {
+      const fresh = await ghLoad();
+      if (fresh) {
+        db = migrateData(fresh);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+        renderTripDetail();
+        reloaded = true;
+      }
+    } catch (e) { console.warn('reload po smlouvě selhal:', e.message); }
+    if (!reloaded) { alert('Smlouva zpracována, obnov stránku.'); return; }
+    if (res.ok) {
+      alert(send ? ('✅ Smlouva odeslána (' + (res.email || p.email) + '), VS ' + res.vs)
+                 : ('✅ Smlouva vygenerována, VS ' + res.vs));
+    } else {
+      alert('⚠️ [krok: email] ' + (res.error || 'PDF vytvořeno, e-mail se nepodařilo odeslat — zkus znovu.'));
+    }
+  } else {
+    const step = res && res.step ? ' [krok: ' + res.step + ']' : '';
+    alert('❌ Smlouva NEBYLA ' + (send ? 'odeslána' : 'vygenerována') + step + '\n' + ((res && res.error) || 'Neznámá chyba'));
+    btn.disabled = false; btn.textContent = send ? 'Odeslat smlouvu' : 'Generovat (bez odeslání)';
   }
 }
 
-// Generovat + odeslat smlouvu
-async function generateAndSendContract(tripId, idx) {
-  const trip = db.trips.find(t => t.id === tripId);
-  if (!trip || !trip.participants[idx]) return;
-  const p = trip.participants[idx];
-  if (!p.name) { alert('Účastník nemá jméno.'); return; }
-  if (!p.email) { alert('Účastník nemá email — smlouvu nelze odeslat.'); return; }
-  const url = getSyncUrl();
-  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
-  if (!confirm('Vygenerovat a odeslat smlouvu pro ' + p.name + '?')) return;
-  const btn = event.target;
-  btn.textContent = '⏳'; btn.disabled = true;
-  try {
-    await fetch(url, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action: 'generateAndSend', clientName: p.name, tripName: trip.name })
-    });
-    // Automaticky zaškrtni SML. — věříme že request prošel
-    trip.participants[idx].contractSent = true;
-    save(db); renderTripDetail();
-    btn.textContent = '✅';
-    setTimeout(() => { btn.textContent = '📨'; btn.disabled = false; }, 3000);
-  } catch(e) {
-    alert('Chyba spojení: ' + e.message);
-    btn.textContent = '📨'; btn.disabled = false;
-  }
-}
+// tlačítka v tabulce účastníků → dialog
+async function generateContract(tripId, idx) { openContractModal(tripId, idx, false); }
+async function generateAndSendContract(tripId, idx) { openContractModal(tripId, idx, true); }
 
 function removeParticipant(tripId, idx) {
   const trip = db.trips.find(t => t.id === tripId);
