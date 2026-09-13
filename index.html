@@ -841,6 +841,14 @@
         </select>
       </div>
       <div class="form-group">
+        <label>Měna</label>
+        <select id="cmCurrency" onchange="cmRecalc()">
+          <option value="CZK">CZK (Kč)</option>
+          <option value="EUR">EUR (€)</option>
+        </select>
+      </div>
+      <div class="form-group"></div>
+      <div class="form-group">
         <label>Splátka 1 — částka (Kč)</label>
         <input type="number" id="cmAmt1" min="0" step="1" oninput="cmRecalc()">
       </div>
@@ -6831,7 +6839,7 @@ function cmIsoFromCz(txt) {
   return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
 }
 
-function openContractModal(tripId, idx, send) {
+async function openContractModal(tripId, idx, send) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.participants[idx]) return;
   const p = trip.participants[idx];
@@ -6840,13 +6848,27 @@ function openContractModal(tripId, idx, send) {
   if (!getSyncUrl()) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
   cmCtx = { tripId, idx, send };
 
+  // 5.3 C: předvyplnění z formuláře listu (jen čtení; selhání → dnešní logika)
+  let cd = null;
+  if (trip.code) {
+    try {
+      const r = await fetch(getSyncUrl() + '?action=contractDefaults&code=' + encodeURIComponent(trip.code));
+      const j = await r.json();
+      if (j && j.ok) cd = j;
+    } catch (e) { console.warn('contractDefaults nedostupné:', e.message); }
+  }
+
   const schedSum = a => (a || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
-  const price = (p.schedule && schedSum(p.schedule)) || Number(trip.price) || '';
+  const price = (p.schedule && schedSum(p.schedule)) || (cd && cd.price) || Number(trip.price) || '';
   const has3 = (p.schedule && p.schedule.length === 3) ||
-    (!p.schedule && (trip.participants || []).some(x => x.schedule && x.schedule.length === 3));
+    (!p.schedule && cd && cd.rows && cd.rows[2] && cd.rows[2].amount > 0) ||
+    (!p.schedule && !cd && (trip.participants || []).some(x => x.schedule && x.schedule.length === 3));
   document.getElementById('cmClientInfo').textContent = p.name + ' — ' + trip.name;
   document.getElementById('cmPrice').value = price || '';
   document.getElementById('cmCount').value = has3 ? '3' : '2';
+  // 5.3 A: měna — p.currency > formulář listu > CZK
+  document.getElementById('cmCurrency').value =
+    (p.currency === 'EUR' || (!p.currency && cd && cd.currency === 'EUR')) ? 'EUR' : 'CZK';
 
   const today7 = new Date(); today7.setDate(today7.getDate() + 7);
   const dueDefault2 = cmIsoFromCode(trip.code, 30) || '';
@@ -6857,6 +6879,14 @@ function openContractModal(tripId, idx, send) {
     document.getElementById('cmDue2').value = /^\d{4}-/.test(p.schedule[1].due || '') ? p.schedule[1].due : cmIsoFromCz(p.schedule[1].due);
     document.getElementById('cmAmt3').value = p.schedule[2] ? p.schedule[2].amount : '';
     document.getElementById('cmDue3').value = p.schedule[2] ? (/^\d{4}-/.test(p.schedule[2].due || '') ? p.schedule[2].due : cmIsoFromCz(p.schedule[2].due)) : '';
+  } else if (cd && cd.rows && cd.rows[0] && cd.rows[0].amount > 0) {
+    // 5.3 C: z formuláře listu (A31–A33 datum regexem d.m.yyyy; chybí → prázdné)
+    document.getElementById('cmAmt1').value = cd.rows[0].amount || '';
+    document.getElementById('cmDue1').value = cmIsoFromCz(cd.rows[0].label);
+    document.getElementById('cmAmt2').value = cd.rows[1].amount || '';
+    document.getElementById('cmDue2').value = cmIsoFromCz(cd.rows[1].label);
+    document.getElementById('cmAmt3').value = has3 ? (cd.rows[2].amount || '') : '';
+    document.getElementById('cmDue3').value = has3 ? cmIsoFromCz(cd.rows[2].label) : '';
   } else {
     // stejná výchozí logika jako formulář listu: 1. platba = polovina, dnes+7;
     // 2. platba měsíc před zájezdem; 3. splátka = zbytek, zájezd − 30 dní
@@ -6900,9 +6930,10 @@ function cmRecalc() {
   else if (amts.some(a => a <= 0)) err = 'Každá splátka musí mít kladnou částku.';
   else if (dues.some(d => !d)) err = 'Každá splátka musí mít termín.';
   else if (dues.some((d, i) => i > 0 && d < dues[i - 1])) err = 'Termíny musí být vzestupně.';
-  else if (Math.abs(sum - price) > 1) err = 'Součet splátek ' + sum.toLocaleString('cs-CZ') + ' Kč ≠ cena ' + price.toLocaleString('cs-CZ') + ' Kč.';
+  else if (Math.abs(sum - price) > 1) err = 'Součet splátek ' + sum.toLocaleString('cs-CZ') + ' ≠ cena ' + price.toLocaleString('cs-CZ') + '.';
+  const unit = document.getElementById('cmCurrency').value === 'EUR' ? '€' : 'Kč';
   if (err) { st.textContent = '⚠️ ' + err; st.style.color = '#c0392b'; btn.disabled = true; }
-  else { st.textContent = '✓ Součet sedí: ' + sum.toLocaleString('cs-CZ') + ' Kč'; st.style.color = '#03989E'; btn.disabled = false; }
+  else { st.textContent = '✓ Součet sedí: ' + sum.toLocaleString('cs-CZ') + ' ' + unit; st.style.color = '#03989E'; btn.disabled = false; }
   return !err;
 }
 
@@ -6920,10 +6951,12 @@ async function submitContractModal() {
   const price = Math.round(Number(document.getElementById('cmPrice').value) || 0);
   const btn = document.getElementById('cmSubmitBtn');
   btn.disabled = true; btn.textContent = '⏳ Pracuji…';
+  const currency = document.getElementById('cmCurrency').value;
   const body = {
     action: send ? 'generateAndSend' : 'generateContract',
     clientName: p.name, tripName: trip.name,
-    price: price, schedule: schedule
+    price: price, currency: currency,
+    schedule: schedule.map(x => ({ ...x, currency }))
   };
   let res = null;
   try {
