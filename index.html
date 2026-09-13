@@ -8114,7 +8114,7 @@ async function lgLoadLedger(force) {
   if (lgLedgerState === 'loading') return null;
   lgLedgerState = 'loading';
   try {
-    const r = await ghLoadFile(LG_LEDGER_PATH, ['statuses']);
+    const r = await ghLoadFile(LG_LEDGER_PATH, { statuses: 'object' });   // _ghValidateKeys bere mapu {klíč: typ}
     if (r.status === 'OK') { lgLedger = r.data; lgLedgerState = 'ok'; }
     else { lgLedger = null; lgLedgerState = 'error'; console.warn('[ledger] načtení selhalo:', r.status, r.error || ''); }
   } catch (e) { lgLedger = null; lgLedgerState = 'error'; console.warn('[ledger]', e.message); }
@@ -8282,7 +8282,7 @@ async function lgRunLedgerRefresh() {
 async function lgManualWrite(mutator, message) {
   for (let attempt = 1; attempt <= 2; attempt++) {
     let manual = { assignments: [], splits: [], ignored: [], payerHints: [] };
-    const r = await ghLoadFile(LG_MANUAL_PATH, []);
+    const r = await ghLoadFile(LG_MANUAL_PATH, { assignments: 'array', splits: 'array', ignored: 'array', payerHints: 'array' });
     let absent = false;
     if (r.status === 'OK') manual = r.data;
     else if (r.status === 'ABSENT') absent = true;
@@ -9416,7 +9416,7 @@ const _origSyncFromGitHub = syncFromGitHub;
 
 const AUTO_LOGOUT_MS = 10 * 60 * 1000;
 const AUTO_LOGOUT_WARN_MS = 60 * 1000;
-let _autoLogoutTimer = null;
+var _autoLogoutTimer = null;   // var kvůli hoistingu — init blok (getRole) běží dřív; s let byl TDZ ReferenceError (i ve v176) a updatePresenceBanner se nikdy nespustil
 let _autoLogoutWarnTimer = null;
 let _countdownInterval = null;
 
