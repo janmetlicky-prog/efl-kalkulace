@@ -523,6 +523,39 @@
   .check-cell input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--teal); }
 
   /* Colleague mode — skryje admin prvky */
+
+  /* ═══ KROK 4: ledger chip, drawer, fronta ═══ */
+  .lg-chip { display:inline-block; padding:3px 10px; border-radius:12px; font-size:11px; font-weight:600; cursor:pointer; border:1.5px solid transparent; white-space:nowrap; line-height:1.5; }
+  .lg-chip.lg-nezaplaceno { background:#eef1f1; color:#9aa5a6; border-color:#d5dcdc; }
+  .lg-chip.lg-bez_rozpisu { background:#eef1f1; color:#8a9596; border:1.5px dashed #9aa5a6; }
+  .lg-chip.lg-castecne { background:#fdf6e0; color:#a8871e; border-color:#CDAA3A; }
+  .lg-chip.lg-splatka_ok { background:#e8f6f7; color:#2e8d91; border-color:#7fc9cc; }
+  .lg-chip.lg-zaplaceno { background:#03989E; color:#fff; border-color:#03989E; }
+  .lg-chip.lg-preplatek { background:#f2ecfa; color:#8e6cc1; border-color:#8e6cc1; }
+  .lg-chip.lg-k_vraceni { background:#fdf1e3; color:#e08a2e; border-color:#e08a2e; }
+  .lg-chip.lg-neutral { background:#f4f6f6; color:#a5adae; border-color:#e0e6e6; }
+  .lg-chip.lg-none { background:transparent; color:#c4cccc; border-color:#e6ebeb; }
+  .lg-chip.lg-overdue { border-color:#e53935 !important; box-shadow:0 0 0 1px #e5393533; }
+  .lg-drawer-overlay { position:fixed; inset:0; background:rgba(10,40,42,.35); z-index:9000; display:flex; justify-content:flex-end; }
+  .lg-drawer { width:min(480px,95vw); height:100%; background:#fbfefe; box-shadow:-8px 0 30px rgba(0,0,0,.2); overflow-y:auto; padding:20px 22px; }
+  .lg-drawer h3 { font-family:'Cormorant Garamond',serif; font-size:22px; color:#026d72; margin:0 0 4px; }
+  .lg-sec { margin-top:16px; }
+  .lg-sec-title { font-size:11px; font-weight:700; letter-spacing:1px; text-transform:uppercase; color:#8a9596; margin-bottom:6px; }
+  .lg-tbl { width:100%; border-collapse:collapse; font-size:12px; }
+  .lg-tbl th { text-align:left; font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:#8a9596; padding:4px 6px; border-bottom:1px solid #c8e4e5; }
+  .lg-tbl td { padding:5px 6px; border-bottom:1px solid #eef4f4; }
+  .lg-tx-btn { font-size:10px; padding:2px 7px; border:1px solid #c8e4e5; border-radius:5px; background:#f0f7f7; cursor:pointer; }
+  .lg-tx-btn:hover { background:#e6f7f7; border-color:#03989E; }
+  .lg-dot { display:inline-flex; align-items:center; gap:4px; font-size:11px; margin-right:10px; }
+  .lg-dot i { width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .lg-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#026d72; color:#fff; padding:12px 22px; border-radius:10px; font-size:13px; z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:90vw; }
+  .lq-row { background:#fff; border:1px solid #c8e4e5; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+  .lq-row.lq-hidden { display:none; }
+  .lq-badge-hi { background:#CDAA3A; color:#fff; border-radius:8px; padding:1px 8px; font-size:10px; font-weight:700; }
+  .lq-badge-lo { background:#eef1f1; color:#8a9596; border-radius:8px; padding:1px 8px; font-size:10px; font-weight:700; }
+  .lq-sug { display:inline-flex; align-items:center; gap:6px; background:#f0f7f7; border:1px solid #c8e4e5; border-radius:7px; padding:3px 8px; font-size:11px; margin:2px 4px 2px 0; }
+  .colleague-mode .lg-admin-act { display:none !important; }
+
   .colleague-mode .admin-only { display: none !important; }
   .colleague-mode .btn-new-trip { display: none !important; }
   /* Stat cards pro colleague - skryj finanční */
@@ -751,6 +784,7 @@
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
       <button class="topbar-nav-btn" onclick="showView('destinations')" id="btnDestinations">📍 Destinace</button>
       <button class="topbar-nav-btn" onclick="showView('finance')" id="btnFinance" style="display:none">💰 Finance</button>
+      <button class="topbar-nav-btn" onclick="showView('ledgerQueue')" id="btnLedgerQueue" style="display:none">💳 Platby k přiřazení <span id="lqBadge" style="display:none;background:#CDAA3A;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px"></span></button>
 
     </div>
     <div class="gear-wrap" id="gearWrap">
@@ -2285,7 +2319,7 @@ document.addEventListener('click', e => {
 
 function updateNavActive(view) {
   document.querySelectorAll('.topbar-nav-btn').forEach(b => b.classList.remove('active'));
-  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations', finance: 'btnFinance' };
+  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations', finance: 'btnFinance', ledgerQueue: 'btnLedgerQueue' };
   if (map[view]) {
     const el = document.getElementById(map[view]);
     if (el) el.classList.add('active');
@@ -3205,6 +3239,11 @@ function showView(view, tripId) {
     currentTripId = null;
     renderSidebar();
     renderFinance();
+  } else if (view === 'ledgerQueue') {
+    if (!ledgerPerm('LEDGER_QUEUE')) { showView('overview'); return; }
+    currentTripId = null;
+    renderSidebar();
+    renderLedgerQueue();
   }
 }
 
@@ -5696,8 +5735,8 @@ function renderTripDetail() {
         ? `<input type="text" value="${p.vs||''}" onchange="confirmVsChange('${trip.id}',${idx},this)" placeholder="VS" style="width:90px;font-family:monospace;font-size:12px;border:1px solid var(--border);border-radius:6px;padding:4px 6px">`
         : `<span style="font-family:monospace;font-size:12px;display:inline-block;min-width:90px;padding:6px 4px;color:${p.vs?'inherit':'#ccc'}">${p.vs||'—'}</span>`}</td>
       <td style="font-size:11px;color:var(--text-muted);line-height:1.7;min-width:150px;padding:4px 8px;vertical-align:middle;white-space:nowrap">
-        ${(p.payment1Date || p.payment1Amount) ? `<div><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
-        ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' Kč</strong>' : ''}</div>` : ''}
+        ${(p.payment1Date || p.payment1Amount) ? `<div><span style="color:var(--navy);font-weight:600">1. platba</span>${p.payment1Date ? ' · <span style="color:#026d72">' + esc(p.payment1Date) + '</span>' : ''}${p.payment1Amount ? ' · <strong>' + Math.round(p.payment1Amount).toLocaleString('cs-CZ') + ' ' + lgCurSym(p) + '</strong>' : ''}</div>` : ''}
+        ${(p.payment2Date || p.payment2Amount) ? `<div><span style="color:var(--navy);font-weight:600">Doplatek</span>${p.payment2Date ? ' · <span style="color:#026d72">' + esc(p.payment2Date) + '</span>' : ''}${p.payment2Amount ? ' · <strong>' + Math.round(p.payment2Amount).toLocaleString('cs-CZ') + ' ' + lgCurSym(p) + '</strong>' : ''}</div>` : ''}
         ${(!p.payment1Date && !p.payment1Amount && !p.payment2Date && !p.payment2Amount) ? '<span style="color:#ddd">—</span>' : ''}
       </td>
       <td><input type="text" value="${p.phone||''}" onchange="updateParticipant('${trip.id}',${idx},'phone',this.value)" placeholder="Telefon" style="width:110px"></td>
@@ -5712,8 +5751,7 @@ function renderTripDetail() {
       </td>
       <td class="check-cell"><input type="checkbox" ${p.contractSigned?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'contractSigned',this.checked)"></td>
       <td class="check-cell"><input type="checkbox" ${p.flightBought?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'flightBought',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.firstPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'firstPayment',this.checked)"></td>
-      <td class="check-cell"><input type="checkbox" ${p.fullPayment?'checked':''} onchange="updateParticipantAndSync('${trip.id}',${idx},'fullPayment',this.checked)"></td>
+      <td style="text-align:center">${lgChip(trip, p)}</td>
       <td class="check-cell"><input type="checkbox" ${p.insurance?'checked':''} onchange="updateParticipant('${trip.id}',${idx},'insurance',this.checked)"></td>
       <td style="position:relative;min-width:260px">
         <div style="position:relative">
@@ -5966,6 +6004,9 @@ function renderTripDetail() {
     </div>
     ${(trip.costItems||[]).filter(i=>i.url).map(i=>`<a href="${i.url}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;background:#f0f7f7;border:1px solid #c8e4e5;border-radius:8px;text-decoration:none;color:#026d72;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:16px">&#128279; ${i.name||'Ubytování'}</a>`).join('')}` : ''}
 
+    <!-- PLATBY (KROK 4 — ledger) -->
+    <div id="lgTripCard">${lgRenderTripCard(trip)}</div>
+
      <!-- ÚČASTNÍCI-->
     <div class="card">
       <div class="card-header">
@@ -5986,15 +6027,14 @@ function renderTripDetail() {
             <th title="Smlouva poslána">📨 Sml.</th>
             <th title="Smlouva podepsána">✍ Podp.</th>
             <th title="Letenky koupeny">✈ Let.</th>
-            <th title="1. platba">💳 1. pl.</th>
-            <th title="Kompletní platba">✅ Kompl.</th>
+            <th title="Stav platby z ledgeru" style="min-width:120px">💳 Platba</th>
             <th title="Pojištění zaplaceno">🛡 Poj.</th>
             <th style="min-width:260px">Poznámky</th>
             <th title="Storno">🚫</th>
             <th></th>
           </tr></thead>
           <tbody id="participantBody">
-            ${participantsHtml || '<tr><td colspan="14" style="text-align:center;padding:20px;color:var(--text-muted)">Zatím žádní účastníci</td></tr>'}
+            ${participantsHtml || '<tr><td colspan="13" style="text-align:center;padding:20px;color:var(--text-muted)">Zatím žádní účastníci</td></tr>'}
           </tbody>
         </table>
       </div>
@@ -6834,7 +6874,8 @@ function cmIsoFromCode(code, minusDays) {
   return d.toISOString().slice(0, 10);
 }
 function cmIsoFromCz(txt) {
-  const m = String(txt || '').match(/(\d{1,2})\.(\d{1,2})\.(\d{4})/);
+  // 5.4: chytá i "Doplatek do: 20. 10. 2026" (mezery, prefixy)
+  const m = String(txt || '').match(/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/);
   if (!m) return '';
   return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
 }
@@ -6855,6 +6896,7 @@ async function openContractModal(tripId, idx, send) {
       const r = await fetch(getSyncUrl() + '?action=contractDefaults&code=' + encodeURIComponent(trip.code));
       const j = await r.json();
       if (j && j.ok) cd = j;
+      if (cd) console.log('[contractDefaults] rows:', cd.rows.map(x => x.label + ' | ' + x.amount).join(' ;; '));
     } catch (e) { console.warn('contractDefaults nedostupné:', e.message); }
   }
 
@@ -8030,6 +8072,649 @@ function loadSampleData() {
 }
 
 // ═══════════════════════════════════════════════
+// KROK 4 — LEDGER VRSTVA: chip, drawer, karta Platby, fronta
+// payments-ledger.json JEN ČTE; zápisy jdou do payments-manual.json;
+// db.json se mění pouze u billedWith a založení zájezdu z fronty.
+// Ledger je zdroj pravdy — UI po akci NEsimuluje výsledek (čeká na běh/↻).
+// ═══════════════════════════════════════════════
+const LG_LEDGER_PATH = 'data/payments-ledger.json';
+const LG_MANUAL_PATH = 'data/payments-manual.json';
+let lgLedger = null;          // {meta, ledger, queue, classified, refunds, statuses}
+let lgLedgerState = 'idle';   // idle | loading | ok | error
+let lgManualPendingIds = {};  // fioId → true (odložené zápisy z fronty — optimisticky skryté)
+
+function ledgerPerm(key) {
+  if (isAdmin()) return true;
+  if (!isColleague()) return false;
+  // Pavla (B2): frontu a chip vidí vč. částek (výslovná výjimka), akce omezené
+  const P = { LEDGER_QUEUE: true, LEDGER_CHIP: true, LEDGER_DRAWER: true, LEDGER_EXTERNAL: true,
+              LEDGER_REASSIGN: false, LEDGER_SPLIT: false, LEDGER_BILLED: false,
+              LEDGER_SUMS: false, LEDGER_BULK: false, LEDGER_CREATE_TRIP: false, LEDGER_IGNORE: false };
+  return !!P[key];
+}
+function lgCurSym(pOrCur) {
+  const c = typeof pOrCur === 'string' ? pOrCur
+    : (pOrCur && ((pOrCur.schedule && pOrCur.schedule[0] && pOrCur.schedule[0].currency) || pOrCur.currency)) || 'CZK';
+  return c === 'EUR' ? '€' : 'Kč';
+}
+function lgFmtAmt(n, cur) {
+  return (Math.round(Number(n) * 100) / 100).toLocaleString('cs-CZ') + ' ' + (cur === 'EUR' ? '€' : 'Kč');
+}
+function lgToast(msg, ms) {
+  document.querySelectorAll('.lg-toast').forEach(t => t.remove());
+  const el = document.createElement('div');
+  el.className = 'lg-toast'; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), ms || 5000);
+}
+
+// ── načtení ledgeru (lazy; cache do reloadu) ──
+async function lgLoadLedger(force) {
+  if (lgLedger && !force) return lgLedger;
+  if (lgLedgerState === 'loading') return null;
+  lgLedgerState = 'loading';
+  try {
+    const r = await ghLoadFile(LG_LEDGER_PATH, ['statuses']);
+    if (r.status === 'OK') { lgLedger = r.data; lgLedgerState = 'ok'; }
+    else { lgLedger = null; lgLedgerState = 'error'; console.warn('[ledger] načtení selhalo:', r.status, r.error || ''); }
+  } catch (e) { lgLedger = null; lgLedgerState = 'error'; console.warn('[ledger]', e.message); }
+  lgUpdateBadge();
+  return lgLedger;
+}
+function lgQueueVisible() {
+  if (!lgLedger) return [];
+  return (lgLedger.queue || []).filter(q => !lgManualPendingIds[q.fioId]);
+}
+function lgUpdateBadge() {
+  const b = document.getElementById('lqBadge');
+  if (!b) return;
+  const n = lgQueueVisible().length;
+  b.textContent = n; b.style.display = n ? '' : 'none';
+}
+function lgStatusOf(trip, p) {
+  if (!lgLedger) return null;
+  const tid = trip.id || trip.name;
+  const pid = p.id || String(p.vs || '').trim();
+  return (lgLedger.statuses && lgLedger.statuses[tid] && lgLedger.statuses[tid][pid]) || null;
+}
+function lgPaymentsOf(trip, p) {
+  if (!lgLedger) return [];
+  const tid = trip.id || trip.name;
+  const pid = p.id || String(p.vs || '').trim();
+  return (lgLedger.ledger && lgLedger.ledger[tid] && lgLedger.ledger[tid][pid] && lgLedger.ledger[tid][pid].payments) || [];
+}
+
+// ── CHIP ──
+function lgChipMeta(st, trip) {
+  if (!st) return { cls: 'lg-none', text: '—' };
+  const cur = st.currency || 'CZK';
+  const f = n => Math.round(n).toLocaleString('cs-CZ');
+  const stat = st.status || '';
+  if (stat === 'v_cene_jineho') {
+    let payer = '';
+    (trip.participants || []).forEach(x => { /* jméno plátce dohledá volající přes billedWith */ });
+    return { cls: 'lg-neutral', text: 'v ceně jiného' };
+  }
+  if (stat === 'bez_rozpisu') return { cls: 'lg-bez_rozpisu', text: 'bez rozpisu' };
+  if (stat === 'historie') return { cls: 'lg-neutral', text: 'historie' };
+  if (stat === 'storno') return { cls: 'lg-neutral', text: st.stornoFee > 0 ? 'storno (poplatek ' + f(st.stornoFee) + ')' : 'storno' };
+  if (stat === 'k_vraceni') return { cls: 'lg-k_vraceni', text: 'k vrácení ' + f(st.paidTotal) };
+  if (stat === 'preplatek') return { cls: 'lg-preplatek', text: f(st.paidTotal) + ' / ' + f(st.dueTotal) + ' ' + lgCurSym(cur) + ' (+' + f(-st.balance) + ')' };
+  const base = f(st.paidTotal) + ' / ' + f(st.dueTotal) + ' ' + lgCurSym(cur);
+  if (stat === 'zaplaceno') return { cls: 'lg-zaplaceno', text: base };
+  if (/^splatka_\d+_ok$/.test(stat)) return { cls: 'lg-splatka_ok', text: base };
+  if (/^castecne_\d+$/.test(stat)) return { cls: 'lg-castecne', text: base };
+  if (stat === 'nezaplaceno') return { cls: 'lg-nezaplaceno', text: base };
+  return { cls: 'lg-neutral', text: stat };
+}
+function lgChipTooltip(trip, p, st) {
+  if (!st) return lgLedgerState === 'error' ? 'ledger nedostupný' : (lgLedgerState === 'ok' ? 'účastník bez záznamu v ledgeru' : 'ledger se načítá…');
+  const cur = st.currency || 'CZK';
+  const lines = [];
+  (st.installments || []).forEach((i2, n) => {
+    lines.push((n + 1) + '. splátka ' + lgFmtAmt(i2.amount, cur) + (i2.due ? ' do ' + i2.due : '') +
+      ' — zaplaceno ' + lgFmtAmt(i2.paid, cur) + ', zbývá ' + lgFmtAmt(i2.remaining, cur));
+  });
+  const pays = lgPaymentsOf(trip, p);
+  if (pays.length) {
+    lines.push('———');
+    pays.forEach(x => lines.push(x.date + '  ' + lgFmtAmt(x.amount, x.currency || 'CZK') + '  [' + x.matchedBy + ']  ' + String(x.counterparty || '').slice(0, 22)));
+  }
+  return lines.join('\n');
+}
+function lgChip(trip, p) {
+  const st = lgStatusOf(trip, p);
+  const m = lgChipMeta(st, trip);
+  let text = m.text;
+  if (st && st.status === 'v_cene_jineho' && p.billedWith) {
+    const payer = (trip.participants || []).find(x => x.id === p.billedWith);
+    if (payer) text = 'v ceně: ' + payer.name;
+  }
+  const over = st && st.overdue;
+  const idx = (trip.participants || []).indexOf(p);
+  return `<span class="lg-chip ${m.cls}${over ? ' lg-overdue' : ''}" title="${esc(lgChipTooltip(trip, p, st))}"
+    onclick="lgOpenDrawer('${trip.id}',${idx})">${over ? '⚠ ' : ''}${esc(text)}</span>`;
+}
+
+// ── KARTA PLATBY na detailu zájezdu ──
+function lgRenderTripCard(trip) {
+  if (!['active', 'ongoing', 'accounting', 'done'].includes(trip.status)) return '';
+  const showSums = ledgerPerm('LEDGER_SUMS');
+  if (!lgLedger) {
+    // lazy: spustit načtení a překreslit kartu po dokončení (neblokuje render)
+    if (lgLedgerState === 'idle') lgLoadLedger().then(() => { if (currentView === 'trip') renderTripDetail(); });
+    return `<div class="card"><div class="card-header"><div class="card-title">💳 Platby</div></div>
+      <div style="font-size:12px;color:var(--text-muted)">${lgLedgerState === 'error' ? 'Ledger nedostupný.' : 'Načítám ledger…'} <button class="btn btn-secondary btn-sm" onclick="lgRefreshLedgerFile()">↻ ledger</button></div></div>`;
+  }
+  const tid = trip.id || trip.name;
+  const stMap = (lgLedger.statuses && lgLedger.statuses[tid]) || {};
+  const inScope = (trip.participants || []).filter(p => !p.isCancelled);
+  const byCur = {};
+  const counts = {};
+  const watch = [];
+  inScope.forEach(p => {
+    const st = stMap[p.id || String(p.vs || '').trim()];
+    if (!st) return;
+    counts[st.status] = (counts[st.status] || 0) + 1;
+    const skip = ['v_cene_jineho', 'historie', 'storno'].includes(st.status);
+    if (!skip && st.dueTotal > 0) {
+      const c = st.currency || 'CZK';
+      byCur[c] = byCur[c] || { due: 0, paid: 0, kvr: 0 };
+      byCur[c].due += st.dueTotal; byCur[c].paid += st.paidTotal;
+    }
+    if (st.status === 'k_vraceni') { const c = st.currency || 'CZK'; byCur[c] = byCur[c] || { due: 0, paid: 0, kvr: 0 }; byCur[c].kvr += st.paidTotal; }
+    if (st.overdue || st.status === 'k_vraceni' || st.status === 'bez_rozpisu' || (/^castecne_/.test(st.status) && st.overdue !== false && st.overdue)) {
+      watch.push({ p, st, why: st.status === 'k_vraceni' ? 'k vrácení' : st.status === 'bez_rozpisu' ? 'bez rozpisu' : (st.overdue ? 'po splatnosti (' + st.status + ')' : st.status) });
+    } else if (/^castecne_/.test(st.status)) {
+      // částečná platba bez overdue nejde do Pozor (jen po termínu)
+    }
+  });
+  const DOTS = [['zaplaceno', '#03989E'], ['splatka_1_ok', '#7fc9cc'], ['splatka_2_ok', '#7fc9cc'], ['castecne_1', '#CDAA3A'], ['castecne_2', '#CDAA3A'], ['castecne_3', '#CDAA3A'], ['nezaplaceno', '#9aa5a6'], ['preplatek', '#8e6cc1'], ['k_vraceni', '#e08a2e'], ['bez_rozpisu', '#8a9596'], ['storno', '#c4cccc'], ['v_cene_jineho', '#c4cccc'], ['historie', '#c4cccc']];
+  const dots = DOTS.filter(d => counts[d[0]]).map(d => `<span class="lg-dot"><i style="background:${d[1]}"></i>${d[0].replace(/_/g, ' ')}: <strong>${counts[d[0]]}</strong></span>`).join('');
+  const sums = showSums ? Object.keys(byCur).map(c => {
+    const x = byCur[c];
+    return `<div style="display:flex;gap:22px;flex-wrap:wrap;font-size:13px;margin-bottom:4px">
+      <div>Očekáváno: <strong>${lgFmtAmt(x.due, c)}</strong></div>
+      <div>Přijato: <strong style="color:#026d72">${lgFmtAmt(x.paid, c)}</strong></div>
+      <div>Zbývá: <strong style="color:${x.due - x.paid > 0 ? '#a8871e' : '#026d72'}">${lgFmtAmt(x.due - x.paid, c)}</strong></div>
+      ${x.kvr ? `<div>K vrácení: <strong style="color:#e08a2e">${lgFmtAmt(x.kvr, c)}</strong></div>` : ''}
+    </div>`;
+  }).join('') : '';
+  const watchHtml = watch.length ? watch.map(w => {
+    const idx = (trip.participants || []).indexOf(w.p);
+    return `<div style="cursor:pointer;padding:3px 0;font-size:12px" onclick="lgOpenDrawer('${trip.id}',${idx})">⚠ <strong>${esc(w.p.name)}</strong> — ${esc(w.why)}</div>`;
+  }).join('') : '<div style="font-size:12px;color:var(--text-muted)">nic</div>';
+  return `<div class="card">
+    <div class="card-header"><div class="card-title">💳 Platby</div>
+      <div style="font-size:11px;color:var(--text-muted)">ledger: ${esc((lgLedger.meta && lgLedger.meta.updatedAt || '').replace('T', ' '))}
+        <button class="btn btn-secondary btn-sm" onclick="lgRefreshLedgerFile()" title="Znovu načíst payments-ledger.json">↻ ledger</button>
+        ${isAdmin() ? `<button class="btn btn-secondary btn-sm" onclick="lgRunLedgerRefresh()" title="Spustit stažení banky (~1 min)">🏦 Obnovit z banky</button>` : ''}
+      </div></div>
+    ${sums}
+    <div style="margin:6px 0 10px">${dots || ''}</div>
+    <div class="lg-sec-title">Pozor</div>
+    ${watchHtml}
+  </div>`;
+}
+async function lgRefreshLedgerFile() {
+  lgToast('Načítám ledger…', 2500);
+  await lgLoadLedger(true);
+  if (currentView === 'trip') renderTripDetail();
+  if (currentView === 'ledgerQueue') renderLedgerQueue();
+  lgToast(lgLedgerState === 'ok' ? 'Ledger načten.' : 'Ledger se nepodařilo načíst.');
+}
+async function lgRunLedgerRefresh() {
+  const url = getSyncUrl();
+  if (!url) { alert('Nastavte Apps Script URL v sekci Sync.'); return; }
+  lgToast('Stahuji banku, ~1 min…', 90000);
+  try {
+    const r = await fetch(url + '?action=ledgerRefresh');
+    const j = await r.json();
+    if (!j.ok) { lgToast(j.error === 'timeout' ? 'Běh nedoběhl v limitu — spusť později.' : 'Chyba: ' + (j.error || '?')); return; }
+    await lgLoadLedger(true);
+    if (currentView === 'trip') renderTripDetail();
+    if (currentView === 'ledgerQueue') renderLedgerQueue();
+    lgToast('Ledger obnoven (' + (j.updatedAt || '') + '), fronta: ' + (j.queue != null ? j.queue : '?'));
+  } catch (e) { lgToast('Obnovení selhalo: ' + e.message); }
+}
+
+// ── zápis payments-manual.json (čerstvá SHA + retry na konflikt) ──
+async function lgManualWrite(mutator, message) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    let manual = { assignments: [], splits: [], ignored: [], payerHints: [] };
+    const r = await ghLoadFile(LG_MANUAL_PATH, []);
+    let absent = false;
+    if (r.status === 'OK') manual = r.data;
+    else if (r.status === 'ABSENT') absent = true;
+    else return { ok: false, error: 'manual nejde načíst (' + (r.error || r.status) + ')' };
+    ['assignments', 'splits', 'ignored', 'payerHints'].forEach(k => { if (!Array.isArray(manual[k])) manual[k] = []; });
+    mutator(manual);
+    const w = await ghSaveFile(LG_MANUAL_PATH, manual, { message: 'manual: ' + message + ' (' + getNick() + ')', absentOk: absent });
+    if (w.ok) return { ok: true };
+    if (w.conflict && attempt === 1) continue;   // souběžný zápis → znovu načíst a zopakovat
+    return { ok: false, conflict: !!w.conflict, error: w.error || (w.conflict ? 'konflikt' : '?') };
+  }
+  return { ok: false, error: 'konflikt i po opakování' };
+}
+function lgStamp() { return { by: getNick(), at: new Date().toISOString().slice(0, 19) }; }
+function lgAfterWriteToast() {
+  lgToast('Uloženo, projeví se po ranním běhu ledgeru (06:30) — nebo klikni ↻ ledger po ručním spuštění.', 7000);
+}
+
+// ── DRAWER ──
+let lgDrawerCtx = null;   // {tripId, idx}
+function lgOpenDrawer(tripId, idx) {
+  if (!ledgerPerm('LEDGER_DRAWER')) return;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip && trip.participants[idx];
+  if (!p) return;
+  lgDrawerCtx = { tripId, idx };
+  let ov = document.getElementById('lgDrawerOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'lgDrawerOv'; ov.className = 'lg-drawer-overlay';
+    ov.onclick = e => { if (e.target === ov) lgCloseDrawer(); };
+    document.body.appendChild(ov);
+  }
+  const st = lgStatusOf(trip, p);
+  const pays = lgPaymentsOf(trip, p);
+  const cur = st ? (st.currency || 'CZK') : lgCurSym(p) === '€' ? 'EUR' : 'CZK';
+  const m = lgChipMeta(st, trip);
+  const instHtml = st && st.installments && st.installments.length ? `
+    <table class="lg-tbl"><tr><th>#</th><th>Částka</th><th>Termín</th><th>Zaplaceno</th><th>Zbývá</th></tr>
+    ${st.installments.map((i2, n) => `<tr>
+      <td>${n + 1}.</td><td>${lgFmtAmt(i2.amount, cur)}</td><td>${i2.due || '—'}</td>
+      <td>${lgFmtAmt(i2.paid, cur)}</td>
+      <td style="color:${i2.remaining > 0 ? '#a8871e' : '#026d72'};font-weight:600">${lgFmtAmt(i2.remaining, cur)}</td></tr>`).join('')}
+    </table>` : '<div style="font-size:12px;color:var(--text-muted)">bez rozpisu</div>';
+  const canReassign = ledgerPerm('LEDGER_REASSIGN');
+  const canSplit = ledgerPerm('LEDGER_SPLIT');
+  const txHtml = pays.length ? `
+    <table class="lg-tbl"><tr><th>Datum</th><th>Částka</th><th>Jak</th><th>Protiúčet</th><th></th></tr>
+    ${pays.map((x, xi) => `<tr>
+      <td>${x.date}</td><td style="font-weight:600;${x.amount < 0 ? 'color:#e08a2e' : ''}">${lgFmtAmt(x.amount, x.currency || 'CZK')}</td>
+      <td style="font-size:10px">${esc(x.matchedBy || '')}${x.source !== 'fio' ? ' · ' + esc(x.source) : ''}</td>
+      <td style="font-size:10px" title="${esc(x.counterpartyAccount || '')}">${esc(String(x.counterparty || '').slice(0, 16))}</td>
+      <td style="white-space:nowrap">${x.source === 'fio' ? `
+        ${canReassign ? `<button class="lg-tx-btn" onclick="lgReassignModal(${xi})">Přeřadit</button>` : ''}
+        ${canSplit ? `<button class="lg-tx-btn" onclick="lgSplitModal(${xi})">Rozdělit</button>` : ''}` : ''}</td>
+    </tr>`).join('')}</table>` : '<div style="font-size:12px;color:var(--text-muted)">žádné transakce v ledgeru</div>';
+  ov.innerHTML = `<div class="lg-drawer" onclick="event.stopPropagation()">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <h3>${esc(p.name || '')}</h3>
+        <div style="font-size:12px;color:var(--text-muted);font-family:monospace">VS ${p.vs || '—'}${Array.isArray(p.vsAlt) && p.vsAlt.length ? ' (alt: ' + p.vsAlt.join(', ') + ')' : ''} · ${cur}</div>
+        <div style="margin-top:6px"><span class="lg-chip ${m.cls}${st && st.overdue ? ' lg-overdue' : ''}">${st && st.overdue ? '⚠ ' : ''}${esc(m.text)}</span></div>
+      </div>
+      <button class="btn-icon" onclick="lgCloseDrawer()" style="font-size:18px">✕</button>
+    </div>
+    <div class="lg-sec"><div class="lg-sec-title">Rozpis</div>${instHtml}</div>
+    <div class="lg-sec"><div class="lg-sec-title">Transakce</div>${txHtml}</div>
+    <div class="lg-sec" style="display:flex;gap:8px;flex-wrap:wrap">
+      ${ledgerPerm('LEDGER_EXTERNAL') ? `<button class="btn btn-secondary btn-sm" onclick="lgExternalModal()">＋ Platba mimo účet</button>` : ''}
+      ${ledgerPerm('LEDGER_BILLED') ? `<button class="btn btn-secondary btn-sm" onclick="lgBilledModal()">V ceně jiného…</button>` : ''}
+    </div>
+  </div>`;
+  ov.style.display = 'flex';
+}
+function lgCloseDrawer() { const ov = document.getElementById('lgDrawerOv'); if (ov) ov.remove(); lgDrawerCtx = null; }
+
+// výběr účastníka (vrací HTML select; hodnota "tripId||pid||jméno")
+function lgParticipantOptions(selTripId) {
+  return db.trips
+    .filter(t => (t.participants || []).length)
+    .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'cs'))
+    .map(t => `<optgroup label="${esc(t.name)}">` + t.participants.map(p =>
+      `<option value="${t.id}||${p.id || String(p.vs || '').trim()}||${esc(p.name || '')}" ${selTripId === t.id ? '' : ''}>${esc(p.name || '?')}${p.isCancelled ? ' (storno)' : ''}</option>`).join('') + '</optgroup>')
+    .join('');
+}
+function lgModal(html) {
+  let m = document.getElementById('lgActionModal');
+  if (!m) { m = document.createElement('div'); m.id = 'lgActionModal'; m.className = 'modal-overlay'; document.body.appendChild(m); }
+  m.classList.remove('hidden');
+  m.innerHTML = `<div class="modal" style="max-width:460px" onclick="event.stopPropagation()">${html}</div>`;
+  m.onclick = e => { if (e.target === m) lgModalClose(); };
+}
+function lgModalClose() { const m = document.getElementById('lgActionModal'); if (m) m.remove(); }
+
+// ── akce z draweru ──
+function lgReassignModal(txIdx) {
+  const { tripId, idx } = lgDrawerCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip.participants[idx];
+  const tx = lgPaymentsOf(trip, p)[txIdx];
+  if (!tx) return;
+  lgModal(`<h2>Přeřadit platbu</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${tx.date} · ${lgFmtAmt(tx.amount, tx.currency)} · ${esc(tx.counterparty || '')}</div>
+    <div class="form-group"><label>Nový příjemce</label>
+      <select id="lgReasTarget" style="width:100%">${lgParticipantOptions(tripId)}</select></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" onclick="lgReassignSave('${esc(tx.fioId)}')">Přeřadit</button>
+    </div>`);
+}
+async function lgReassignSave(fioId) {
+  const v = document.getElementById('lgReasTarget').value.split('||');
+  lgModalClose(); lgCloseDrawer();
+  const res = await lgManualWrite(m => {
+    m.assignments = m.assignments.filter(a => String(a.fioId) !== String(fioId));
+    m.assignments.push({ fioId: String(fioId), tripId: v[0], participantId: v[1], source: 'manual', ...lgStamp() });
+  }, 'přeřazení ' + v[2]);
+  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+}
+function lgSplitModal(txIdx) {
+  const { tripId, idx } = lgDrawerCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip.participants[idx];
+  const tx = lgPaymentsOf(trip, p)[txIdx];
+  if (!tx) return;
+  lgSplitModalFor(tx, tripId);
+}
+function lgSplitModalFor(tx, selTripId) {
+  const total = Math.abs(tx.amountCZK != null ? tx.amountCZK : tx.amount);
+  lgModal(`<h2>Rozdělit platbu</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${tx.date} · ${lgFmtAmt(tx.amountCZK != null ? tx.amountCZK : tx.amount, 'CZK')} · ${esc(tx.counterparty || '')}</div>
+    <div id="lgSplitRows"></div>
+    <button class="btn btn-secondary btn-sm" onclick="lgSplitAddRow()">＋ řádek</button>
+    <div id="lgSplitStatus" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" id="lgSplitSave" onclick="lgSplitSave('${esc(tx.fioId)}',${total})" disabled>Rozdělit</button>
+    </div>`);
+  window._lgSplitSel = selTripId;
+  lgSplitAddRow(); lgSplitAddRow();
+}
+function lgSplitAddRow() {
+  const d = document.createElement('div');
+  d.style.cssText = 'display:flex;gap:6px;margin-bottom:6px;align-items:center';
+  d.innerHTML = `<select class="lg-split-p" style="flex:1" onchange="lgSplitCheck()">${lgParticipantOptions(window._lgSplitSel)}</select>
+    <input type="number" class="lg-split-a" style="width:100px" placeholder="Kč" oninput="lgSplitCheck()">
+    <button class="btn-icon" onclick="this.parentElement.remove();lgSplitCheck()">✕</button>`;
+  document.getElementById('lgSplitRows').appendChild(d);
+  lgSplitCheck();
+}
+function lgSplitCheck() {
+  const amts = [...document.querySelectorAll('.lg-split-a')].map(i => Math.round(Number(i.value) || 0));
+  const btn = document.getElementById('lgSplitSave');
+  const st = document.getElementById('lgSplitStatus');
+  if (!btn) return false;
+  const total = Number(btn.getAttribute('onclick').match(/,(\d+(?:\.\d+)?)\)/)[1]);
+  const sum = amts.reduce((s, x) => s + x, 0);
+  const ok = amts.length >= 2 && amts.every(a => a > 0) && Math.abs(sum - total) < 1;
+  st.textContent = ok ? '✓ ' + sum.toLocaleString('cs-CZ') + ' Kč' : '⚠️ součet ' + sum.toLocaleString('cs-CZ') + ' ≠ ' + total.toLocaleString('cs-CZ') + ' Kč (2+ účastníci, vše > 0)';
+  st.style.color = ok ? '#03989E' : '#c0392b';
+  btn.disabled = !ok;
+  return ok;
+}
+async function lgSplitSave(fioId, total) {
+  if (!lgSplitCheck()) return;
+  const parts = [...document.querySelectorAll('#lgSplitRows > div')].map(row => {
+    const v = row.querySelector('.lg-split-p').value.split('||');
+    return { tripId: v[0], participantId: v[1], amountCZK: Math.round(Number(row.querySelector('.lg-split-a').value) || 0) };
+  });
+  lgModalClose(); lgCloseDrawer();
+  const res = await lgManualWrite(m => {
+    m.splits = m.splits.filter(x => String(x.fioId) !== String(fioId));
+    m.splits.push({ fioId: String(fioId), parts, ...lgStamp() });
+  }, 'split ' + fioId);
+  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+}
+function lgExternalModal() {
+  lgModal(`<h2>Platba mimo účet</h2>
+    <div class="form-grid">
+      <div class="form-group"><label>Částka (Kč)</label><input type="number" id="lgExtAmt"></div>
+      <div class="form-group"><label>Datum</label><input type="date" id="lgExtDate" value="${new Date().toISOString().slice(0, 10)}"></div>
+      <div class="form-group"><label>Druh</label><select id="lgExtKind"><option value="cash">hotovost</option><option value="external">externí (Marco Polo, jiný účet)</option></select></div>
+      <div class="form-group" style="grid-column:span 2"><label>Poznámka</label><input type="text" id="lgExtNote"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" onclick="lgExternalSave()">Uložit</button>
+    </div>`);
+}
+async function lgExternalSave() {
+  const { tripId, idx } = lgDrawerCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip.participants[idx];
+  const amt = Math.round(Number(document.getElementById('lgExtAmt').value) || 0);
+  if (amt <= 0) { alert('Zadej kladnou částku.'); return; }
+  const rec = {
+    tripId: trip.id, participantId: p.id || String(p.vs || '').trim(),
+    source: document.getElementById('lgExtKind').value,
+    amountCZK: amt, date: document.getElementById('lgExtDate').value,
+    note: document.getElementById('lgExtNote').value.trim(), ...lgStamp()
+  };
+  lgModalClose(); lgCloseDrawer();
+  const res = await lgManualWrite(m => { m.assignments.push(rec); }, 'platba mimo účet ' + p.name);
+  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+}
+function lgBilledModal() {
+  const { tripId, idx } = lgDrawerCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  const p = trip.participants[idx];
+  const opts = (trip.participants || []).filter((x, i) => i !== idx && !x.isCancelled)
+    .map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  lgModal(`<h2>V ceně jiného účastníka</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${esc(p.name)} nebude platit sám — platby na jeho VS jdou plátci.</div>
+    <div class="form-group"><label>Plátce (týž zájezd)</label><select id="lgBilledSel" style="width:100%">${opts}</select></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" onclick="lgBilledSave()">Uložit do db</button>
+    </div>`);
+}
+function lgBilledSave() {
+  const { tripId, idx } = lgDrawerCtx;
+  const trip = db.trips.find(t => t.id === tripId);
+  trip.participants[idx].billedWith = document.getElementById('lgBilledSel').value;
+  save(db);
+  lgModalClose(); lgCloseDrawer();
+  lgAfterWriteToast();
+}
+
+// ── FRONTA ──
+let lqFilters = { conf: '', trip: '', text: '', showClassified: false };
+let lqPendingWrites = {};   // fioId → {timer, undo, desc}
+function renderLedgerQueue() {
+  const c = document.getElementById('content');
+  c.innerHTML = `<h2 style="font-family:'Cormorant Garamond',serif;font-size:26px;color:var(--navy);margin-bottom:14px">💳 Platby k přiřazení</h2><div id="lqBody">Načítám ledger…</div>`;
+  lgLoadLedger().then(() => lqRender());
+}
+function lqRender() {
+  const body = document.getElementById('lqBody');
+  if (!body) return;
+  if (!lgLedger) { body.innerHTML = '<div style="color:#c0392b">Ledger nedostupný.</div>'; return; }
+  let q = lgQueueVisible();
+  const trips = [...new Set(q.map(x => x.tripNameHint).filter(Boolean))];
+  if (lqFilters.conf) q = q.filter(x => (x.confidence || 'nizka') === lqFilters.conf);
+  if (lqFilters.trip) q = q.filter(x => x.tripNameHint === lqFilters.trip);
+  if (lqFilters.text) { const t = lqFilters.text.toLowerCase(); q = q.filter(x => JSON.stringify(x).toLowerCase().includes(t)); }
+  q.sort((a, b) => (a.confidence === 'vysoka' ? 0 : 1) - (b.confidence === 'vysoka' ? 0 : 1) || (b.date || '').localeCompare(a.date || ''));
+  const hi = lgQueueVisible().filter(x => x.confidence === 'vysoka');
+  const cls = (lgLedger.classified || []);
+  body.innerHTML = `
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+      <select onchange="lqFilters.conf=this.value;lqRender()"><option value="">jistota: vše</option><option value="vysoka" ${lqFilters.conf === 'vysoka' ? 'selected' : ''}>vysoká</option><option value="nizka" ${lqFilters.conf === 'nizka' ? 'selected' : ''}>nízká</option></select>
+      <select onchange="lqFilters.trip=this.value;lqRender()"><option value="">zájezd: vše</option>${trips.map(t => `<option ${lqFilters.trip === t ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>
+      <input type="text" placeholder="hledat…" value="${esc(lqFilters.text)}" oninput="lqFilters.text=this.value;lqRender()" style="width:160px">
+      <button class="btn btn-secondary btn-sm" onclick="lgRefreshLedgerFile()">↻ ledger</button>
+      ${ledgerPerm('LEDGER_BULK') && hi.length ? `<button class="btn btn-primary btn-sm" onclick="lqBulkAssign()">Přiřadit všechny s vysokou jistotou (${hi.length})</button>` : ''}
+      <span style="font-size:11px;color:var(--text-muted)">ledger: ${esc((lgLedger.meta && lgLedger.meta.updatedAt || '').replace('T', ' '))}</span>
+    </div>
+    ${q.length ? q.map(x => lqRow(x)).join('') : '<div style="color:var(--text-muted)">Fronta je prázdná 🎉</div>'}
+    <div style="margin-top:16px">
+      <a href="#" onclick="lqFilters.showClassified=!lqFilters.showClassified;lqRender();return false" style="font-size:12px;color:var(--teal)">${lqFilters.showClassified ? 'skrýt' : 'zobrazit'} klasifikované (${cls.length})</a>
+      ${lqFilters.showClassified ? `<div style="margin-top:8px">${cls.map((x, i) => `
+        <div style="font-size:11px;color:var(--text-muted);padding:3px 0;border-bottom:1px solid #eef4f4">
+          ${x.date} · ${lgFmtAmt(x.amount, x.currency)} · <strong>${esc(x.kind)}</strong> (${esc(x.reason || '')})
+          ${ledgerPerm('LEDGER_REASSIGN') ? `<button class="lg-tx-btn" style="margin-left:8px" onclick="lqAssignClassified(${i})">Přesto přiřadit</button>` : ''}
+        </div>`).join('')}</div>` : ''}
+    </div>`;
+  lgUpdateBadge();
+}
+function lqRow(x) {
+  const sugs = (x.suggestions || []).map((s2, i) => `<span class="lq-sug">${esc(s2.name)} @ ${esc(String(s2.tripName || '').slice(0, 24))} <em style="opacity:.6">(${esc(s2.why)}, ${s2.score})</em></span>`).join('');
+  return `<div class="lq-row" id="lq_${esc(x.fioId)}">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <div style="font-size:13px"><strong>${x.date}</strong> · <strong>${lgFmtAmt(x.amount, x.currency)}</strong>
+        · ${esc(x.counterparty || '—')} <span style="font-size:10px;color:var(--text-muted)">${esc(x.counterpartyAccount || '')}</span></div>
+      <span class="${x.confidence === 'vysoka' ? 'lq-badge-hi' : 'lq-badge-lo'}">${x.confidence === 'vysoka' ? 'vysoká' : 'nízká'}</span>
+    </div>
+    <div style="font-size:11px;color:var(--text-muted);margin:3px 0">VS ${x.vs || '—'} · ${esc(x.message || '')}${x.note ? ' · pozn.: ' + esc(x.note) : ''} · <em>${esc(x.reason || '')}</em>${x.tripNameHint ? ' · ' + esc(x.tripNameHint) : ''}</div>
+    <div>${sugs}</div>
+    <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">
+      ${ledgerPerm('LEDGER_REASSIGN') ? `<button class="btn btn-secondary btn-sm" onclick="lqAssignModal('${esc(x.fioId)}')">Přiřadit</button>` : ''}
+      ${ledgerPerm('LEDGER_SPLIT') ? `<button class="btn btn-secondary btn-sm" onclick="lqSplitOpen('${esc(x.fioId)}')">Rozdělit</button>` : ''}
+      ${ledgerPerm('LEDGER_IGNORE') ? `<button class="btn btn-secondary btn-sm" onclick="lqIgnoreModal('${esc(x.fioId)}')">Není platba klienta</button>` : ''}
+      ${ledgerPerm('LEDGER_CREATE_TRIP') ? `<button class="btn btn-secondary btn-sm" onclick="lqCreateTrip('${esc(x.fioId)}')">Založit zájezd</button>` : ''}
+    </div>
+  </div>`;
+}
+function lqFind(fioId) { return (lgLedger.queue || []).find(x => String(x.fioId) === String(fioId)); }
+
+// odložený zápis s Vrátit (10 s); 409 → řádek zpět
+function lqDeferredWrite(fioId, mutator, message, desc) {
+  lgManualPendingIds[fioId] = true;
+  const row = document.getElementById('lq_' + fioId);
+  if (row) row.classList.add('lq-hidden');
+  lgUpdateBadge();
+  const toast = document.createElement('div');
+  toast.className = 'lg-toast';
+  toast.innerHTML = `${esc(desc)} <button style="margin-left:12px;background:#fff;color:#026d72;border:none;border-radius:6px;padding:3px 10px;font-weight:700;cursor:pointer">Vrátit</button>`;
+  document.body.appendChild(toast);
+  const timer = setTimeout(async () => {
+    toast.remove();
+    delete lqPendingWrites[fioId];
+    const res = await lgManualWrite(mutator, message);
+    if (!res.ok) {
+      delete lgManualPendingIds[fioId];
+      lqRender();
+      lgToast('❌ Zápis selhal (' + (res.conflict ? 'konflikt — data změněna jinde' : res.error) + ') — řádek vrácen.');
+    } else lgAfterWriteToast();
+  }, 10000);
+  lqPendingWrites[fioId] = { timer };
+  const undoBtn = toast.querySelector('button');
+  if (undoBtn) undoBtn.onclick = () => {
+    clearTimeout(timer);
+    toast.remove();
+    delete lqPendingWrites[fioId];
+    delete lgManualPendingIds[fioId];
+    lqRender();
+  };
+}
+function lqAssignModal(fioId, presetTx) {
+  const x = presetTx || lqFind(fioId);
+  if (!x) return;
+  const top = (x.suggestions || [])[0];
+  lgModal(`<h2>Přiřadit platbu</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${x.date} · ${lgFmtAmt(x.amount, x.currency)} · ${esc(x.counterparty || '')}</div>
+    <div class="form-group"><label>Účastník</label>
+      <select id="lqAssignSel" style="width:100%">${lgParticipantOptions()}</select></div>
+    <label style="display:flex;gap:8px;align-items:center;font-size:12px;margin-top:8px">
+      <input type="checkbox" id="lqHintChk"> Zapamatovat účet ${esc(x.counterpartyAccount || '')} jako plátce pro tohoto účastníka</label>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" onclick="lqAssignSave('${esc(x.fioId)}')">Přiřadit</button>
+    </div>`);
+  if (top) {
+    const sel = document.getElementById('lqAssignSel');
+    const want = top.tripId + '||' + top.participantId;
+    [...sel.options].forEach(o => { if (o.value.startsWith(want + '||')) o.selected = true; });
+  }
+}
+function lqAssignSave(fioId) {
+  const x = lqFind(fioId) || {};
+  const v = document.getElementById('lqAssignSel').value.split('||');
+  const hint = document.getElementById('lqHintChk').checked;
+  const acct = x.counterpartyAccount || '';
+  lgModalClose();
+  lqDeferredWrite(fioId, m => {
+    m.assignments = m.assignments.filter(a => String(a.fioId) !== String(fioId));
+    m.assignments.push({ fioId: String(fioId), tripId: v[0], participantId: v[1], source: 'manual', ...lgStamp() });
+    if (hint && acct) {
+      let h = m.payerHints.find(z => z.counterpartyAccount === acct);
+      if (!h) { h = { counterpartyAccount: acct, participantIds: [], ...lgStamp() }; m.payerHints.push(h); }
+      if (!h.participantIds.includes(v[1])) h.participantIds.push(v[1]);
+    }
+  }, 'přiřazení ' + v[2], 'Přiřazeno: ' + v[2]);
+}
+function lqSplitOpen(fioId) {
+  const x = lqFind(fioId);
+  if (!x) return;
+  // split z fronty — stejný modal, ale uložení odloženě
+  lgSplitModalFor(x, null);
+  const btn = document.getElementById('lgSplitSave');
+  btn.setAttribute('onclick', `lqSplitSave('${esc(fioId)}',${Math.abs(x.amountCZK != null ? x.amountCZK : x.amount)})`);
+}
+function lqSplitSave(fioId, total) {
+  if (!lgSplitCheck()) return;
+  const parts = [...document.querySelectorAll('#lgSplitRows > div')].map(row => {
+    const v = row.querySelector('.lg-split-p').value.split('||');
+    return { tripId: v[0], participantId: v[1], amountCZK: Math.round(Number(row.querySelector('.lg-split-a').value) || 0) };
+  });
+  lgModalClose();
+  lqDeferredWrite(fioId, m => {
+    m.splits = m.splits.filter(z => String(z.fioId) !== String(fioId));
+    m.splits.push({ fioId: String(fioId), parts, ...lgStamp() });
+  }, 'split ' + fioId, 'Rozděleno na ' + parts.length + ' části');
+}
+function lqIgnoreModal(fioId) {
+  lgModal(`<h2>Není platba klienta</h2>
+    <div class="form-group"><label>Druh</label>
+      <select id="lqIgnKind"><option value="faktura">faktura</option><option value="vratka">vratka</option><option value="interni">interní</option><option value="ostatni_prijem">jiné</option></select></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
+      <button class="btn btn-primary" onclick="lqIgnoreSave('${esc(fioId)}')">Uložit</button>
+    </div>`);
+}
+function lqIgnoreSave(fioId) {
+  const kind = document.getElementById('lqIgnKind').value;
+  lgModalClose();
+  lqDeferredWrite(fioId, m => {
+    m.ignored = m.ignored.filter(z => String(z.fioId) !== String(fioId));
+    m.ignored.push({ fioId: String(fioId), kind, ...lgStamp() });
+  }, 'ignorováno ' + fioId + ' (' + kind + ')', 'Označeno: ' + kind);
+}
+function lqBulkAssign() {
+  const hi = lgQueueVisible().filter(x => x.confidence === 'vysoka' && x.suggestions && x.suggestions[0]);
+  if (!hi.length) { lgToast('Žádné položky s vysokou jistotou a návrhem.'); return; }
+  const list = hi.map(x => '• ' + x.date + ' ' + lgFmtAmt(x.amount, x.currency) + ' → ' + x.suggestions[0].name + ' @ ' + (x.suggestions[0].tripName || '')).join('\n');
+  if (!confirm('Přiřadit ' + hi.length + ' plateb podle top návrhu?\n\n' + list)) return;
+  hi.forEach(x => {
+    const s2 = x.suggestions[0];
+    lqDeferredWrite(x.fioId, m => {
+      m.assignments = m.assignments.filter(a => String(a.fioId) !== String(x.fioId));
+      m.assignments.push({ fioId: String(x.fioId), tripId: s2.tripId, participantId: s2.participantId, source: 'manual', ...lgStamp() });
+    }, 'hromadné přiřazení ' + s2.name, 'Přiřazeno: ' + s2.name);
+  });
+}
+function lqAssignClassified(i) {
+  const x = (lgLedger.classified || [])[i];
+  if (!x) return;
+  lqAssignModal(x.fioId, { fioId: x.fioId, date: x.date, amount: x.amount, currency: x.currency, counterparty: '', counterpartyAccount: '', suggestions: [] });
+}
+function lqCreateTrip(fioId) {
+  const x = lqFind(fioId);
+  if (!x) return;
+  const name = prompt('Název nového zájezdu:', x.tripNameHint || x.note || '');
+  if (!name) return;
+  const code = prompt('Kód cesty (8 číslic):', x.tripCodeHint || '');
+  const status = confirm('OK = done (historický), Zrušit = active') ? 'done' : 'active';
+  const pName = prompt('Jméno účastníka:', x.counterparty || '');
+  if (!pName) return;
+  const trip = { id: uid(), name: name.trim(), year: Number((code || '').slice(0, 4)) || new Date().getFullYear(),
+    month: Number((code || '').slice(4, 6)) || 1, status, participants: [], costItems: [], expenses: [] };
+  if (code && /^\d{8}$/.test(code)) trip.code = code;
+  const p = { id: uid(), name: pName.trim(), email: '', phone: '', vs: String(x.vs || ''), firstPayment: false, fullPayment: false, contractSent: false, isCancelled: false };
+  trip.participants.push(p);
+  db.trips.push(trip);
+  save(db);
+  lqDeferredWrite(fioId, m => {
+    m.assignments = m.assignments.filter(a => String(a.fioId) !== String(fioId));
+    m.assignments.push({ fioId: String(fioId), tripId: trip.id, participantId: p.id, source: 'manual', ...lgStamp() });
+  }, 'založení zájezdu ' + name, 'Zájezd založen: ' + name);
+}
+
+// ═══════════════════════════════════════════════
 // ROLE & PIN SYSTEM
 // ═══════════════════════════════════════════════
 const PINS = {
@@ -8108,6 +8793,8 @@ async function checkPin() {
     if (role === 'colleague') document.body.classList.add('colleague-mode');
     const _bf2 = document.getElementById('btnFinance');
     if (_bf2) _bf2.style.display = financeAnyPerm() ? '' : 'none';
+    const _blq2 = document.getElementById('btnLedgerQueue');
+    if (_blq2) _blq2.style.display = ledgerPerm('LEDGER_QUEUE') ? '' : 'none';
     initApp();
     startAutoLogout();
     updatePresenceBanner();
@@ -8146,6 +8833,9 @@ async function initApp() {
   // Viditelnost karty Finance dle role (JS, ne CSS — master 4.2)
   const _btnFin = document.getElementById('btnFinance');
   if (_btnFin) _btnFin.style.display = financeAnyPerm() ? '' : 'none';
+  // KROK 4: fronta plateb — perm klíč, ne CSS
+  const _btnLQ = document.getElementById('btnLedgerQueue');
+  if (_btnLQ) _btnLQ.style.display = ledgerPerm('LEDGER_QUEUE') ? '' : 'none';
 
   renderSidebar();
   if (isColleague()) {
