@@ -8378,48 +8378,84 @@ function lgModal(html) {
 function lgModalClose() { const m = document.getElementById('lgActionModal'); if (m) m.remove(); }
 
 // ── akce z draweru ──
+// 4.2 B/C: každý modal si kontext ZKOPÍRUJE při otevření (lgActionCtx) — drawer
+// se smí zavřít až po úspěšném zápisu. Žádný destructuring z možná-null proměnné.
+let lgActionCtx = null;
+function lgCtxOrThrow() {
+  if (!lgActionCtx || !lgActionCtx.tripId) throw new Error('Chybí kontext akce — zavři dialog a otevři znovu z chipu.');
+  return lgActionCtx;
+}
+function lgActionError(msg) {
+  const el = document.getElementById('lgActionErr');
+  if (el) el.textContent = '❌ ' + msg;
+}
+// 4.2 C: spinner + blokace tlačítka + try/catch — žádná Unhandled Promise Rejection
+async function lgSubmitAction(btn, fn) {
+  if (btn && btn.disabled) return;
+  const orig = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Ukládám…'; }
+  try {
+    await fn();
+  } catch (e) {
+    console.error('[ledger-manual]', e);
+    lgActionError(e && e.message ? e.message : String(e));
+    if (btn) { btn.disabled = false; btn.textContent = orig; }
+  }
+}
+const LG_ERR_DIV = '<div id="lgActionErr" style="color:#c0392b;font-size:12px;min-height:16px;margin-top:8px"></div>';
+
 function lgReassignModal(txIdx) {
-  const { tripId, idx } = lgDrawerCtx;
-  const trip = db.trips.find(t => t.id === tripId);
-  const p = trip.participants[idx];
-  const tx = lgPaymentsOf(trip, p)[txIdx];
+  const ctx = lgDrawerCtx;
+  if (!ctx) return;
+  const trip = db.trips.find(t => t.id === ctx.tripId);
+  const p = trip && trip.participants[ctx.idx];
+  const tx = p ? lgPaymentsOf(trip, p)[txIdx] : null;
   if (!tx) return;
+  lgActionCtx = { tripId: ctx.tripId, idx: ctx.idx, fioId: String(tx.fioId) };
   lgModal(`<h2>Přeřadit platbu</h2>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${tx.date} · ${lgFmtAmt(tx.amount, tx.currency)} · ${esc(tx.counterparty || '')}</div>
     <div class="form-group"><label>Nový příjemce</label>
-      <select id="lgReasTarget" style="width:100%">${lgParticipantOptions(tripId)}</select></div>
+      <select id="lgReasTarget" style="width:100%">${lgParticipantOptions(ctx.tripId)}</select></div>
+    ${LG_ERR_DIV}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
-      <button class="btn btn-primary" onclick="lgReassignSave('${esc(tx.fioId)}')">Přeřadit</button>
+      <button class="btn btn-primary" onclick="lgSubmitAction(this, lgReassignSave)">Přeřadit</button>
     </div>`);
 }
-async function lgReassignSave(fioId) {
+async function lgReassignSave() {
+  const ctx = lgCtxOrThrow();
   const v = document.getElementById('lgReasTarget').value.split('||');
-  lgModalClose(); lgCloseDrawer();
   const res = await lgManualWrite(m => {
-    m.assignments = m.assignments.filter(a => String(a.fioId) !== String(fioId));
-    m.assignments.push({ fioId: String(fioId), tripId: v[0], participantId: v[1], source: 'manual', ...lgStamp() });
+    m.assignments = m.assignments.filter(a => String(a.fioId) !== ctx.fioId);
+    m.assignments.push({ fioId: ctx.fioId, tripId: v[0], participantId: v[1], source: 'manual', ...lgStamp() });
   }, 'přeřazení ' + v[2]);
-  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+  if (!res.ok) throw new Error('Zápis selhal: ' + (res.conflict ? 'konflikt — data změněna jinde' : res.error));
+  lgModalClose(); lgCloseDrawer();
+  lgAfterWriteToast();
 }
 function lgSplitModal(txIdx) {
-  const { tripId, idx } = lgDrawerCtx;
-  const trip = db.trips.find(t => t.id === tripId);
-  const p = trip.participants[idx];
-  const tx = lgPaymentsOf(trip, p)[txIdx];
+  const ctx = lgDrawerCtx;
+  if (!ctx) return;
+  const trip = db.trips.find(t => t.id === ctx.tripId);
+  const p = trip && trip.participants[ctx.idx];
+  const tx = p ? lgPaymentsOf(trip, p)[txIdx] : null;
   if (!tx) return;
-  lgSplitModalFor(tx, tripId);
+  lgSplitModalFor(tx, ctx.tripId, 'drawer');
 }
-function lgSplitModalFor(tx, selTripId) {
+// mode: 'drawer' (okamžitý zápis) | 'queue' (odložený s Vrátit)
+function lgSplitModalFor(tx, selTripId, mode) {
   const total = Math.abs(tx.amountCZK != null ? tx.amountCZK : tx.amount);
+  lgActionCtx = { fioId: String(tx.fioId), total: total, mode: mode || 'drawer',
+    tripId: (lgDrawerCtx && lgDrawerCtx.tripId) || selTripId || 'q' };
   lgModal(`<h2>Rozdělit platbu</h2>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">${tx.date} · ${lgFmtAmt(tx.amountCZK != null ? tx.amountCZK : tx.amount, 'CZK')} · ${esc(tx.counterparty || '')}</div>
     <div id="lgSplitRows"></div>
     <button class="btn btn-secondary btn-sm" onclick="lgSplitAddRow()">＋ řádek</button>
     <div id="lgSplitStatus" style="font-size:12px;margin-top:8px;min-height:16px"></div>
+    ${LG_ERR_DIV}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
-      <button class="btn btn-primary" id="lgSplitSave" onclick="lgSplitSave('${esc(tx.fioId)}',${total})" disabled>Rozdělit</button>
+      <button class="btn btn-primary" id="lgSplitSave" onclick="lgSubmitAction(this, lgSplitSave)" disabled>Rozdělit</button>
     </div>`);
   window._lgSplitSel = selTripId;
   lgSplitAddRow(); lgSplitAddRow();
@@ -8437,8 +8473,8 @@ function lgSplitCheck() {
   const amts = [...document.querySelectorAll('.lg-split-a')].map(i => Math.round(Number(i.value) || 0));
   const btn = document.getElementById('lgSplitSave');
   const st = document.getElementById('lgSplitStatus');
-  if (!btn) return false;
-  const total = Number(btn.getAttribute('onclick').match(/,(\d+(?:\.\d+)?)\)/)[1]);
+  if (!btn || !lgActionCtx) return false;
+  const total = lgActionCtx.total;
   const sum = amts.reduce((s, x) => s + x, 0);
   const ok = amts.length >= 2 && amts.every(a => a > 0) && Math.abs(sum - total) < 1;
   st.textContent = ok ? '✓ ' + sum.toLocaleString('cs-CZ') + ' Kč' : '⚠️ součet ' + sum.toLocaleString('cs-CZ') + ' ≠ ' + total.toLocaleString('cs-CZ') + ' Kč (2+ účastníci, vše > 0)';
@@ -8446,20 +8482,36 @@ function lgSplitCheck() {
   btn.disabled = !ok;
   return ok;
 }
-async function lgSplitSave(fioId, total) {
-  if (!lgSplitCheck()) return;
-  const parts = [...document.querySelectorAll('#lgSplitRows > div')].map(row => {
+function lgSplitParts() {
+  return [...document.querySelectorAll('#lgSplitRows > div')].map(row => {
     const v = row.querySelector('.lg-split-p').value.split('||');
     return { tripId: v[0], participantId: v[1], amountCZK: Math.round(Number(row.querySelector('.lg-split-a').value) || 0) };
   });
-  lgModalClose(); lgCloseDrawer();
+}
+async function lgSplitSave() {
+  const ctx = lgCtxOrThrow();
+  if (!lgSplitCheck()) throw new Error('Součet částí musí odpovídat částce.');
+  const parts = lgSplitParts();
+  if (ctx.mode === 'queue') {
+    lgModalClose();
+    lqDeferredWrite(ctx.fioId, m => {
+      m.splits = m.splits.filter(z => String(z.fioId) !== ctx.fioId);
+      m.splits.push({ fioId: ctx.fioId, parts, ...lgStamp() });
+    }, 'split ' + ctx.fioId, 'Rozděleno na ' + parts.length + ' části');
+    return;
+  }
   const res = await lgManualWrite(m => {
-    m.splits = m.splits.filter(x => String(x.fioId) !== String(fioId));
-    m.splits.push({ fioId: String(fioId), parts, ...lgStamp() });
-  }, 'split ' + fioId);
-  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+    m.splits = m.splits.filter(z => String(z.fioId) !== ctx.fioId);
+    m.splits.push({ fioId: ctx.fioId, parts, ...lgStamp() });
+  }, 'split ' + ctx.fioId);
+  if (!res.ok) throw new Error('Zápis selhal: ' + (res.conflict ? 'konflikt — data změněna jinde' : res.error));
+  lgModalClose(); lgCloseDrawer();
+  lgAfterWriteToast();
 }
 function lgExternalModal() {
+  const ctx = lgDrawerCtx;
+  if (!ctx) return;
+  lgActionCtx = { tripId: ctx.tripId, idx: ctx.idx };
   lgModal(`<h2>Platba mimo účet</h2>
     <div class="form-grid">
       <div class="form-group"><label>Částka (Kč)</label><input type="number" id="lgExtAmt"></div>
@@ -8467,45 +8519,54 @@ function lgExternalModal() {
       <div class="form-group"><label>Druh</label><select id="lgExtKind"><option value="cash">hotovost</option><option value="external">externí (Marco Polo, jiný účet)</option></select></div>
       <div class="form-group" style="grid-column:span 2"><label>Poznámka</label><input type="text" id="lgExtNote"></div>
     </div>
+    ${LG_ERR_DIV}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
-      <button class="btn btn-primary" onclick="lgExternalSave()">Uložit</button>
+      <button class="btn btn-primary" onclick="lgSubmitAction(this, lgExternalSave)">Uložit</button>
     </div>`);
 }
 async function lgExternalSave() {
-  const { tripId, idx } = lgDrawerCtx;
-  const trip = db.trips.find(t => t.id === tripId);
-  const p = trip.participants[idx];
+  const ctx = lgCtxOrThrow();
+  const trip = db.trips.find(t => t.id === ctx.tripId);
+  const p = trip && trip.participants[ctx.idx];
+  if (!p) throw new Error('Účastník nenalezen — zavři dialog a otevři znovu.');
   const amt = Math.round(Number(document.getElementById('lgExtAmt').value) || 0);
-  if (amt <= 0) { alert('Zadej kladnou částku.'); return; }
+  if (amt <= 0) throw new Error('Zadej kladnou částku.');
   const rec = {
     tripId: trip.id, participantId: p.id || String(p.vs || '').trim(),
     source: document.getElementById('lgExtKind').value,
     amountCZK: amt, date: document.getElementById('lgExtDate').value,
     note: document.getElementById('lgExtNote').value.trim(), ...lgStamp()
   };
+  const res = await lgManualWrite(m => { m.assignments.push(rec); }, (rec.source === 'cash' ? 'hotovost ' : 'external ') + p.name);
+  if (!res.ok) throw new Error('Zápis selhal: ' + (res.conflict ? 'konflikt — data změněna jinde' : res.error));
   lgModalClose(); lgCloseDrawer();
-  const res = await lgManualWrite(m => { m.assignments.push(rec); }, 'platba mimo účet ' + p.name);
-  res.ok ? lgAfterWriteToast() : lgToast('❌ Zápis selhal: ' + res.error);
+  lgAfterWriteToast();
 }
 function lgBilledModal() {
-  const { tripId, idx } = lgDrawerCtx;
-  const trip = db.trips.find(t => t.id === tripId);
-  const p = trip.participants[idx];
-  const opts = (trip.participants || []).filter((x, i) => i !== idx && !x.isCancelled)
+  const ctx = lgDrawerCtx;
+  if (!ctx) return;
+  const trip = db.trips.find(t => t.id === ctx.tripId);
+  const p = trip && trip.participants[ctx.idx];
+  if (!p) return;
+  lgActionCtx = { tripId: ctx.tripId, idx: ctx.idx };
+  const opts = (trip.participants || []).filter((x, i) => i !== ctx.idx && !x.isCancelled)
     .map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
   lgModal(`<h2>V ceně jiného účastníka</h2>
     <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${esc(p.name)} nebude platit sám — platby na jeho VS jdou plátci.</div>
     <div class="form-group"><label>Plátce (týž zájezd)</label><select id="lgBilledSel" style="width:100%">${opts}</select></div>
+    ${LG_ERR_DIV}
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="lgModalClose()">Zrušit</button>
-      <button class="btn btn-primary" onclick="lgBilledSave()">Uložit do db</button>
+      <button class="btn btn-primary" onclick="lgSubmitAction(this, lgBilledSave)">Uložit do db</button>
     </div>`);
 }
-function lgBilledSave() {
-  const { tripId, idx } = lgDrawerCtx;
-  const trip = db.trips.find(t => t.id === tripId);
-  trip.participants[idx].billedWith = document.getElementById('lgBilledSel').value;
+async function lgBilledSave() {
+  const ctx = lgCtxOrThrow();
+  const trip = db.trips.find(t => t.id === ctx.tripId);
+  const p = trip && trip.participants[ctx.idx];
+  if (!p) throw new Error('Účastník nenalezen.');
+  p.billedWith = document.getElementById('lgBilledSel').value;
   save(db);
   lgModalClose(); lgCloseDrawer();
   lgAfterWriteToast();
@@ -8584,12 +8645,16 @@ function lqDeferredWrite(fioId, mutator, message, desc) {
   const timer = setTimeout(async () => {
     toast.remove();
     delete lqPendingWrites[fioId];
-    const res = await lgManualWrite(mutator, message);
-    if (!res.ok) {
+    try {
+      const res = await lgManualWrite(mutator, message);
+      if (!res.ok) throw new Error(res.conflict ? 'konflikt — data změněna jinde' : (res.error || '?'));
+      lgAfterWriteToast();
+    } catch (e) {
+      console.error('[ledger-manual]', e);
       delete lgManualPendingIds[fioId];
-      lqRender();
-      lgToast('❌ Zápis selhal (' + (res.conflict ? 'konflikt — data změněna jinde' : res.error) + ') — řádek vrácen.');
-    } else lgAfterWriteToast();
+      if (currentView === 'ledgerQueue') lqRender(); else lgUpdateBadge();
+      lgToast('❌ Zápis selhal (' + (e.message || e) + ') — řádek vrácen.');
+    }
   }, 10000);
   lqPendingWrites[fioId] = { timer };
   const undoBtn = toast.querySelector('button');
@@ -8622,6 +8687,7 @@ function lqAssignModal(fioId, presetTx) {
   }
 }
 function lqAssignSave(fioId) {
+  try {
   const x = lqFind(fioId) || {};
   const v = document.getElementById('lqAssignSel').value.split('||');
   const hint = document.getElementById('lqHintChk').checked;
@@ -8636,26 +8702,12 @@ function lqAssignSave(fioId) {
       if (!h.participantIds.includes(v[1])) h.participantIds.push(v[1]);
     }
   }, 'přiřazení ' + v[2], 'Přiřazeno: ' + v[2]);
+  } catch (e) { console.error('[ledger-manual]', e); lgToast('❌ ' + (e.message || e)); }
 }
 function lqSplitOpen(fioId) {
   const x = lqFind(fioId);
   if (!x) return;
-  // split z fronty — stejný modal, ale uložení odloženě
-  lgSplitModalFor(x, null);
-  const btn = document.getElementById('lgSplitSave');
-  btn.setAttribute('onclick', `lqSplitSave('${esc(fioId)}',${Math.abs(x.amountCZK != null ? x.amountCZK : x.amount)})`);
-}
-function lqSplitSave(fioId, total) {
-  if (!lgSplitCheck()) return;
-  const parts = [...document.querySelectorAll('#lgSplitRows > div')].map(row => {
-    const v = row.querySelector('.lg-split-p').value.split('||');
-    return { tripId: v[0], participantId: v[1], amountCZK: Math.round(Number(row.querySelector('.lg-split-a').value) || 0) };
-  });
-  lgModalClose();
-  lqDeferredWrite(fioId, m => {
-    m.splits = m.splits.filter(z => String(z.fioId) !== String(fioId));
-    m.splits.push({ fioId: String(fioId), parts, ...lgStamp() });
-  }, 'split ' + fioId, 'Rozděleno na ' + parts.length + ' části');
+  lgSplitModalFor(x, null, 'queue');   // uložení odloženě s Vrátit
 }
 function lqIgnoreModal(fioId) {
   lgModal(`<h2>Není platba klienta</h2>
@@ -8667,14 +8719,17 @@ function lqIgnoreModal(fioId) {
     </div>`);
 }
 function lqIgnoreSave(fioId) {
+  try {
   const kind = document.getElementById('lqIgnKind').value;
   lgModalClose();
   lqDeferredWrite(fioId, m => {
     m.ignored = m.ignored.filter(z => String(z.fioId) !== String(fioId));
     m.ignored.push({ fioId: String(fioId), kind, ...lgStamp() });
   }, 'ignorováno ' + fioId + ' (' + kind + ')', 'Označeno: ' + kind);
+  } catch (e) { console.error('[ledger-manual]', e); lgToast('❌ ' + (e.message || e)); }
 }
 function lqBulkAssign() {
+  try {
   const hi = lgQueueVisible().filter(x => x.confidence === 'vysoka' && x.suggestions && x.suggestions[0]);
   if (!hi.length) { lgToast('Žádné položky s vysokou jistotou a návrhem.'); return; }
   const list = hi.map(x => '• ' + x.date + ' ' + lgFmtAmt(x.amount, x.currency) + ' → ' + x.suggestions[0].name + ' @ ' + (x.suggestions[0].tripName || '')).join('\n');
@@ -8686,6 +8741,7 @@ function lqBulkAssign() {
       m.assignments.push({ fioId: String(x.fioId), tripId: s2.tripId, participantId: s2.participantId, source: 'manual', ...lgStamp() });
     }, 'hromadné přiřazení ' + s2.name, 'Přiřazeno: ' + s2.name);
   });
+  } catch (e) { console.error('[ledger-manual]', e); lgToast('❌ ' + (e.message || e)); }
 }
 function lqAssignClassified(i) {
   const x = (lgLedger.classified || [])[i];
@@ -8693,6 +8749,7 @@ function lqAssignClassified(i) {
   lqAssignModal(x.fioId, { fioId: x.fioId, date: x.date, amount: x.amount, currency: x.currency, counterparty: '', counterpartyAccount: '', suggestions: [] });
 }
 function lqCreateTrip(fioId) {
+  try {
   const x = lqFind(fioId);
   if (!x) return;
   const name = prompt('Název nového zájezdu:', x.tripNameHint || x.note || '');
@@ -8712,6 +8769,7 @@ function lqCreateTrip(fioId) {
     m.assignments = m.assignments.filter(a => String(a.fioId) !== String(fioId));
     m.assignments.push({ fioId: String(fioId), tripId: trip.id, participantId: p.id, source: 'manual', ...lgStamp() });
   }, 'založení zájezdu ' + name, 'Zájezd založen: ' + name);
+  } catch (e) { console.error('[ledger-manual]', e); lgToast('❌ ' + (e.message || e)); }
 }
 
 // ═══════════════════════════════════════════════
