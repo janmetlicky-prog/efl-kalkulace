@@ -1318,13 +1318,15 @@
     <div class="form-group admin-only" style="margin-bottom:14px">
       <label>Finance URL <span style="font-size:10px;color:var(--text-muted)">(Fio výpis — GAS EFL Finance)</span></label>
       <input type="url" id="financeUrlInput" placeholder="https://script.google.com/macros/s/..."
-        style="font-size:12px;" oninput="localStorage.setItem('efl_finance_url',this.value)">
+        style="font-size:12px;" oninput="finSaveCfg('efl_finance_url', this)">
+      <div id="financeUrlErr" style="font-size:11px;color:#c0392b;min-height:14px"></div>
     </div>
 
     <div class="form-group admin-only" style="margin-bottom:14px">
       <label>Finance secret <span style="font-size:10px;color:var(--text-muted)">(sdílené tajemství endpointu)</span></label>
       <input type="password" id="financeSecretInput" placeholder="48 znaků" autocomplete="off"
-        style="font-size:12px;" oninput="localStorage.setItem('efl_finance_secret',this.value)">
+        style="font-size:12px;" oninput="finSaveCfg('efl_finance_secret', this)">
+      <div id="financeSecretErr" style="font-size:11px;color:#c0392b;min-height:14px"></div>
     </div>
 
     <div style="display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap">
@@ -2499,6 +2501,7 @@ async function saveFinance() {
   if (r.ok) {
     _financeSessionSha = r.sha;
     _financeLoadStatus = 'OK';
+    finFetchLastCommitSha().then(sha => { if (sha) _finPollCommitSha = sha; });   // 4F 1.4: poll baseline po vlastním zápisu
     _financeLoadedTxCount = financeDb.transactions.length;
     if (r.warning === 'size') showFinanceStatus('⚠️ Finance soubor přes 700 kB — blíží se limitu', 'warn');
     return true;
@@ -2630,7 +2633,111 @@ function renderFinancePohledavky()  { if (!financePerm('pohledavky'))  return ''
 function renderFinanceCashflow()    { if (!financePerm('cashflow'))    return ''; return financePlaceholder('Cashflow'); }
 function renderFinanceRentabilita() { if (!financePerm('rentabilita')) return ''; return financePlaceholder('Rentabilita'); }
 function renderFinanceUzaverka()    { if (!financePerm('uzaverka'))    return ''; return financePlaceholder('Uzávěrka'); }
-function renderFinanceNastaveni()   { if (!financePerm('nastaveni'))   return ''; return financePlaceholder('Nastavení'); }
+function renderFinanceNastaveni() {
+  if (!financePerm('nastaveni')) return '';
+  // 4F 1.3: Import historie z očíslovaných výpisů (getStatementById)
+  return `<div class="card">
+    <div class="card-header"><div class="card-title">📜 Import historie z výpisů</div></div>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">
+      Stáhne očíslované výpisy Fio sekvenčně (pauza 31 s mezi výpisy — limit banky), dedup přes fioId,
+      jeden zápis na konci. Poslední vydaný výpis: <span id="finHistLast">— klikni Zjistit</span>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px">
+      <button class="btn btn-secondary" onclick="finHistFetchLast()">🔍 Zjistit poslední výpisy</button>
+      <div class="form-group" style="margin:0"><label>Účet</label>
+        <select id="finHistAcc"><option value="czk">CZK</option><option value="eur">EUR</option></select></div>
+      <div class="form-group" style="margin:0"><label>Rok</label>
+        <input type="number" id="finHistYear" value="${currentFinanceYear || currentYear}" style="width:80px"></div>
+      <div class="form-group" style="margin:0"><label>Výpis od</label>
+        <input type="number" id="finHistFrom" value="1" min="1" style="width:70px"></div>
+      <div class="form-group" style="margin:0"><label>do</label>
+        <input type="number" id="finHistTo" value="1" min="1" style="width:70px"></div>
+      <button class="btn btn-primary" id="finHistGo" onclick="finHistRun()">⬇️ Importovat</button>
+      <button class="btn btn-secondary" id="finHistStop" onclick="_finHistStop=true" style="display:none">⏹ Stop</button>
+    </div>
+    <div id="finHistLog" style="font-size:12px;font-family:monospace;white-space:pre-wrap;max-height:220px;overflow-y:auto"></div>
+  </div>`;
+}
+let _finHistStop = false;
+function _finHistLog(m) {
+  const el = document.getElementById('finHistLog');
+  if (el) { el.textContent += m + '\n'; el.scrollTop = el.scrollHeight; }
+}
+async function finHistFetchLast() {
+  const url = (localStorage.getItem('efl_finance_url') || '').trim();
+  const secret = (localStorage.getItem('efl_finance_secret') || '').trim();
+  if (!url || !secret) { _finHistLog('⚙️ Chybí Finance URL / secret'); return; }
+  const out = [];
+  for (const acc of ['czk', 'eur']) {
+    const j = await finFetchStatement_(url + '?action=lastStatementId&account=' + acc + '&secret=' + encodeURIComponent(secret), 60000, m => _finHistLog(m));
+    out.push(acc.toUpperCase() + ': ' + (j && j.ok ? (j.year + '/' + j.id) : '⛔ ' + ((j && j.error) || '?')));
+  }
+  const el = document.getElementById('finHistLast');
+  if (el) el.textContent = out.join(' · ');
+}
+async function finHistRun() {
+  const url = (localStorage.getItem('efl_finance_url') || '').trim();
+  const secret = (localStorage.getItem('efl_finance_secret') || '').trim();
+  if (!url || !secret) { _finHistLog('⚙️ Chybí Finance URL / secret'); return; }
+  if (!_financeLoaded || !financeDb) { _finHistLog('⛔ Finanční data nejsou načtena'); return; }
+  const acc = (document.getElementById('finHistAcc') || {}).value || 'czk';
+  const year = Number((document.getElementById('finHistYear') || {}).value) || (currentFinanceYear || currentYear);
+  const from = Number((document.getElementById('finHistFrom') || {}).value) || 1;
+  const to = Number((document.getElementById('finHistTo') || {}).value) || from;
+  if (from < 1 || to < from || to - from > 30) { _finHistLog('⛔ Neplatný rozsah výpisů (max 30 najednou)'); return; }
+  const accId = acc === 'eur' ? 'fio-eur' : 'fio-czk';
+  const goBtn = document.getElementById('finHistGo');
+  const stopBtn = document.getElementById('finHistStop');
+  _finHistStop = false;
+  if (goBtn) goBtn.disabled = true;
+  if (stopBtn) stopBtn.style.display = '';
+  const vsIndex = buildFinanceVsIndex();
+  const total = { loaded: 0, added: 0, dupes: 0, newIds: [] };
+  let anyImported = false;
+  try {
+    for (let n = from; n <= to; n++) {
+      if (_finHistStop) { _finHistLog('⏹ Zastaveno uživatelem po výpisu ' + (n - 1) + '.'); break; }
+      _finHistLog('Výpis ' + year + '/' + n + ' (' + acc.toUpperCase() + ')…');
+      const j = await finFetchStatement_(url + '?action=getStatementById&account=' + acc + '&year=' + year + '&id=' + n + '&secret=' + encodeURIComponent(secret), 90000, m => _finHistLog(m));
+      if (!j || j.ok !== true) { _finHistLog('⛔ ' + ((j && j.error) || 'výpis nedorazil') + ' — pokračuji dalším'); }
+      else {
+        // dedup přes fioId dělá importStatementIntoMemory (existing.has)
+        const r = importStatementIntoMemory(j, accId, vsIndex);
+        total.loaded += r.loaded; total.added += r.added; total.dupes += r.dupes;
+        total.newIds = total.newIds.concat(r.newIds);
+        anyImported = true;
+        _finHistLog('  → ' + r.loaded + ' transakcí, ' + r.added + ' nových, ' + r.dupes + ' duplicit');
+        // openingBalance z výpisu č. 1 — jen pokud je dosud 0
+        if (n === 1 && typeof j.openingBalance === 'number') {
+          const accObj = (financeDb.accounts || []).find(x => x.id === accId);
+          if (accObj && !(Number(accObj.openingBalance) > 0) && Number(accObj.openingBalance) !== j.openingBalance) {
+            accObj.openingBalance = j.openingBalance;
+            _finHistLog('  openingBalance ← ' + j.openingBalance + ' (z výpisu č. 1; bylo 0)');
+          }
+        }
+      }
+      if (n < to && !_finHistStop) {
+        _finHistLog('  pauza 31 s (limit Fio)…');
+        await new Promise(res => setTimeout(res, 31000));
+      }
+    }
+    _finHistLog('Souhrn: načteno ' + total.loaded + ', nových ' + total.added + ', duplicit ' + total.dupes);
+    if (anyImported && total.added > 0) {
+      if (FINANCE_IMPORT_MODE === 'shadow') { _finHistLog('🔬 SHADOW: neuloženo'); }
+      else {
+        // 4F 1.3: JEDEN saveFinance na konci
+        const ok = await financeImportSave(total.newIds);
+        _finHistLog(ok ? '✅ Uloženo (1 zápis)' : '⛔ Zápis selhal');
+      }
+      renderFinanceTabContent();
+    } else if (anyImported) {
+      _finHistLog('Žádné nové transakce — nic se nezapisuje.');
+    }
+  } finally {
+    if (goBtn) goBtn.disabled = false;
+    if (stopBtn) stopBtn.style.display = 'none';
+  }
+}
 
 // ═══════════════════════════════════════════════
 // FINANCE IMPORT — BANKA (BĚH 3a)
@@ -2824,6 +2931,41 @@ async function submitFinanceImport() {
   finally { if (btn) btn.disabled = false; }
 }
 
+// 4F 1.2: fetch endpointu s timeoutem; při odpovědi „limit" JEDEN auto-retry po 35 s.
+// Vrací JSON, nebo null (chyba už zobrazena přes status()).
+async function finFetchStatement_(fullUrl, timeoutMs, status) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const ctrl = new AbortController();
+    const tmr = setTimeout(() => ctrl.abort(), timeoutMs);
+    let json = null, httpStatus = 0;
+    try {
+      const res = await fetch(fullUrl, { redirect: 'follow', signal: ctrl.signal });
+      httpStatus = res.status;
+      json = await res.json();
+    } catch (e) {
+      status('⛔ Endpoint nedostupný: ' + e.message);
+      return null;
+    } finally { clearTimeout(tmr); }
+    const err = (json && json.error) || '';
+    if (attempt === 1 && /limit/i.test(err)) {
+      status('⏳ Fio limit — čekám 35 s a zkusím to znovu automaticky…');
+      await new Promise(r => setTimeout(r, 35000));
+      continue;
+    }
+    if (json) json._httpStatus = httpStatus;
+    return json;
+  }
+  return null;
+}
+// 4F 1.2: chybové hlášky — 422 DOSLOVA (validace endpointu popisuje, co je špatně)
+function finImpShowError_(json, prefix) {
+  const err = (json && json.error) || 'neznámá chyba';
+  if (json && json._httpStatus === 422) _finImpStatus('⛔ ' + prefix + err);
+  else if (/unauthorized/i.test(err)) _finImpStatus('⛔ Endpoint odmítl secret — zkontroluj ⚙️ → Sync → Finance secret');
+  else if (/limit/i.test(err)) _finImpStatus('⏳ Fio limit i po opakování — zkus znovu za minutu');
+  else _finImpStatus('⛔ Chyba endpointu: ' + prefix + err);
+}
+
 async function runFinanceImport(account, from, to) {
   const url = (localStorage.getItem('efl_finance_url') || '').trim();
   const secret = (localStorage.getItem('efl_finance_secret') || '').trim();
@@ -2836,40 +2978,40 @@ async function runFinanceImport(account, from, to) {
     : '?action=getStatement&account=' + encodeURIComponent(account) + '&from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&secret=' + encodeURIComponent(secret);
   _finImpStatus(both ? 'Načítám CZK… poté EUR (pauza banky 30 s, celkem ~40 s)…' : 'Načítám výpis…');
 
-  const ctrl = new AbortController();
-  const tmr = setTimeout(() => ctrl.abort(), both ? 120000 : 90000);
-  let json;
-  try {
-    const res = await fetch(url + q, { redirect: 'follow', signal: ctrl.signal });
-    json = await res.json();
-  } catch (e) {
-    _finImpStatus('⛔ Endpoint nedostupný: ' + e.message);
-    return;
-  } finally { clearTimeout(tmr); }
+  // 4F 1.2: jeden pokus + 1× auto-retry po 35 s při Fio „limit"
+  const json = await finFetchStatement_(url + q, both ? 120000 : 90000, m => _finImpStatus(m));
+  if (!json) return;   // chyba už zobrazena
 
-  if (!json || json.ok !== true) {
-    const err = (json && json.error) || 'neznámá chyba';
-    if (/unauthorized/i.test(err)) _finImpStatus('⛔ Endpoint odmítl secret — zkontroluj ⚙️ → Sync → Finance secret');
-    else if (/limit/i.test(err)) _finImpStatus('⏳ Fio limit — zkus znovu za 30 s');
-    else _finImpStatus('⛔ Chyba endpointu: ' + err);
+  if (json.ok !== true && !both) {
+    finImpShowError_(json, '');
+    return;
+  }
+  // getStatementBoth v2: horní ok/error + partial; per-účet czk/eur mají vlastní ok/error
+  if (both && json.ok !== true && !json.partial) {
+    finImpShowError_(json, '');
     return;
   }
 
   const vsIndex = buildFinanceVsIndex();
   const stmts = both
-    ? [[json.czk, 'fio-czk'], [json.eur, 'fio-eur']]
-    : [[json, account === 'eur' ? 'fio-eur' : 'fio-czk']];
+    ? [[json.czk, 'fio-czk', 'CZK'], [json.eur, 'fio-eur', 'EUR']]
+    : [[json, account === 'eur' ? 'fio-eur' : 'fio-czk', account === 'eur' ? 'EUR' : 'CZK']];
 
   const total = { loaded: 0, added: 0, dupes: 0, matched: 0, needs: 0, warn: false, newIds: [] };
+  const perAcc = [];   // 4F 1.2: hláška per účet — žádné tiché přeskočení účtu
   const today = _finTodayISO();
   stmts.forEach(pair => {
-    const stmt = pair[0], accId = pair[1];
-    if (!stmt || stmt.ok === false) return;
+    const stmt = pair[0], accId = pair[1], accLabel = pair[2];
+    if (!stmt || stmt.ok === false) {
+      perAcc.push('⛔ ' + accLabel + ': ' + ((stmt && stmt.error) || 'výpis nedorazil'));
+      return;
+    }
     const s = importStatementIntoMemory(stmt, accId, vsIndex);
     total.loaded += s.loaded; total.added += s.added; total.dupes += s.dupes;
     total.matched += s.matched; total.needs += s.needs;
     total.warn = total.warn || s.warn;
     total.newIds = total.newIds.concat(s.newIds);
+    perAcc.push('✅ ' + accLabel + ': ' + s.loaded + ' načteno, ' + s.added + ' nových');
     const accObj = (financeDb.accounts || []).find(a => a.id === accId);
     if (accObj) {
       accObj.lastSyncAt = to;
@@ -2880,7 +3022,7 @@ async function runFinanceImport(account, from, to) {
   closeFinanceImportModal();
   renderFinanceTabContent();
 
-  const souhrn = 'Načteno ' + total.loaded + ', nových ' + total.added + ', duplicit ' + total.dupes +
+  const souhrn = perAcc.join(' · ') + ' | celkem: nových ' + total.added + ', duplicit ' + total.dupes +
                  ', spárováno ' + total.matched + ', k doplnění ' + total.needs;
   if (FINANCE_IMPORT_MODE === 'shadow') {
     showFinanceStatus('🔬 SHADOW: ' + total.added + ' nových transakcí NEULOŽENO · ' + souhrn, 'warn');
@@ -2918,26 +3060,57 @@ async function financeSaveFlush() {
 window.addEventListener('beforeunload', () => { if (_finSaveTimer) financeSaveFlush(); });
 
 // ── polling cizích změn (6.7) ──
+// 4F 1.4: polling přes commits API (lehčí — contents API tahalo celý base64 obsah)
+let _finPollCommitSha = null;
+async function finFetchLastCommitSha() {
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GH_REPO}/commits?path=${financeFilePath(currentFinanceYear || currentYear)}&sha=${GH_BRANCH}&per_page=1&t=${Date.now()}`,
+      { headers: { Authorization: `token ${ghToken()}` } });
+    if (!res.ok) return null;
+    const j = await res.json();
+    return (Array.isArray(j) && j[0] && j[0].sha) || null;
+  } catch (e) { return null; }
+}
 function startFinancePolling() {
   if (_finPollTimer) return;
+  finFetchLastCommitSha().then(sha => { if (sha) _finPollCommitSha = sha; });
   _finPollTimer = setInterval(async () => {
     if (typeof currentView !== 'undefined' && currentView !== 'finance') return;
-    if (!_financeLoaded || !_financeSessionSha || !ghToken()) return;
-    try {
-      const res = await fetch(
-        `https://api.github.com/repos/${GH_REPO}/contents/${financeFilePath(currentFinanceYear || currentYear)}?ref=${GH_BRANCH}&t=${Date.now()}`,
-        { headers: { Authorization: `token ${ghToken()}` } });
-      if (!res.ok) return;
-      const j = await res.json();
-      if (j.sha && j.sha !== _financeSessionSha && !_financeChangedRemote) {
-        _financeChangedRemote = true;
-        renderFinanceTabContent();
-      }
-    } catch (e) {}
+    if (!_financeLoaded || !ghToken()) return;
+    const sha = await finFetchLastCommitSha();
+    if (!sha) return;
+    if (!_finPollCommitSha) { _finPollCommitSha = sha; return; }
+    if (sha !== _finPollCommitSha && !_financeChangedRemote) {
+      _financeChangedRemote = true;
+      renderFinanceTabContent();
+    }
   }, 60000);
 }
+// ── 4F 1.1: sanitizace + validace Finance URL/secret při uložení ──
+// Odstraní ne-ASCII (neviditelné znaky z kopírování rozbíjely fetch) a ořeže;
+// URL musí být https://script.google.com/…/exec. Chyba → uloží se sanitizovaná
+// hodnota + červená hláška (nic se tiše nezahazuje).
+function finSanitizeCfg(v) { return String(v || '').replace(/[^\x20-\x7E]/g, '').trim(); }
+function finSaveCfg(key, inp) {
+  const clean = finSanitizeCfg(inp.value);
+  if (clean !== inp.value) inp.value = clean;
+  localStorage.setItem(key, clean);
+  const errEl = document.getElementById(key === 'efl_finance_url' ? 'financeUrlErr' : 'financeSecretErr');
+  let err = '';
+  if (key === 'efl_finance_url' && clean && !/^https:\/\/script\.google\.com\/.+\/exec$/.test(clean)) {
+    err = '⚠️ URL musí být https://script.google.com/…/exec';
+  }
+  if (key === 'efl_finance_secret' && clean && clean.length < 20) {
+    err = '⚠️ Secret je podezřele krátký (' + clean.length + ' znaků)';
+  }
+  if (errEl) errEl.textContent = err;
+}
+
 function financeReloadRemote() {
-  console.log('Neuložený lokální stav finance (před reloadem):', JSON.parse(JSON.stringify(financeDb || {})));
+  // 4F 1.4: nelogovat celý financeDb (obří objekt v konzoli) — jen souhrn
+  console.log('Neuložený lokální stav finance (před reloadem): transakcí=' +
+    ((financeDb && financeDb.transactions) || []).length + ', rok=' + (financeDb && financeDb.year));
   _financeChangedRemote = false;
   _financeLoaded = false; financeDb = null;
   renderFinance();
@@ -3117,14 +3290,13 @@ function financeBankaHtml() {
   </div>`;
 
   // hromadné akce
-  html += `<div id="finBulkBar" style="display:${financeBankaSel.size ? '' : 'none'};gap:8px;align-items:center;margin-bottom:10px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;background:rgba(205,170,58,.06)">
+  html += `<div id="finBulkBar" style="display:${financeBankaSel.size ? 'flex' : 'none'};gap:8px;align-items:center;margin-bottom:10px;padding:8px 12px;border:1px solid var(--gold);border-radius:8px;background:rgba(205,170,58,.06)">
     <span>Vybraným (<b id="finBulkCount">${financeBankaSel.size}</b>):</span>
     <select ${selSt} onchange="finBulkCategory(this.value)"><option value="">kategorie…</option>${((financeDb && financeDb.categories) || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('')}</select>
     <select ${selSt} onchange="finBulkTrip(this.value)"><option value="">cesta…</option>${financeTripOptions(null).replace('<option value=""></option>', '')}</select>
     <button class="btn btn-secondary" onclick="finBulkInternal()">🔇 Interní převod</button>
     <button class="btn btn-secondary" onclick="finClearSel()">Zrušit výběr</button>
   </div>`;
-  html = html.replace('id="finBulkBar" style="display:', 'id="finBulkBar" style="display:flex;display:');
 
   // tabulka
   if (!txs.length) {
