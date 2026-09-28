@@ -2626,7 +2626,150 @@ function renderFinanceTabContent() {
 }
 
 // každý placeholder: kontrola oprávnění → '' (obsah nevznikne v DOMu — master 4.2)
-function renderFinanceDashboard()   { if (!financePerm('dashboard'))   return ''; return financePlaceholder('Dashboard'); }
+// ═══ BĚH 5 — DASHBOARD (jen čtení: financeDb + db + ledger přes lgLoadLedger) ═══
+// Volná hotovost = zůstatky − vázané zálohy budoucích cest + už zaplacené náklady těchto cest.
+function finDashTripStart(trip) {
+  // start cesty = existující odvození aplikace (getTripProjectNum: year+month+den z date)
+  if (trip.year == null) return null;   // year:null → nezahrnovat, vypsat v poznámce
+  const num = getTripProjectNum(trip);   // 'YYYYMMDD'
+  if (!/^\d{8}$/.test(String(num))) return null;
+  return String(num).slice(0, 4) + '-' + String(num).slice(4, 6) + '-' + String(num).slice(6, 8);
+}
+function finDashCompute(dbData, fdb, ledgerData, todayIso, eurRate) {
+  const out = { balances: [], balanceSum: 0, tied: 0, prepaidCosts: 0, notes: [], perTrip: [] };
+  ((fdb && fdb.accounts) || []).forEach(a2 => {
+    const bal = Number(a2.balance) || 0;
+    const czk = a2.currency === 'EUR' ? bal * eurRate : bal;
+    out.balances.push({ id: a2.id, currency: a2.currency, balance: bal, czk, lastSyncAt: a2.lastSyncAt || null });
+    out.balanceSum += czk;
+  });
+  const led = (ledgerData && ledgerData.ledger) || {};
+  (dbData.trips || []).forEach(trip => {
+    if (['storno', 'done', 'accounting'].includes(trip.status)) return;
+    const start = finDashTripStart(trip);
+    if (start === null) { if (trip.year == null) out.notes.push(trip.name); return; }
+    if (!(start > todayIso)) return;   // jen budoucí odjezdy
+    const tid = trip.id || trip.name;
+    let paid = 0;
+    const perP = led[tid] || {};
+    Object.values(perP).forEach(o => (o.payments || []).forEach(x => {
+      paid += Number(x.amountCZK != null ? x.amountCZK : x.amount) || 0;   // kladné − vratky (záporné)
+    }));
+    let costs = 0;
+    (trip.expenses || []).forEach(e => {
+      const v = Number(e.amountCZK != null ? e.amountCZK : e.amount) || 0;
+      if (e.txId && v < 0) costs += Math.abs(v);
+    });
+    if (paid > 0 || costs > 0) out.perTrip.push({ trip, start, paid, costs });
+    out.tied += Math.max(0, paid);
+    out.prepaidCosts += costs;
+  });
+  out.free = out.balanceSum - out.tied + out.prepaidCosts;
+  return out;
+}
+function renderFinanceDashboard() {
+  if (!financePerm('dashboard')) return '';
+  const fdb = financeDb;
+  if (!_financeLoaded || !fdb) return '<div class="card">⛔ Finanční data nejsou načtena.</div>';
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const eurRate = getEurRate();
+  const led = (typeof lgLedger !== 'undefined' && lgLedger) ? lgLedger : null;
+  if (!led) {
+    // lazy: načíst ledger a překreslit (dashboard bez ledgeru nemá vázané zálohy)
+    lgLoadLedger().then(() => { if (currentView === 'finance' && currentFinanceTab === 'dashboard') renderFinanceTabContent(); });
+  }
+  const d = finDashCompute(db, fdb, led, todayIso, eurRate);
+  const F = n => Math.round(n).toLocaleString('cs-CZ');
+  const year = currentFinanceYear || currentYear;
+
+  // režie letos: rezie-* + ostatni BEZ tripId, výdaje
+  let rezie = 0, chybiDokl = 0;
+  ((fdb.transactions) || []).forEach(t => {
+    if (t.matchStatus === 'ignored' || t.isInternalTransfer) return;
+    const v = Number(t.amountCZK != null ? t.amountCZK : t.amount) || 0;
+    if (v < 0 && !t.tripId && (String(t.categoryId || '').indexOf('rezie-') === 0 || t.categoryId === 'ostatni')) rezie += Math.abs(v);
+    if (v < 0 && !t.docUrl && t.docStatus !== 'none_needed') chybiDokl++;
+  });
+
+  // cashflow 12 měsíců (bez ignored)
+  const months = [];
+  for (let i = 11; i >= 0; i--) { const dte = new Date(); dte.setMonth(dte.getMonth() - i); months.push(dte.toISOString().slice(0, 7)); }
+  const cf = {}; months.forEach(m => cf[m] = { inn: 0, out: 0 });
+  (fdb.transactions || []).forEach(t => {
+    if (t.matchStatus === 'ignored' || t.isInternalTransfer) return;
+    const m = String(t.date || '').slice(0, 7);
+    if (!cf[m]) return;
+    const v = Number(t.amountCZK != null ? t.amountCZK : t.amount) || 0;
+    if (v >= 0) cf[m].inn += v; else cf[m].out += Math.abs(v);
+  });
+  const maxCf = Math.max(1, ...months.map(m => Math.max(cf[m].inn, cf[m].out)));
+  const BW = 22, GAP = 12, H = 120;
+  const bars = months.map((m, i) => {
+    const x = i * (2 * BW + GAP);
+    const hi = Math.round(cf[m].inn / maxCf * H), ho = Math.round(cf[m].out / maxCf * H);
+    return `<rect x="${x}" y="${H - hi}" width="${BW}" height="${hi}" fill="#1a7a5e" rx="2"><title>${esc(m)} příjmy ${F(cf[m].inn)} Kč</title></rect>` +
+           `<rect x="${x + BW + 2}" y="${H - ho}" width="${BW}" height="${ho}" fill="#c0392b" rx="2"><title>${esc(m)} výdaje ${F(cf[m].out)} Kč</title></rect>` +
+           `<text x="${x + BW}" y="${H + 12}" font-size="8" text-anchor="middle" fill="var(--text-muted)">${esc(m.slice(5))}</text>`;
+  }).join('');
+  const cfRows = months.map(m => `<tr><td style="padding:3px 6px">${esc(m)}</td><td style="padding:3px 6px;text-align:right;color:#1a7a5e">${F(cf[m].inn)}</td><td style="padding:3px 6px;text-align:right;color:#c0392b">${F(cf[m].out)}</td><td style="padding:3px 6px;text-align:right;font-weight:600">${F(cf[m].inn - cf[m].out)}</td></tr>`).join('');
+
+  // nejbližší cesty do 60 dní (z ledger statuses)
+  const lim = new Date(); lim.setDate(lim.getDate() + 60);
+  const limIso = lim.toISOString().slice(0, 10);
+  const soon = [];
+  if (led && led.statuses) (db.trips || []).forEach(trip => {
+    if (['storno', 'done', 'accounting'].includes(trip.status)) return;
+    const start = finDashTripStart(trip);
+    if (!start || !(start > todayIso) || start > limIso) return;
+    const stm = led.statuses[trip.id || trip.name] || {};
+    let prij = 0, zbyva = 0, dluznici = 0;
+    (trip.participants || []).forEach(p2 => {
+      if (p2.isCancelled) return;
+      const st = stm[p2.id || String(p2.vs || '').trim()];
+      if (!st || ['storno', 'k_vraceni', 'historie', 'v_cene_jineho'].includes(st.status)) return;
+      const kurz = st.currency === 'EUR' ? eurRate : 1;
+      prij += (Number(st.paidTotal) || 0) * kurz;
+      const z = Math.max(0, (Number(st.dueTotal) || 0) - (Number(st.paidTotal) || 0)) * kurz;
+      zbyva += z;
+      if (z > (st.currency === 'EUR' ? 8 * kurz : 200)) dluznici++;
+    });
+    soon.push({ trip, start, prij, zbyva, dluznici });
+  });
+  soon.sort((a2, b2) => a2.start.localeCompare(b2.start));
+
+  const syncWarn = d.balances.filter(b2 => !b2.lastSyncAt || b2.lastSyncAt < new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10));
+  const balCards = d.balances.map(b2 => `<div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Zůstatek ${esc(b2.currency)}</div>
+    <div style="font-size:20px;font-weight:700">${b2.currency === 'EUR' ? esc(b2.balance.toLocaleString('cs-CZ')) + ' €' : F(b2.balance) + ' Kč'}</div>
+    ${b2.currency === 'EUR' ? `<div style="font-size:11px;color:var(--text-muted)">≈ ${F(b2.czk)} Kč @ ${esc(String(eurRate))} Kč/€</div>` : ''}
+    <div style="font-size:10px;color:var(--text-muted)">sync: ${esc(b2.lastSyncAt || 'nikdy')}</div></div>`).join('');
+
+  return `<div class="fin-kpi-grid" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr">
+    <div class="fin-kpi hero" title="Volná hotovost = zůstatky účtů − zálohy klientů na budoucí cesty (přijaté platby − vratky) + náklady těchto cest už zaplacené z banky (výdaje s vazbou txId). Záloha je vázaná jen do výše, ve které ještě nebyla utracena.">
+      <div style="font-size:11px;color:var(--text-muted)">VOLNÁ HOTOVOST</div>
+      <div style="font-size:26px;font-weight:800;color:${d.free < 0 ? '#c0392b' : 'var(--navy)'}">${F(d.free)} Kč</div>
+      <div style="font-size:11px;color:var(--text-muted)">${F(d.balanceSum)} − ${F(d.tied)} vázané + ${F(d.prepaidCosts)} zaplacené náklady</div>
+      ${d.free < 0 ? '<div style="font-size:11px;color:#c0392b;font-weight:600">⚠️ záporná — zálohy převyšují hotovost</div>' : ''}
+      ${d.notes.length ? `<div style="font-size:10px;color:#CDAA3A">mimo výpočet (year:null): ${esc(d.notes.join(', ').slice(0, 80))}</div>` : ''}
+    </div>
+    ${balCards}
+    <div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Vázané zálohy</div><div style="font-size:20px;font-weight:700">${F(d.tied)} Kč</div><div style="font-size:11px;color:var(--text-muted)">${d.perTrip.length} budoucích cest</div></div>
+    <div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Režie ${esc(String(year))}</div><div style="font-size:20px;font-weight:700">${F(rezie)} Kč</div></div>
+    <div class="fin-kpi" style="cursor:pointer" onclick="financeBankaFilters.doc='chybi';showFinanceTab('banka')"><div style="font-size:11px;color:var(--text-muted)">Chybí doklad</div><div style="font-size:20px;font-weight:700;color:${chybiDokl ? '#CDAA3A' : 'inherit'}">${chybiDokl}×</div><div style="font-size:11px;color:var(--teal)">→ Banka</div></div>
+  </div>
+  ${syncWarn.length ? `<div style="padding:8px 12px;border:1.5px solid #CDAA3A;border-radius:8px;background:rgba(205,170,58,.08);font-size:12px;margin-bottom:12px">⚠️ ${syncWarn.map(b2 => esc(b2.currency)).join(' + ')} sync starší než 7 dní — Načti banku (tab Banka → ⟳)</div>` : ''}
+  <div class="card"><div class="card-header"><div class="card-title">📊 Cashflow 12 měsíců</div></div>
+    <div style="overflow-x:auto"><svg width="${months.length * (2 * BW + GAP)}" height="${H + 18}" style="display:block">${bars}</svg></div>
+    <table class="lg-tbl" style="width:100%;margin-top:8px"><tr><th>Měsíc</th><th style="text-align:right">Příjmy</th><th style="text-align:right">Výdaje</th><th style="text-align:right">Netto</th></tr>${cfRows}</table>
+  </div>
+  <div class="card"><div class="card-header"><div class="card-title">🧳 Nejbližší cesty (do 60 dní)</div></div>
+    ${led ? (soon.length ? `<table class="lg-tbl" style="width:100%"><tr><th>Cesta</th><th>Start</th><th style="text-align:right">Přijato</th><th style="text-align:right">Zbývá</th><th style="text-align:right">Dlužníci</th></tr>
+      ${soon.map(x => `<tr><td style="padding:4px 6px"><a href="#" onclick="showView('trip','${esc(x.trip.id)}');return false" style="color:var(--teal)">${esc(x.trip.name)}</a></td>
+        <td style="padding:4px 6px">${esc(x.start)}</td><td style="padding:4px 6px;text-align:right;color:#1a7a5e">${F(x.prij)} Kč</td>
+        <td style="padding:4px 6px;text-align:right;color:${x.zbyva > 0 ? '#c0392b' : 'inherit'}">${F(x.zbyva)} Kč</td>
+        <td style="padding:4px 6px;text-align:right">${x.dluznici}</td></tr>`).join('')}</table>` : '<div style="font-size:12px;color:var(--text-muted)">žádná cesta do 60 dní</div>')
+    : '<div style="font-size:12px;color:var(--text-muted)">Načítám ledger…</div>'}
+  </div>`;
+}
 function renderFinanceBanka()       { if (!financePerm('banka'))       return ''; return financeBankaHtml(); }
 function renderFinanceNaklady() {
   if (!financePerm('naklady')) return '';
@@ -2696,7 +2839,7 @@ function renderFinanceNastaveni() {
     <div id="finHistLog" style="font-size:12px;font-family:monospace;white-space:pre-wrap;max-height:220px;overflow-y:auto">${esc(_finHistLogBuf)}</div>
   </div>
   <div class="card" style="margin-top:14px">
-    <div class="card-header"><div class="card-title">🔁 Propis do P&L (BĚH 4a — nasucho)</div></div>
+    <div class="card-header"><div class="card-title">🔁 Propis do P&L</div></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn btn-secondary" onclick="finPropisPreview()">🧮 Náhled propisu</button>
       <button class="btn btn-secondary" onclick="reconcileFinance()">🔍 Reconcile (analýza vazeb)</button>
@@ -2792,7 +2935,7 @@ async function finHistRun() {
 // ═══════════════════════════════════════════════
 // FINANCE IMPORT — BANKA (BĚH 3a)
 // ═══════════════════════════════════════════════
-let financeBankaFilters = { account: 'all', dir: 'all', status: 'all', month: 'all', category: 'all', trip: 'all', q: '' };
+let financeBankaFilters = { account: 'all', dir: 'all', status: 'all', month: 'all', category: 'all', trip: 'all', q: '', doc: 'all' };   // doc: BĚH 5 předfiltr chybějících dokladů
 let financeBankaSel = new Set();
 let _finSaveTimer = null;
 let _finQTimer = null;
@@ -3658,6 +3801,7 @@ function filterFinanceTxs(list, f) {
     if (f.dir !== 'all' && t.direction !== f.dir) return false;
     if (f.status !== 'all' && t.matchStatus !== f.status) return false;
     if (f.month !== 'all' && String(t.date || '').slice(0, 7) !== f.month) return false;
+    if (f.doc === 'chybi' && (t.docUrl || t.docStatus === 'none_needed')) return false;   // BĚH 5
     if (f.category !== 'all' && String(t.categoryId || '') !== f.category) return false;
     if (f.trip !== 'all' && String(t.tripId || '') !== f.trip) return false;
     if (q) {
