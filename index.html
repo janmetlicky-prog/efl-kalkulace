@@ -2810,7 +2810,94 @@ function renderFinanceNaklady() {
     <table class="lg-tbl" style="width:100%">${top10}</table>
   </div>`;
 }
-function renderFinancePohledavky()  { if (!financePerm('pohledavky'))  return ''; return financePlaceholder('Pohledávky'); }
+// ═══ BĚH 6 — POHLEDÁVKY (zdroj VÝHRADNĚ ledger statuses — táž data jako chip;
+// žádný vlastní výpočet ceny: cena=dueTotal, zaplaceno=paidTotal, overdue=st.overdue) ═══
+let finPohledavkyFilters = { onlyOverdue: false, year: 'all', q: '' };
+function finPohlCompute(dbData, ledgerData, eurRate) {
+  const rows = [];
+  const stAll = (ledgerData && ledgerData.statuses) || {};
+  (dbData.trips || []).forEach(trip => {
+    if (trip.status === 'storno') return;
+    const stm = stAll[trip.id || trip.name];
+    if (!stm) return;
+    (trip.participants || []).forEach(p2 => {
+      if (p2.isCancelled) return;
+      const st = stm[p2.id || String(p2.vs || '').trim()];
+      if (!st) return;
+      if (['storno', 'k_vraceni', 'historie', 'v_cene_jineho', 'bez_rozpisu'].includes(st.status)) return;
+      const tol = st.currency === 'EUR' ? 8 : 200;
+      const zbyva = (Number(st.dueTotal) || 0) - (Number(st.paidTotal) || 0);
+      if (zbyva <= tol) return;   // uhrazeno (vč. tolerance) → do tabulky nejde
+      // nejbližší nekrytá splátka = první s remaining > tol (táž logika jako upomínky)
+      let due = '';
+      for (const i2 of (st.installments || [])) { if (i2.remaining > tol) { due = String(i2.due || ''); break; } }
+      const kurz = st.currency === 'EUR' ? eurRate : 1;
+      rows.push({ trip, name: p2.name || '?', cur: st.currency || 'CZK',
+        cena: st.dueTotal, zaplaceno: st.paidTotal, zbyva, zbyvaCZK: zbyva * kurz,
+        due, overdue: !!st.overdue });
+    });
+  });
+  rows.sort((a2, b2) => (a2.overdue === b2.overdue ? String(a2.due || '9999').localeCompare(String(b2.due || '9999')) : (a2.overdue ? -1 : 1)));
+  return rows;
+}
+function finPohlSet(k, v) { finPohledavkyFilters[k] = v; renderFinanceTabContent(); }
+function renderFinancePohledavky() {
+  if (!financePerm('pohledavky')) return '';
+  const led = (typeof lgLedger !== 'undefined' && lgLedger) ? lgLedger : null;
+  if (!led) {
+    lgLoadLedger().then(() => { if (currentView === 'finance' && currentFinanceTab === 'pohledavky') renderFinanceTabContent(); });
+    return '<div class="card">Načítám ledger…</div>';
+  }
+  const f = finPohledavkyFilters;
+  const eurRate = getEurRate();
+  let rows = finPohlCompute(db, led, eurRate);
+  const years = [...new Set(rows.map(r2 => r2.trip.year).filter(y => y != null))].sort();
+  if (f.year !== 'all') rows = rows.filter(r2 => String(r2.trip.year) === String(f.year));
+  if (f.onlyOverdue) rows = rows.filter(r2 => r2.overdue);
+  const q = String(f.q || '').trim().toLowerCase();
+  if (q) rows = rows.filter(r2 => (r2.name + ' ' + r2.trip.name).toLowerCase().indexOf(q) >= 0);
+
+  const sum = rows.reduce((s2, r2) => s2 + r2.zbyvaCZK, 0);
+  const sumOver = rows.filter(r2 => r2.overdue).reduce((s2, r2) => s2 + r2.zbyvaCZK, 0);
+  const F = n => Math.round(n).toLocaleString('cs-CZ');
+  const amt = (n, cur) => Math.round(n).toLocaleString('cs-CZ') + (cur === 'EUR' ? ' €' : ' Kč');
+  const qLen = (led.queue || []).length;
+
+  // tabulka skupinově po cestách (pořadí dle prvního řádku — overdue nahoře)
+  const tripsOrder = [];
+  rows.forEach(r2 => { if (!tripsOrder.includes(r2.trip)) tripsOrder.push(r2.trip); });
+  const body = tripsOrder.map(trip => {
+    const rr = rows.filter(r2 => r2.trip === trip);
+    return `<tr><td colspan="6" style="padding:6px;background:var(--bg-subtle,#f0f7f7);font-weight:600">
+        <a href="#" onclick="showView('trip','${esc(trip.id)}');return false" style="color:var(--teal)">${esc(trip.name)}</a>
+        <span style="font-weight:400;color:var(--text-muted)">(${rr.length})</span></td></tr>` +
+      rr.map(r2 => `<tr>
+        <td style="padding:4px 6px">${esc(r2.name)}</td>
+        <td style="padding:4px 6px;text-align:right">${esc(amt(r2.cena, r2.cur))}</td>
+        <td style="padding:4px 6px;text-align:right;color:#1a7a5e">${esc(amt(r2.zaplaceno, r2.cur))}</td>
+        <td style="padding:4px 6px;text-align:right;font-weight:700;color:#c0392b">${esc(amt(r2.zbyva, r2.cur))}</td>
+        <td style="padding:4px 6px">${esc(r2.due || '—')}</td>
+        <td style="padding:4px 6px">${r2.overdue ? '<span style="background:#c0392b;color:#fff;border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700">PO SPLATNOSTI</span>' : ''}</td>
+      </tr>`).join('');
+  }).join('');
+
+  return `<div class="fin-kpi-grid" style="grid-template-columns:repeat(3,1fr)">
+    <div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Pohledávky celkem</div><div style="font-size:22px;font-weight:700">${F(sum)} Kč</div></div>
+    <div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Z toho po splatnosti</div><div style="font-size:22px;font-weight:700;color:#c0392b">${F(sumOver)} Kč</div></div>
+    <div class="fin-kpi"><div style="font-size:11px;color:var(--text-muted)">Dlužníků</div><div style="font-size:22px;font-weight:700">${rows.length}</div></div>
+  </div>
+  ${qLen && ledgerPerm('LEDGER_QUEUE') ? `<div style="font-size:12px;margin-bottom:10px">📥 <a href="#" onclick="showView('ledgerQueue');return false" style="color:var(--teal)">Platby k přiřazení (${qLen})</a> — nepřiřazené platby mohou pohledávky snižovat</div>` : ''}
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+    <label style="font-size:12px"><input type="checkbox" ${f.onlyOverdue ? 'checked' : ''} onchange="finPohlSet('onlyOverdue',this.checked)"> jen po splatnosti</label>
+    <select onchange="finPohlSet('year',this.value)"><option value="all">rok: vše</option>${years.map(y => `<option ${String(f.year) === String(y) ? 'selected' : ''}>${esc(String(y))}</option>`).join('')}</select>
+    <input type="text" placeholder="hledat jméno/cestu…" value="${esc(f.q)}" oninput="finPohlSet('q',this.value)" style="width:180px">
+    <span style="font-size:11px;color:var(--text-muted)">ledger: ${esc(((led.meta || {}).updatedAt || '').replace('T', ' '))}</span>
+  </div>
+  <div class="card"><table class="lg-tbl" style="width:100%">
+    <tr><th>Účastník</th><th style="text-align:right">Cena</th><th style="text-align:right">Zaplaceno</th><th style="text-align:right">Zbývá</th><th>Splatnost</th><th></th></tr>
+    ${body || '<tr><td colspan="6" style="padding:10px;color:var(--text-muted)">Žádné pohledávky 🎉</td></tr>'}
+  </table></div>`;
+}
 function renderFinanceCashflow()    { if (!financePerm('cashflow'))    return ''; return financePlaceholder('Cashflow'); }
 function renderFinanceRentabilita() { if (!financePerm('rentabilita')) return ''; return financePlaceholder('Rentabilita'); }
 function renderFinanceUzaverka()    { if (!financePerm('uzaverka'))    return ''; return financePlaceholder('Uzávěrka'); }
