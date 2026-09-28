@@ -2718,7 +2718,9 @@ function renderFinanceDashboard() {
   const limIso = lim.toISOString().slice(0, 10);
   const soon = [];
   if (led && led.statuses) (db.trips || []).forEach(trip => {
-    if (['storno', 'done', 'accounting'].includes(trip.status)) return;
+    // 5b/6: POUZE active|ongoing|done — kalkulace/storno/accounting mimo TENTO seznam
+    // (vázané zálohy ve finDashCompute se NEMĚNÍ — kalkulace s platbami tam patří dál)
+    if (!['active', 'ongoing', 'done'].includes(trip.status)) return;
     const start = finDashTripStart(trip);
     if (!start || !(start > todayIso) || start > limIso) return;
     const stm = led.statuses[trip.id || trip.name] || {};
@@ -2773,46 +2775,66 @@ function renderFinanceDashboard() {
 function renderFinanceBanka()       { if (!financePerm('banka'))       return ''; return financeBankaHtml(); }
 function renderFinanceNaklady() {
   if (!financePerm('naklady')) return '';
-  // 4a 2.5: souhrn přímé vs. režie, rozpad kategorií, top protistrany, chybějící doklady — jen čte financeDb
-  const txs = ((financeDb && financeDb.transactions) || []).filter(t => Number(t.amount) < 0 && !t.isInternalTransfer && t.matchStatus !== 'ignored');
+  // 5b: do výpočtů vstupují POUZE výdaje (direction 'out'); příchozí vratka od
+  // dodavatele (kladná, kategorie 'vratka', s tripId nebo protistranou) se ODEČÍTÁ.
+  const all = ((financeDb && financeDb.transactions) || []).filter(t => !t.isInternalTransfer && t.matchStatus !== 'ignored');
+  const outs = all.filter(t => t.direction === 'out');
+  const refunds = all.filter(t => t.direction !== 'out' && t.categoryId === 'vratka' &&
+    (t.tripId || t.counterpartyReal || t.counterparty || t.userIdentification));
   const cats = (financeDb && financeDb.categories) || FINANCE_DEFAULT_CATEGORIES;
   const czk = t => Math.abs(Number(t.amountCZK != null ? t.amountCZK : t.amount) || 0);
+  const cpOf = t => (t.counterpartyReal || t.counterparty || t.userIdentification || '').trim() || '(neurčeno)';
   let direct = 0, rezie = 0, bezKat = 0, bezDokladu = 0;
-  const byCat = {}, byCp = {};
-  txs.forEach(t => {
+  const byCat = {}, byCp = {}, byTrip = {};
+  outs.forEach(t => {
     const c = cats.find(x => x.id === t.categoryId);
     const v = czk(t);
-    if (!c) bezKat += v;
-    else if (c.direct === false) rezie += v; else direct += v;
+    if (!t.categoryId) bezKat += v;
+    if (t.tripId) { direct += v; byTrip[t.tripId] = (byTrip[t.tripId] || 0) + v; }
+    else if (c && String(t.categoryId).indexOf('rezie-') === 0) rezie += v;
     const cn = c ? c.name : '(bez kategorie)';
     byCat[cn] = (byCat[cn] || 0) + v;
-    const cp = t.counterpartyReal || t.counterparty || t.userIdentification || '?';
-    byCp[cp] = (byCp[cp] || 0) + v;
+    byCp[cpOf(t)] = (byCp[cpOf(t)] || 0) + v;
     if (!t.docUrl && t.docStatus !== 'none_needed') bezDokladu++;
   });
-  const maxCat = Math.max(1, ...Object.values(byCat));
+  refunds.forEach(t => {
+    const v = czk(t);
+    const c = cats.find(x => x.id === t.categoryId);
+    const cn = c ? c.name : '(bez kategorie)';
+    byCat[cn] = (byCat[cn] || 0) - v;
+    byCp[cpOf(t)] = (byCp[cpOf(t)] || 0) - v;
+    if (t.tripId) { direct -= v; byTrip[t.tripId] = (byTrip[t.tripId] || 0) - v; }
+  });
+  const F = n => Math.round(n).toLocaleString('cs-CZ');
+  const maxCat = Math.max(1, ...Object.values(byCat).map(v => Math.abs(v)));
   const catBars = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([n, v]) =>
     `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;font-size:12px">
       <div style="width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(n)}</div>
-      <div style="flex:1;background:var(--bg-subtle,#f0f7f7);border-radius:4px;height:14px"><div style="width:${Math.round(v / maxCat * 100)}%;background:var(--teal);height:14px;border-radius:4px"></div></div>
-      <div style="width:110px;text-align:right">${Math.round(v).toLocaleString('cs-CZ')} Kč</div></div>`).join('');
+      <div style="flex:1;background:var(--bg-subtle,#f0f7f7);border-radius:4px;height:14px"><div style="width:${Math.round(Math.abs(v) / maxCat * 100)}%;background:${v < 0 ? '#1a7a5e' : 'var(--teal)'};height:14px;border-radius:4px"></div></div>
+      <div style="width:110px;text-align:right">${F(v)} Kč</div></div>`).join('');
   const top10 = Object.entries(byCp).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([n, v]) =>
-    `<tr><td style="padding:3px 6px">${esc(String(n).slice(0, 40))}</td><td style="padding:3px 6px;text-align:right">${Math.round(v).toLocaleString('cs-CZ')} Kč</td></tr>`).join('');
+    `<tr><td style="padding:3px 6px">${esc(String(n).slice(0, 40))}</td><td style="padding:3px 6px;text-align:right">${F(v)} Kč</td></tr>`).join('');
+  // 5b: tabulka přímých nákladů per cesta — Σ = KPI Přímé
+  const tripRows = Object.entries(byTrip).sort((a, b) => b[1] - a[1]).map(([tid, v]) => {
+    const trip = (db.trips || []).find(t => t.id === tid);
+    const nm = trip ? trip.name : tid;
+    return `<tr><td style="padding:3px 6px">${trip ? `<a href="#" onclick="showView('trip','${esc(tid)}');return false" style="color:var(--teal)">${esc(nm)}</a>` : esc(nm)}</td>
+      <td style="padding:3px 6px;text-align:right">${F(v)} Kč</td></tr>`;
+  }).join('');
   return `<div class="card"><div class="card-header"><div class="card-title">📉 Náklady ${currentFinanceYear || currentYear}</div></div>
     <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:12px;font-size:13px">
-      <div>Přímé (cesty): <b style="color:#c0392b">${Math.round(direct).toLocaleString('cs-CZ')} Kč</b></div>
-      <div>Režie: <b>${Math.round(rezie).toLocaleString('cs-CZ')} Kč</b></div>
-      ${bezKat ? `<div>Bez kategorie: <b style="color:#CDAA3A">${Math.round(bezKat).toLocaleString('cs-CZ')} Kč</b></div>` : ''}
+      <div>Přímé (cesty): <b style="color:#c0392b">${F(direct)} Kč</b></div>
+      <div>Režie: <b>${F(rezie)} Kč</b></div>
+      ${bezKat ? `<div style="cursor:pointer" onclick="financeBankaFilters.dir='out';financeBankaFilters.category='none';showFinanceTab('banka')">Bez kategorie: <b style="color:#CDAA3A">${F(bezKat)} Kč</b> <span style="color:var(--teal);font-size:11px">→ Banka</span></div>` : ''}
       <div>Chybí doklad: <b>${bezDokladu}×</b></div>
     </div>
-    <div style="font-weight:600;margin-bottom:6px">Rozpad kategorií</div>${catBars || '<div style="font-size:12px;color:var(--text-muted)">žádné výdaje</div>'}
+    <div style="font-weight:600;margin-bottom:6px">Přímé náklady per cesta</div>
+    <table class="lg-tbl" style="width:100%;margin-bottom:12px">${tripRows || '<tr><td style="padding:6px;color:var(--text-muted)">žádné</td></tr>'}</table>
+    <div style="font-weight:600;margin-bottom:6px">Rozpad kategorií (výdaje − vratky dodavatelů)</div>${catBars || '<div style="font-size:12px;color:var(--text-muted)">žádné výdaje</div>'}
     <div style="font-weight:600;margin:12px 0 6px">Top 10 protistran</div>
     <table class="lg-tbl" style="width:100%">${top10}</table>
   </div>`;
 }
-// ═══ BĚH 6 — POHLEDÁVKY (zdroj VÝHRADNĚ ledger statuses — táž data jako chip;
-// žádný vlastní výpočet ceny: cena=dueTotal, zaplaceno=paidTotal, overdue=st.overdue) ═══
-let finPohledavkyFilters = { onlyOverdue: false, year: 'all', q: '' };
 function finPohlCompute(dbData, ledgerData, eurRate) {
   const rows = [];
   const stAll = (ledgerData && ledgerData.statuses) || {};
@@ -3889,7 +3911,8 @@ function filterFinanceTxs(list, f) {
     if (f.status !== 'all' && t.matchStatus !== f.status) return false;
     if (f.month !== 'all' && String(t.date || '').slice(0, 7) !== f.month) return false;
     if (f.doc === 'chybi' && (t.docUrl || t.docStatus === 'none_needed')) return false;   // BĚH 5
-    if (f.category !== 'all' && String(t.categoryId || '') !== f.category) return false;
+    if (f.category === 'none') { if (t.categoryId) return false; }   // 5b: bez kategorie
+    else if (f.category !== 'all' && String(t.categoryId || '') !== f.category) return false;
     if (f.trip !== 'all' && String(t.tripId || '') !== f.trip) return false;
     if (q) {
       const hay = [t.counterparty, t.counterpartyReal, t.message, t.vs, t.userNote, t.comment, t.userIdentification]
