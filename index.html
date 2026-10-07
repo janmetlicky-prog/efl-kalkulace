@@ -783,6 +783,7 @@
       <button class="topbar-nav-btn" onclick="showView('clients')" id="btnClients">👥 Klienti</button>
       <button class="topbar-nav-btn" onclick="showView('instructors')" id="btnInstructors">🎓 Lektoři</button>
       <button class="topbar-nav-btn" onclick="showView('destinations')" id="btnDestinations">📍 Destinace</button>
+      <button class="topbar-nav-btn" onclick="showView('reminders')" id="btnReminders">📨 Upomínky <span id="remBadge" style="display:none;background:#CDAA3A;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px"></span></button>
       <button class="topbar-nav-btn" onclick="showView('finance')" id="btnFinance" style="display:none">💰 Finance</button>
       <button class="topbar-nav-btn" onclick="showView('ledgerQueue')" id="btnLedgerQueue" style="display:none">💳 Platby k přiřazení <span id="lqBadge" style="display:none;background:#CDAA3A;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px"></span></button>
 
@@ -1970,6 +1971,7 @@ function startGhShaPolling() {
           localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
           renderSidebar();
           if (typeof renderTripDetail === 'function') try { renderTripDetail(); } catch(e) {}
+          try { updateRemBadge(); if (currentView === 'reminders') renderReminders(); } catch(e) {}
           showGhStatus('📥 Data aktualizována ze serveru', 'ok');
           setTimeout(() => showGhStatus('', ''), 3000);
         }
@@ -2321,7 +2323,7 @@ document.addEventListener('click', e => {
 
 function updateNavActive(view) {
   document.querySelectorAll('.topbar-nav-btn').forEach(b => b.classList.remove('active'));
-  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations', finance: 'btnFinance', ledgerQueue: 'btnLedgerQueue' };
+  const map = { clients: 'btnClients', instructors: 'btnInstructors', destinations: 'btnDestinations', reminders: 'btnReminders', finance: 'btnFinance', ledgerQueue: 'btnLedgerQueue' };
   if (map[view]) {
     const el = document.getElementById(map[view]);
     if (el) el.classList.add('active');
@@ -4143,6 +4145,10 @@ function showView(view, tripId) {
     currentTripId = null;
     renderSidebar();
     renderDestinations();
+  } else if (view === 'reminders') {
+    currentTripId = null;
+    renderSidebar();
+    renderReminders();
   } else if (view === 'finance') {
     if (!financeAnyPerm()) { showView('overview'); return; }
     currentTripId = null;
@@ -7645,8 +7651,16 @@ function autofillParticipantFromClient(tripId, idx, name) {
 function updateParticipant(tripId, idx, field, val) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip || !trip.participants[idx]) return;
-  trip.participants[idx][field] = val;
+  const p = trip.participants[idx];
+  p[field] = val;
+  // APP-K1: ruční zaškrtnutí smlouvy ukončí rozjetou upomínku — worker má
+  // vlastní pojistku, tohle jen čistí seznam návrhů
+  if (field === 'contractSigned' && val && p.reminder &&
+      (p.reminder.proposed || p.reminder.approved) && !p.reminder.dismissed) {
+    p.reminder.dismissed = { at: new Date().toISOString().slice(0, 19), by: getNick(), reason: 'contractSigned ručně' };
+  }
   save(db);
+  if (field === 'contractSigned') { try { updateRemBadge(); } catch (e) {} }
 }
 
 // Aktualizuje pole + synchronizuje platbu do Sheetu
@@ -9686,6 +9700,285 @@ function lqCreateTrip(fioId) {
 }
 
 // ═══════════════════════════════════════════════
+// UPOMÍNKY (APP-K1) — schvalování návrhů workera z VPS
+// ═══════════════════════════════════════════════
+// Worker zapisuje reminder.proposed a reminder.sent; aplikace zapisuje
+// VÝHRADNĚ reminder.approved / reminder.dismissed. Žádné emaily odsud —
+// odesílá worker z info@ (R3, hodinově), a jen se schválením odsud.
+
+function remHasSentLevel(p, level) {
+  return ((p.reminder || {}).sent || []).some(s => s.level === level);
+}
+
+// Návrhy ke schválení: proposed ∧ bez approved/sent téže úrovně ∧ bez
+// dismissed ∧ !contractSigned ∧ !isCancelled. Řazení: úroveň 2 nahoře, pak dní ↓.
+function remRows() {
+  const rows = [];
+  (db.trips || []).forEach(t => (t.participants || []).forEach(p => {
+    const r = p.reminder || {};
+    const prop = r.proposed;
+    if (!prop) return;
+    if (p.contractSigned || p.isCancelled || r.dismissed) return;
+    if (r.approved && r.approved.level === prop.level) return;
+    if (remHasSentLevel(p, prop.level)) return;
+    rows.push({ trip: t, p, prop });
+  }));
+  rows.sort((a, b) => (b.prop.level - a.prop.level) || ((b.prop.daysSinceSent || 0) - (a.prop.daysSinceSent || 0)));
+  return rows;
+}
+function remWaiting() {   // approved bez sent téže úrovně — worker je teprve odešle
+  const rows = [];
+  (db.trips || []).forEach(t => (t.participants || []).forEach(p => {
+    const r = p.reminder || {};
+    if (r.approved && !r.dismissed && !remHasSentLevel(p, r.approved.level)) rows.push({ trip: t, p, ap: r.approved });
+  }));
+  return rows;
+}
+function remCutoff30() { return new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 19); }
+function remSentRecent() {
+  const cut = remCutoff30(), rows = [];
+  (db.trips || []).forEach(t => (t.participants || []).forEach(p => {
+    ((p.reminder || {}).sent || []).forEach(s => { if ((s.at || '') >= cut) rows.push({ trip: t, p, s }); });
+  }));
+  return rows.sort((a, b) => (b.s.at || '').localeCompare(a.s.at || ''));
+}
+function remDismissedRecent() {
+  const cut = remCutoff30(), rows = [];
+  (db.trips || []).forEach(t => (t.participants || []).forEach(p => {
+    const d = (p.reminder || {}).dismissed;
+    if (d && (d.at || '') >= cut) rows.push({ trip: t, p, d });
+  }));
+  return rows.sort((a, b) => (b.d.at || '').localeCompare(a.d.at || ''));
+}
+function updateRemBadge() {
+  const el = document.getElementById('remBadge');
+  if (!el) return;
+  const n = remRows().length;
+  el.textContent = n;
+  el.style.display = n ? '' : 'none';
+}
+
+// ── atomický zápis: výhradně participant.reminder ──
+// Identita jako worker: trip id+name SOUČASNĚ (duplicitní trip.id existují),
+// účastník VS+jméno (manželé sdílí VS), fallback email+jméno, pak jméno.
+function remFindParticipant(data, m) {
+  for (const t of (data.trips || [])) {
+    if (m.tripId) { if (t.id !== m.tripId || t.name !== m.tripName) continue; }
+    else if (t.name !== m.tripName) continue;
+    for (const p of (t.participants || [])) {
+      if (m.vs) { if (String(p.vs || '').trim() === m.vs && (p.name || '') === m.name) return p; }
+      else if (m.email) { if ((p.email || '').toLowerCase().trim() === m.email && (p.name || '') === m.name) return p; }
+      else if ((p.name || '') === m.name) return p;
+    }
+  }
+  return null;
+}
+function remMutation(trip, p, apply) {
+  return { tripId: trip.id || null, tripName: trip.name, vs: String(p.vs || '').trim(),
+           email: (p.email || '').toLowerCase().trim(), name: p.name || '', apply };
+}
+// Gate po vzoru Z20: smí se změnit JEN pole reminder — cokoli jiného = odmítnout
+function remDiffOutsideReminder(before, work) {
+  const strip = d => JSON.stringify(d, (k, v) => k === 'reminder' ? undefined : v);
+  return strip(before) !== strip(work);
+}
+async function remApplyWrite(mutations) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const before = JSON.parse(JSON.stringify(db));
+    const work = JSON.parse(JSON.stringify(db));
+    const missed = [];
+    mutations.forEach(m => { const p = remFindParticipant(work, m); if (p) m.apply(p); else missed.push(m.name); });
+    if (missed.length === mutations.length) return { ok: false, error: 'účastníci nenalezeni: ' + missed.join(', ') };
+    if (remDiffOutsideReminder(before, work)) {
+      console.error('[upomínky] gate: změna mimo reminder — zápis odmítnut');
+      return { ok: false, error: 'interní chyba: změna mimo reminder (zápis odmítnut)' };
+    }
+    const r = await saveAwait(work);
+    if (r.ok) { db = work; ghSetSha(r.sha); return { ok: true, missed }; }
+    if (r.stale && attempt === 1) {
+      // Z19: cizí zápis mezitím → čerstvá data a reaplikace téže operace (Z9: nikdy force)
+      const fresh = await ghLoad();
+      if (!fresh) return { ok: false, error: 'čerstvá data nejdou načíst' };
+      db = migrateData(fresh);
+      continue;
+    }
+    return { ok: false, error: r.stale ? 'konflikt i po reaplikaci' : (r.error || '?') };
+  }
+  return { ok: false, error: 'konflikt i po opakování' };
+}
+
+// ── akce ──
+async function remApproveSelected() {
+  const checks = Array.from(document.querySelectorAll('.rem-check:checked'));
+  if (!checks.length) { lgToast('Nic není vybráno.'); return; }
+  const rows = remRows();
+  const sel = checks.map(c => rows[parseInt(c.dataset.i, 10)]).filter(Boolean);
+  if (!sel.length) return;
+  if (!confirm('Odeslat upomínku ' + sel.length + ' klientům?\n\nWorker odešle z info@ do hodiny.')) return;
+  const at = new Date().toISOString().slice(0, 19);
+  const by = getNick();
+  const muts = sel.map(r => remMutation(r.trip, r.p, p => {
+    p.reminder = p.reminder || {};
+    p.reminder.approved = { level: r.prop.level, at, by };
+  }));
+  const res = await remApplyWrite(muts);
+  if (res.ok) {
+    lgToast('✅ Schváleno ' + (sel.length - res.missed.length) + ' upomínek — worker odešle do hodiny.' +
+      (res.missed.length ? ' Nenalezeni: ' + res.missed.join(', ') : ''), 6000);
+    renderReminders();
+  } else lgToast('⛔ Zápis selhal: ' + res.error, 8000);
+}
+async function remDismissRow(i) {
+  const r = remRows()[i];
+  if (!r) return;
+  const reason = prompt('Zahodit návrh pro ' + (r.p.name || '?') + '?\nVolitelný důvod (např. „smlouva přišla jinudy", „klient se omluvil"):', '');
+  if (reason === null) return;
+  const res = await remApplyWrite([remMutation(r.trip, r.p, p => {
+    p.reminder = p.reminder || {};
+    p.reminder.dismissed = { at: new Date().toISOString().slice(0, 19), by: getNick(), reason: reason || '' };
+  })]);
+  if (res.ok) { lgToast('Zahozeno — worker už nenavrhne (dokud se neobnoví).'); renderReminders(); }
+  else lgToast('⛔ Zápis selhal: ' + res.error, 8000);
+}
+async function remUnapprove(i) {
+  const r = remWaiting()[i];
+  if (!r) return;
+  if (!confirm('Zrušit schválení pro ' + (r.p.name || '?') + '?\nWorker upomínku nepošle (pokud ji ještě neodeslal).')) return;
+  const res = await remApplyWrite([remMutation(r.trip, r.p, p => {
+    if (p.reminder) delete p.reminder.approved;
+  })]);
+  if (res.ok) { lgToast('Schválení zrušeno.'); renderReminders(); }
+  else lgToast('⛔ Zápis selhal: ' + res.error, 8000);
+}
+async function remRestore(i) {
+  const r = remDismissedRecent()[i];
+  if (!r) return;
+  if (!confirm('Obnovit ' + (r.p.name || '?') + '? Worker příští ráno znovu navrhne (trvá-li důvod).')) return;
+  const res = await remApplyWrite([remMutation(r.trip, r.p, p => {
+    if (p.reminder) delete p.reminder.dismissed;
+  })]);
+  if (res.ok) { lgToast('Obnoveno — worker ráno přepočítá.'); renderReminders(); }
+  else lgToast('⛔ Zápis selhal: ' + res.error, 8000);
+}
+
+// ── náhled textu (stejné šablony jako worker — jen pro čtení) ──
+function remTemplateSubject(level, tripName) {
+  return (level === 1 ? 'Připomínka — podpis smlouvy | ' : 'Důležité: podpis smlouvy | ') + tripName;
+}
+function remTemplateHtml(level, tripName) {
+  const t = esc(tripName);
+  const addr = '<a href="mailto:info@essenceforlife.cz" style="color:#03989E">info@essenceforlife.cz</a>';
+  const head = '<div style="font-family:Arial,sans-serif;font-size:14px;color:#2c2c2c;line-height:1.6"><p>Dobrý den!</p>';
+  const tail = '<p>S láskou k cestám,<br><strong>Tým Essence for Life</strong></p><p style="color:#888;font-size:12px">(+ podpis s logem)</p></div>';
+  if (level === 1) return head +
+    '<p>Rádi bychom vám připomněli, že jsme vám zaslali smlouvu na cestu <strong>' + t + '</strong> a dosud jsme ji od vás neobdrželi zpět podepsanou.</p>' +
+    '<p>Prosíme, podepište smlouvu a zašlete ji zpět na adresu ' + addr + '.</p>' +
+    '<p>Pokud jste smlouvu již odeslali nebo máte jakékoli dotazy, neváhejte nás kontaktovat — rádi pomůžeme.</p>' +
+    '<p>Těšíme se na vás!</p>' + tail;
+  return head +
+    '<p>Obrací se na vás tým Essence for Life ohledně smlouvy na cestu <strong>' + t + '</strong>.</p>' +
+    '<p>Smlouvu jsme vám zaslali před delší dobou a stále ji nemáme podepsanou zpět. Bez podpisu smlouvy nemůžeme vaše místo plně garantovat.</p>' +
+    '<p>Prosíme, zašlete podepsanou smlouvu co nejdříve na adresu ' + addr + '.</p>' +
+    '<p>Pokud máte jakékoli otázky nebo potřebujete smlouvu znovu zaslat, kontaktujte nás.</p>' + tail;
+}
+function remPreview(level, tripName) {
+  let ov = document.getElementById('remPreviewOv');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'remPreviewOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9000;display:flex;align-items:center;justify-content:center';
+    ov.onclick = e => { if (e.target === ov) ov.remove(); };
+    document.body.appendChild(ov);
+  }
+  ov.innerHTML = '<div style="background:#fff;border-radius:12px;max-width:560px;width:92%;max-height:80vh;overflow:auto;padding:24px" onclick="event.stopPropagation()">' +
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">' +
+    '<strong>Náhled upomínky — úroveň ' + level + '</strong>' +
+    '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'remPreviewOv\').remove()">Zavřít</button></div>' +
+    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Předmět: ' + esc(remTemplateSubject(level, tripName)) + '</div>' +
+    '<div style="border:1px solid #e2e8f0;border-radius:8px;padding:16px">' + remTemplateHtml(level, tripName) + '</div></div>';
+}
+
+// ── render ──
+function renderReminders() {
+  const rows = remRows();
+  const waiting = remWaiting();
+  const sent = remSentRecent();
+  const dis = remDismissedRecent();
+  const fmtAt = s => (s || '').replace('T', ' ').slice(0, 16);
+  const noteOf = p => { const n = (p.notes || '').trim(); return n ? esc(n.length > 60 ? '…' + n.slice(-60) : n) : '—'; };
+  const lvl = (level, tripName) => '<span style="font-weight:700;color:' + (level === 2 ? '#c0392b' : '#a8871e') + '">' + level +
+    '</span> <span style="color:var(--text-muted);font-size:11px">(' + (level === 2 ? '30' : '7') + ' dní)</span> ' +
+    '<button class="lg-tx-btn" title="Náhled textu" onclick="remPreview(' + level + ',' + JSON.stringify(tripName).replace(/"/g, '&quot;') + ')">👁</button>';
+
+  const mainTbl = rows.length ? `
+    <table class="lg-tbl">
+      <tr><th><input type="checkbox" onchange="document.querySelectorAll('.rem-check').forEach(c=>c.checked=this.checked)"></th>
+      <th>Jméno</th><th>Cesta</th><th>Email</th><th>Dní od odeslání</th><th>Úroveň</th><th>Navrženo</th><th>Poslední poznámka</th><th></th></tr>
+      ${rows.map((r, i) => `<tr>
+        <td><input type="checkbox" class="rem-check" data-i="${i}"></td>
+        <td style="font-weight:600">${esc(r.p.name || '—')}</td>
+        <td>${esc((r.trip.name || '').slice(0, 45))}</td>
+        <td style="font-size:12px">${esc(r.p.email || '—')}</td>
+        <td style="text-align:center;font-weight:600">${r.prop.daysSinceSent != null ? r.prop.daysSinceSent : '—'}</td>
+        <td>${lvl(r.prop.level, r.trip.name || '')}</td>
+        <td style="font-size:12px">${fmtAt(r.prop.at)}</td>
+        <td style="font-size:11px;color:var(--text-muted)" title="${esc(r.p.notes || '')}">${noteOf(r.p)}</td>
+        <td><button class="lg-tx-btn" onclick="remDismissRow(${i})">Zahodit</button></td>
+      </tr>`).join('')}
+    </table>
+    <div style="margin-top:12px"><button class="btn btn-primary" onclick="remApproveSelected()">📨 Odeslat vybrané</button>
+    <span style="font-size:12px;color:var(--text-muted);margin-left:10px">Worker odešle z info@ do hodiny (běhy 8–21 h).</span></div>`
+    : '<div style="padding:18px;color:var(--text-muted)">Žádné návrhy ke schválení. Worker navrhuje každé ráno v 8:00.</div>';
+
+  const waitTbl = waiting.length ? `
+    <table class="lg-tbl"><tr><th>Jméno</th><th>Cesta</th><th>Úroveň</th><th>Schváleno</th><th></th></tr>
+    ${waiting.map((r, i) => `<tr>
+      <td style="font-weight:600">${esc(r.p.name || '—')}</td><td>${esc((r.trip.name || '').slice(0, 45))}</td>
+      <td style="text-align:center">${r.ap.level}</td>
+      <td style="font-size:12px">${fmtAt(r.ap.at)} — ${esc(r.ap.by || '?')}</td>
+      <td><button class="lg-tx-btn" onclick="remUnapprove(${i})">Zrušit schválení</button></td>
+    </tr>`).join('')}</table>`
+    : '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Nic nečeká na odeslání.</div>';
+
+  const sentTbl = sent.length ? `
+    <table class="lg-tbl"><tr><th>Jméno</th><th>Cesta</th><th>Úroveň</th><th>Kdy</th><th>Komu</th></tr>
+    ${sent.map(r => `<tr>
+      <td>${esc(r.p.name || '—')}</td><td>${esc((r.trip.name || '').slice(0, 45))}</td>
+      <td style="text-align:center">${r.s.level}</td><td style="font-size:12px">${fmtAt(r.s.at)}</td>
+      <td style="font-size:12px">${esc(r.s.to || '—')}</td>
+    </tr>`).join('')}</table>`
+    : '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Za posledních 30 dní nic neodesláno.</div>';
+
+  const disTbl = dis.length ? `
+    <table class="lg-tbl"><tr><th>Jméno</th><th>Cesta</th><th>Kdy</th><th>Kým</th><th>Důvod</th><th></th></tr>
+    ${dis.map((r, i) => `<tr>
+      <td>${esc(r.p.name || '—')}</td><td>${esc((r.trip.name || '').slice(0, 45))}</td>
+      <td style="font-size:12px">${fmtAt(r.d.at)}</td><td style="font-size:12px">${esc(r.d.by || '?')}</td>
+      <td style="font-size:12px">${esc(r.d.reason || '—')}</td>
+      <td><button class="lg-tx-btn" onclick="remRestore(${i})">Obnovit</button></td>
+    </tr>`).join('')}</table>`
+    : '<div style="font-size:12px;color:var(--text-muted);padding:6px 0">Za posledních 30 dní nic nezahozeno.</div>';
+
+  document.getElementById('content').innerHTML = `
+    <div style="max-width:1150px">
+      <h2 style="margin:0 0 4px">📨 Upomínky smluv</h2>
+      <p style="font-size:13px;color:var(--text-muted);margin:0 0 18px">
+        Worker každé ráno v 8:00 navrhne, kdo má dostat upomínku (7 / 30 dní od odeslání smlouvy).
+        Klientům se odešle <strong>jen to, co zde schválíš</strong> — z adresy info@, do hodiny od schválení.
+      </p>
+      <h3 style="margin:0 0 8px">Ke schválení (${rows.length})</h3>
+      ${mainTbl}
+      <h3 style="margin:26px 0 8px">Čeká na odeslání (${waiting.length})</h3>
+      ${waitTbl}
+      <h3 style="margin:26px 0 8px">Odesláno — posledních 30 dní (${sent.length})</h3>
+      ${sentTbl}
+      <h3 style="margin:26px 0 8px">Zahozeno — posledních 30 dní (${dis.length})</h3>
+      ${disTbl}
+    </div>`;
+  updateRemBadge();
+}
+
+// ═══════════════════════════════════════════════
 // ROLE & PIN SYSTEM
 // ═══════════════════════════════════════════════
 const PINS = {
@@ -9809,6 +10102,7 @@ async function initApp() {
   if (_btnLQ) _btnLQ.style.display = ledgerPerm('LEDGER_QUEUE') ? '' : 'none';
 
   renderSidebar();
+  try { updateRemBadge(); } catch (e) {}
   if (isColleague()) {
     showView('clients');
   } else {
