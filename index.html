@@ -569,7 +569,12 @@
   .k2-marker { background:#fff3a3; color:#6b5300; padding:0 3px; border-radius:3px; }
   .k2-warn { font-size:12px; color:#b03a2e; background:#fde8e8; border-radius:8px; padding:6px 10px; }
   .k2-ok { font-size:12px; color:#1f7a4d; }
-  body.dark-mode .k2-editor, body.dark-mode .k2-scroll .lg-tbl th { background:#fff; color:#2c2c2c; }
+  .k2-editor table, .k2-mailpreview table { border-collapse:collapse; font-size:13px; margin:8px 0; }
+  .k2-editor th, .k2-editor td, .k2-mailpreview th, .k2-mailpreview td { border:1px solid #c8e4e5; padding:4px 8px; text-align:left; }
+  .k2-editor th, .k2-mailpreview th { background:#f0fafa; }
+  .k2-mailpreview { border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:#fff; max-height:50vh; overflow:auto; }
+  .k2-log-row { cursor:pointer; } .k2-log-row:hover td { background:#f7fbfb; }
+  body.dark-mode .k2-editor, body.dark-mode .k2-scroll .lg-tbl th, body.dark-mode .k2-mailpreview { background:#fff; color:#2c2c2c; }
   .lq-row { background:#fff; border:1px solid #c8e4e5; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
   .lq-row.lq-hidden { display:none; }
   .lq-badge-hi { background:#CDAA3A; color:#fff; border-radius:8px; padding:1px 8px; font-size:10px; font-weight:700; }
@@ -6946,6 +6951,9 @@ function renderTripDetail() {
     <!-- PLATBY (KROK 4 — ledger) -->
     <div id="lgTripCard">${lgRenderTripCard(trip)}</div>
 
+    <!-- ODESLANÉ EMAILY (APP-K2) -->
+    <div id="k2LogCard">${k2RenderLogCard(trip)}</div>
+
      <!-- ÚČASTNÍCI-->
     <div class="card">
       <div class="card-header">
@@ -9807,7 +9815,8 @@ function k2Termin(trip) {
 }
 
 // ── sanitizer — STEJNÝ whitelist jako worker (efl/sanitize.py), bez DOMParseru (testovatelný v node) ──
-const K2_ALLOWED_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'span', 'div', 'h3', 'h4']);
+const K2_ALLOWED_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'span', 'div', 'h3', 'h4',
+  'table', 'thead', 'tbody', 'tr', 'th', 'td']);   // tabulka přehledu pro lektora (stejně jako worker)
 function k2SanitizeHtml(raw) {
   let s = String(raw || '');
   s = s.replace(/<!--[\s\S]*?-->/g, '');
@@ -9833,7 +9842,7 @@ function k2SanitizeHtml(raw) {
 function k2HtmlToText(html) {
   return String(html || '')
     .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h3|h4)>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h3|h4|tr)>/gi, '\n').replace(/<(td|th)\b[^>]*>/gi, ' | ')
     .replace(/<[^>]+>/g, '')
     .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
 }
@@ -10020,6 +10029,7 @@ let _k2 = null;   // { trip, recs, states, draftAbsent, tplSource, selected:Set,
 function k2Btns(trip) {
   return `<div id="k2Btns" style="display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 16px">
     <button class="btn btn-secondary btn-sm" onclick="k2OpenPredodlet('${trip.id}')" style="background:#f0fafa;border-color:#03989E;color:#03989E">📧 Předodletové info</button>
+    <button class="btn btn-secondary btn-sm" onclick="k2OpenLektor('${trip.id}')" style="background:#f0fafa;border-color:#03989E;color:#03989E">📧 Přehled pro lektora</button>
   </div>`;
 }
 
@@ -10230,6 +10240,7 @@ async function k2SendPredodlet() {
     const dbr = await k2DbWrite(muts);
     if (!dbr.ok) lgToast('⚠ Zařazeno do fronty, ale příznak u účastníků se nezapsal (' + dbr.error + ') — worker odešle, štítky doplní sám.', 9000);
     else lgToast('Zařazeno do fronty (' + recipients.length + ' emailů, ' + persons + ' osob) — odejde do 5 minut.', 7000);
+    _k2LogCache = null;
     k2Close();
     if (currentView === 'trip') renderTripDetail();
   } catch (e) {
@@ -10280,6 +10291,316 @@ async function k2TplSave() {
   const r = await ghSaveFile(K2_TEMPLATES_PATH, data, { absentOk: !!_k2Tpl.absent, message: 'email-templates: predodlet (' + getNick() + ')' });
   if (r.ok) { lgToast('Kostra uložena.'); document.getElementById('k2TplOv').classList.add('hidden'); }
   else lgToast('⛔ Uložení kostry selhalo: ' + (r.error || (r.conflict ? 'konflikt' : '?')), 8000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// PŘEHLED PRO LEKTORA + KARTA 📬 ODESLANÉ EMAILY (APP-K2, BĚH 4)
+// ─────────────────────────────────────────────────────────────
+// Lektor dostane JEN stavy (slovy), nikdy částky; žádné RČ, narození, adresy,
+// telefony, pasy, VS, poznámky účastníků ani emaily ostatních klientů.
+// Frontend u lektora do db.json nezapisuje nic — jen záznam do outboxu.
+
+const K2_MIGRATION_BATCH = ['2026-03-15T09:30:00', '2026-03-15T09:35:00'];   // hromadná migrace, ne přihlášení
+const K2_TYPE_LABEL = { predodlet: 'Předodletové info', lektor: 'Přehled lektorovi' };
+const K2_STATUS_LABEL = { queued: '⏳ ve frontě', sending: '⏳ ve frontě', sent: '✓ odesláno', partial: '⚠ částečně', error: '✗ chyba', dry: 'dry-run' };
+const K2_EMAIL_RE = /^[^@\s,;<>"'\r\n]+@[^@\s,;<>"'\r\n]+\.[^@\s,;<>"'\r\n]+$/;
+
+function k2FmtDateFull(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? parseInt(m[3], 10) + '. ' + parseInt(m[2], 10) + '. ' + m[1] : '';
+}
+
+// ── datum přihlášení: registeredAt → form_p_ razítko mimo migrační dávku (jen řazení) → pořadí v poli ──
+function k2RegAt(p) {
+  if (p.registeredAt) return { iso: String(p.registeredAt).slice(0, 19), show: true };
+  const m = String(p.id || '').match(/^form_p_(\d{13})/);
+  if (m) {
+    const iso = k2NowIsoOf(new Date(parseInt(m[1], 10)));
+    if (iso < K2_MIGRATION_BATCH[0] || iso > K2_MIGRATION_BATCH[1]) return { iso, show: false };
+  }
+  return { iso: null, show: false };
+}
+function k2RegOrder(trip) {
+  return (trip.participants || []).map((p, idx) => ({ p, idx, reg: k2RegAt(p) }))
+    .filter(x => !x.p.isCancelled)
+    .sort((a, b) => {
+      if (a.reg.iso && b.reg.iso) return a.reg.iso.localeCompare(b.reg.iso) || a.idx - b.idx;
+      if (a.reg.iso) return -1;
+      if (b.reg.iso) return 1;
+      return a.idx - b.idx;
+    });
+}
+
+// ── stavy plateb slovy (ze statusu ledgeru + installments; nikdy částky) ──
+function k2PayColumns(n) {
+  if (n <= 1) return ['Platba'];
+  if (n === 2) return ['1. záloha', 'Doplatek'];
+  const out = ['1. záloha'];
+  for (let k = 2; k < n; k++) out.push(k + '. splátka');
+  out.push('Doplatek');
+  return out;
+}
+function k2PayWords(st, today) {
+  const W = { paid: 'zaplaceno', part: 'částečně', un: 'nezaplaceno', other: 'hrazeno jiným účastníkem' };
+  if (!st) return { words: ['—'], kind: 'none' };
+  const stat = st.status || '';
+  const inst = st.installments || [];
+  const n = inst.length;
+  if (stat === 'v_cene_jineho') return { words: Array(Math.max(n, 1)).fill(W.other), kind: 'other' };
+  if (!n || ['bez_rozpisu', 'historie', 'storno', 'k_vraceni'].includes(stat)) return { words: Array(Math.max(n, 1)).fill('—'), kind: 'none' };
+  let words, m;
+  if (stat === 'zaplaceno' || stat === 'preplatek') words = Array(n).fill(W.paid);
+  else if ((m = stat.match(/^splatka_(\d+)_ok$/))) { const k = +m[1]; words = Array.from({ length: n }, (_, i) => i < k ? W.paid : W.un); }
+  else if ((m = stat.match(/^castecne_(\d+)$/))) { const k = +m[1]; words = Array.from({ length: n }, (_, i) => i < k - 1 ? W.paid : i === k - 1 ? W.part : W.un); }
+  else if (stat === 'nezaplaceno') words = Array(n).fill(W.un);
+  else return { words: Array(n).fill('—'), kind: 'none' };
+  if (st.overdue) {                                   // „po splatnosti" jen s příznakem ledgeru (= červený štítek)
+    today = today || k2NowIso().slice(0, 10);
+    let i = words.findIndex((w, j) => w !== W.paid && inst[j] && String(inst[j].due || '').slice(0, 10) < today);
+    if (i < 0) i = words.findIndex(w => w !== W.paid);
+    if (i >= 0) words[i] += ' (po splatnosti)';
+  }
+  return { words, kind: 'ok' };
+}
+const k2IsPaidWord = w => /^zaplaceno/.test(w) || /^hrazeno/.test(w);
+
+// ── tabulka pro lektora (statusOf = lgStatusOf; injektovatelné kvůli testům) ──
+function k2BuildLectorTable(trip, statusOf, today) {
+  const rows = k2RegOrder(trip);
+  const sts = rows.map(r => statusOf ? statusOf(trip, r.p) : null);
+  const nCols = Math.max(1, ...sts.map(s => ((s && s.installments) || []).length));
+  const cols = k2PayColumns(nCols);
+  let signed = 0, firstPaid = 0, fullyPaid = 0;
+  const body = rows.map((r, i) => {
+    const pw = k2PayWords(sts[i], today);
+    if (r.p.contractSigned) signed++;
+    if (pw.kind !== 'none' && k2IsPaidWord(pw.words[0])) firstPaid++;
+    if (pw.kind !== 'none' && pw.words.every(k2IsPaidWord)) fullyPaid++;
+    let cells;
+    if (pw.words.length === nCols) cells = pw.words.map(w => '<td>' + esc(w) + '</td>').join('');
+    else if (pw.kind === 'none') cells = Array(nCols).fill('<td>—</td>').join('');
+    else cells = '<td>' + esc(pw.words[0]) + ' (jednorázová platba)</td>' + Array(nCols - 1).fill('<td>—</td>').join('');   // bez colspan — sanitizer atributy zahazuje
+    return '<tr><td>' + (i + 1) + '</td><td>' + esc(r.p.name || '') + '</td><td>' + (r.reg.show ? esc(k2FmtDateFull(r.reg.iso)) : '') + '</td>' +
+      '<td>' + (r.p.contractSigned ? '✓ podepsána' : '—') + '</td>' + cells + '<td></td></tr>';
+  }).join('');
+  const head = '<tr><th>Č.</th><th>Jméno</th><th>Přihlášen(a)</th><th>Smlouva</th>' + cols.map(c => '<th>' + c + '</th>').join('') + '<th>Poznámka</th></tr>';
+  const summary = { total: rows.length, signed, firstPaid, fullyPaid, minPersons: trip.minPersons || 0, singlePay: nCols === 1 };
+  return { html: '<table><thead>' + head + '</thead><tbody>' + body + '</tbody></table>', summary, cols };
+}
+function k2LectorSummaryHtml(s) {
+  return '<p>Přihlášeno celkem: <strong>' + s.total + '</strong> · Smlouva podepsána: ' + s.signed + ' z ' + s.total +
+    ' · ' + (s.singlePay ? 'Platba zaplacena' : '1. záloha zaplacena') + ': ' + s.firstPaid + ' z ' + s.total +
+    ' · Plně zaplaceno: ' + s.fullyPaid + ' z ' + s.total + ' · Minimální počet osob: ' + s.minPersons + '</p>';
+}
+function k2LectorBody(trip, tbl, todayLabel) {
+  return '<p>Dobrý den,</p>' +
+    '<p>posíláme aktuální přehled přihlášených na cestu <strong>' + esc(trip.name || '') + '</strong>' + (trip.date ? ' (' + esc(k2Termin(trip)) + ')' : '') + ', stav k ' + esc(todayLabel) + '.</p>' +
+    tbl.html + k2LectorSummaryHtml(tbl.summary) +
+    '<p>Pokud něco nesedí nebo potřebujete doplnit, ozvěte se nám prosím na info@essenceforlife.cz.</p>' +
+    '<p>S pozdravem<br>Tým Essence for Life</p>';
+}
+
+// ── lektor ↔ cesta: stejná fuzzy shoda jako jinde v aplikaci (ř. ~5332) a jako worker ──
+function k2InstructorMatches(tripInstr, name) {
+  const lname = (tripInstr || '').toLowerCase().trim(), iname = (name || '').toLowerCase().trim();
+  if (!lname || !iname) return false;
+  const lLast = lname.split(/\s+/).pop(), iLast = iname.split(/\s+/).pop();
+  return lLast === iLast ||
+    (lLast.length > 4 && iLast.startsWith(lLast.substring(0, lLast.length - 1))) ||
+    (iLast.length > 4 && lLast.startsWith(iLast.substring(0, iLast.length - 1))) ||
+    lname === iname || (lname.length > 5 && iname.includes(lname)) || (iname.length > 5 && lname.includes(iname));
+}
+function k2FindInstructors(trip) {
+  return getInstructors().filter(i => k2InstructorMatches(trip.instructor, i.name));
+}
+
+// ── modal Přehled pro lektora ──
+let _k2L = null;
+async function k2OpenLektor(tripId) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  let ov = document.getElementById('k2LOv');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'k2LOv'; ov.className = 'modal-overlay';
+    ov.onclick = e => { if (e.target === ov) k2LClose(); };
+    document.body.appendChild(ov);
+  }
+  ov.classList.remove('hidden');
+  ov.innerHTML = '<div class="modal k2-modal" onclick="event.stopPropagation()"><h2>📧 Přehled pro lektora</h2><div style="color:var(--text-muted)">Načítám stavy plateb…</div></div>';
+  if (!lgLedger) {
+    await lgLoadLedger();
+    for (let i = 0; i < 20 && lgLedgerState === 'loading'; i++) await new Promise(r => setTimeout(r, 500));
+  }
+  const ledgerOk = !!lgLedger;
+  const instr = k2FindInstructors(trip);
+  const withMail = instr.filter(i => (i.email || '').includes('@'));
+  const today = k2NowIso().slice(0, 10), todayLabel = k2FmtDateFull(today);
+  const tbl = k2BuildLectorTable(trip, ledgerOk ? lgStatusOf : null, today);
+  _k2L = { trip, ledgerOk, instr, allowed: new Set(withMail.map(i => i.email.toLowerCase().trim())),
+    email: withMail.length ? withMail[0].email : '',
+    subject: 'Přehled přihlášených — ' + (trip.name || '') + ' (k ' + todayLabel + ')',
+    body: k2LectorBody(trip, tbl, todayLabel), today, todayLabel, ack: false };
+  k2LRender();
+}
+function k2LClose() {
+  const ov = document.getElementById('k2LOv');
+  if (ov) ov.classList.add('hidden');
+  _k2L = null;
+}
+function k2LRender() {
+  const c = _k2L; if (!c) return;
+  const emailOk = K2_EMAIL_RE.test(c.email.trim());
+  const override = emailOk && !c.allowed.has(c.email.trim().toLowerCase());
+  let who;
+  if (c.instr.length && c.allowed.size) who = '<span class="k2-ok">Lektor: ' + esc(c.instr.filter(i => (i.email || '').includes('@')).map(i => i.name + ' <' + i.email + '>').join(', ')) + '</span>';
+  else if (c.instr.length) who = '<span class="k2-warn">Lektor ' + esc(c.instr.map(i => i.name).join(', ')) + ' nemá v seznamu lektorů email — doplň adresu ručně (odeslání je do té doby zablokované).</span>';
+  else who = '<span class="k2-warn">Cesta nemá napojeného lektora s emailem (lektor cesty: „' + esc(c.trip.instructor || '—') + '") — doplň adresu ručně.</span>';
+  const canSend = emailOk && (c.ledgerOk || c.ack);
+  document.getElementById('k2LOv').innerHTML = '<div class="modal k2-modal" onclick="event.stopPropagation()">' +
+    '<h2 style="margin-bottom:4px">📧 Přehled pro lektora</h2>' +
+    '<div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">' + esc(c.trip.name) + ' — jen stavy, žádné částky ani osobní údaje. Bez kopie na info@.</div>' +
+    (c.ledgerOk ? '' : '<div class="k2-warn" style="margin-bottom:8px">⚠ Ledger plateb není dostupný — stavy plateb jsou „—". <label style="display:inline-flex;gap:6px;align-items:center;margin-left:8px"><input type="checkbox" ' + (c.ack ? 'checked' : '') + ' onchange="_k2L.ack=this.checked;k2LSyncEditor();k2LRender()"> Rozumím, odeslat i bez stavů plateb</label></div>') +
+    '<label style="display:block;font-size:12px;font-weight:600;margin:8px 0 4px">Komu</label>' +
+    '<input type="text" id="k2LEmail" value="' + esc(c.email) + '" oninput="_k2L.email=this.value;k2LSyncEditor();k2LRender()" placeholder="email lektora" style="width:100%;padding:8px 10px;border:1.5px solid ' + (emailOk ? 'var(--border)' : '#e53e3e') + ';border-radius:8px;font-family:inherit;font-size:14px;box-sizing:border-box">' +
+    '<div style="font-size:12px;margin:4px 0 8px">' + who + (override ? ' <span class="k2-tag k2-tag-wait">⚠ adresa zadána ručně — worker ji v logu označí</span>' : '') + '</div>' +
+    '<label style="display:block;font-size:12px;font-weight:600;margin:8px 0 4px">Předmět</label>' +
+    '<input type="text" id="k2LSubject" value="' + esc(c.subject) + '" oninput="_k2L.subject=this.value" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;box-sizing:border-box">' +
+    '<label style="display:block;font-size:12px;font-weight:600;margin:10px 0 4px">Email <span style="font-weight:400;color:var(--text-muted)">(tabulku i text lze upravit; sloupec Poznámka je pro vás)</span></label>' +
+    k2Editor('k2LBody', c.body).replace('oninput="k2OnEdit()"', 'oninput="k2LSyncEditor()"') +
+    '<div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap">' +
+    '<button class="btn btn-secondary btn-sm" onclick="k2LRegen()">↻ Přegenerovat tabulku</button>' +
+    '<div style="display:flex;gap:8px"><button class="btn btn-secondary" onclick="k2LClose()">Zrušit</button>' +
+    '<button class="btn btn-primary" id="k2LSendBtn" onclick="k2SendLektor()" ' + (canSend ? '' : 'disabled') + '>📧 Odeslat lektorovi</button></div></div></div>';
+  const ei = document.getElementById('k2LEmail');
+  if (ei && document.activeElement !== ei && !c._subjectFocus) { /* bez auto-focusu — re-render při psaní by skákal */ }
+}
+function k2LSyncEditor() {
+  const c = _k2L; if (!c) return;
+  const b = document.getElementById('k2LBody'), s = document.getElementById('k2LSubject');
+  if (b) c.body = b.innerHTML;
+  if (s) c.subject = s.value;
+}
+function k2LRegen() {
+  const c = _k2L; if (!c) return;
+  if (!confirm('Přegenerovat tabulku z aktuálních dat? Zahodí ruční úpravy tabulky (text okolo zůstane).')) return;
+  k2LSyncEditor();
+  const tbl = k2BuildLectorTable(c.trip, c.ledgerOk ? lgStatusOf : null, c.today);
+  const re = /<table[\s\S]*?<\/table>/i;
+  c.body = re.test(c.body) ? c.body.replace(re, tbl.html) : c.body + tbl.html;
+  k2LRender();
+}
+async function k2SendLektor() {
+  const c = _k2L; if (!c) return;
+  k2LSyncEditor();
+  const trip = c.trip, email = c.email.trim(), subject = c.subject.trim();
+  if (!K2_EMAIL_RE.test(email)) { lgToast('Neplatná adresa lektora.'); return; }
+  if (!subject || subject.length > 200 || /[\r\n]/.test(subject)) { lgToast('Neplatný předmět (1–200 znaků).'); return; }
+  const bodyHtml = k2SanitizeHtml(c.body);
+  if (k2CountMarkers(bodyHtml)) { lgToast('V textu zbývají nedoplněná místa.'); return; }
+  if (!/<table/i.test(bodyHtml)) { if (!confirm('V emailu není tabulka přehledu. Odeslat přesto?')) return; }
+  if (!c.ledgerOk && !c.ack) { lgToast('Ledger není dostupný — potvrď odeslání bez stavů plateb.'); return; }
+  const override = !c.allowed.has(email.toLowerCase());
+  if (!confirm('Odeslat přehled na ' + email + '?\nBez kopie na info@. Worker odešle do 5 minut.' + (override ? '\n\n⚠ Adresa není u lektora v seznamu — zadána ručně.' : ''))) return;
+  const btn = document.getElementById('k2LSendBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Zařazuji…'; }
+  try {
+    const id = k2Uuid(), now = k2NowIso();
+    const rec = { v: 1, id, type: 'lektor', tripId: trip.id, tripName: trip.name, createdAt: now, by: getNick(),
+      subject, bodyHtml, recipients: [{ email, emailOverride: override, names: [] }], status: 'queued', results: [] };
+    const path = K2_OUTBOX_ROOT + '/' + now.slice(0, 4) + '/' + now.replace(/[-:]/g, '') + '_' + k2TripKey(trip) + '_lektor_' + id.slice(0, 8) + '.json';
+    const w = await ghSaveFile(path, rec, { absentOk: true, message: 'outbox lektor: ' + (trip.name || '').slice(0, 40) + ' (' + getNick() + ')' });
+    if (!w.ok) { lgToast('⛔ Zařazení do fronty selhalo: ' + (w.error || (w.conflict ? 'konflikt' : '?')) + ' — nic neodejde.', 9000); k2LRender(); return; }
+    _k2LogCache = null;
+    lgToast('Přehled zařazen do fronty — odejde lektorovi do 5 minut.', 7000);
+    k2LClose();
+    if (currentView === 'trip') renderTripDetail();
+  } catch (e) { lgToast('⛔ Chyba: ' + e.message, 9000); k2LRender(); }
+}
+
+// ── karta 📬 Odeslané emaily (jen záznamy této cesty; nic se nemaže) ──
+let _k2LogCache = null;        // { key, at, recs, error, years }
+let _k2LogLoading = null;      // key právě načítaného (ochrana před dvojím načtením při re-renderu)
+let _k2LogFilter = 'all';
+function k2LogYearsAll() {
+  const ys = []; for (let y = 2026; y <= new Date().getFullYear(); y++) ys.push(y); return ys;
+}
+function k2LogWhen(rec) {
+  const oks = (rec.results || []).filter(r => r.ok && r.at).map(r => r.at).sort();
+  return oks.length ? oks[oks.length - 1] : (rec.createdAt || '');
+}
+function k2FmtDateTime(iso) {
+  const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  return m ? parseInt(m[3], 10) + '. ' + parseInt(m[2], 10) + '. ' + m[1] + ' ' + m[4] + ':' + m[5] : String(iso || '').slice(0, 16);
+}
+function k2RenderLogCard(trip) {
+  const key = k2TripKey(trip);
+  const c = _k2LogCache;
+  if (c && c.key === key && Date.now() - c.at < 60000) return k2LogCardHtml(trip, c);
+  if (_k2LogLoading !== key) {
+    _k2LogLoading = key;
+    const years = (c && c.key === key && c.years) || null;
+    k2LoadOutbox(trip, years).then(r => {
+      _k2LogCache = { key, at: Date.now(), recs: r.recs, error: r.error, years };
+      _k2LogLoading = null;
+      const el = document.getElementById('k2LogCard');
+      if (el && currentTripId === trip.id) el.innerHTML = k2LogCardHtml(trip, _k2LogCache);
+    }).catch(() => { _k2LogLoading = null; });
+  }
+  return '<div class="card"><div class="card-header"><div class="card-title">📬 Odeslané emaily</div></div><div style="font-size:12px;color:var(--text-muted)">Načítám…</div></div>';
+}
+function k2LogCardHtml(trip, c) {
+  const recs = (c.recs || []).filter(r => _k2LogFilter === 'all' || r.type === _k2LogFilter);
+  const filt = ['all', 'predodlet', 'lektor'].map(f => '<button class="btn btn-secondary btn-sm" style="' + (_k2LogFilter === f ? 'background:var(--sand);font-weight:700' : '') + '" onclick="_k2LogFilter=\'' + f + '\';document.getElementById(\'k2LogCard\').innerHTML=k2LogCardHtml(db.trips.find(t=>t.id===\'' + esc(trip.id) + '\'),_k2LogCache)">' + (f === 'all' ? 'Vše' : K2_TYPE_LABEL[f]) + '</button>').join(' ');
+  const older = (c.years && c.years.length > 1) ? '' : ' <button class="btn btn-secondary btn-sm" onclick="k2LogOlder(\'' + esc(trip.id) + '\')">Zobrazit starší roky</button>';
+  const rows = recs.map(r => {
+    const n = (r.recipients || []).length;
+    const persons = (r.recipients || []).reduce((s, x) => s + ((x.participantIds || []).length || 1), 0);
+    const names = (r.recipients || []).map(x => (x.names && x.names.length ? x.names.join(', ') : x.email)).join('; ');
+    const komu = r.type === 'lektor' ? esc((r.recipients[0] || {}).email || '—') + ((r.recipients[0] || {}).emailOverride ? ' <span class="k2-tag k2-tag-wait">ručně</span>' : '')
+      : '<details onclick="event.stopPropagation()"><summary style="cursor:pointer">' + persons + ' příjemců</summary><div style="font-size:11px;color:var(--text-muted);max-width:260px">' + esc(names) + '</div></details>';
+    return '<tr class="k2-log-row" onclick="k2OpenLogDetail(\'' + esc(r.id) + '\')">' +
+      '<td style="white-space:nowrap">' + esc(k2FmtDateTime(k2LogWhen(r))) + '</td><td>' + esc(r.by || '?') + '</td>' +
+      '<td>' + esc(K2_TYPE_LABEL[r.type] || r.type) + '</td><td>' + komu + '</td>' +
+      '<td title="' + esc(r.subject || '') + '">' + esc(String(r.subject || '').slice(0, 50)) + '</td>' +
+      '<td style="white-space:nowrap">' + esc(K2_STATUS_LABEL[r.status] || r.status) + (r.testRedirect ? ' <span class="k2-tag k2-tag-grey">TEST</span>' : '') + '</td></tr>';
+  }).join('');
+  return '<div class="card"><div class="card-header"><div class="card-title">📬 Odeslané emaily' + (c.recs && c.recs.length ? ' <span style="font-size:13px;font-weight:400;color:var(--text-muted)">(' + c.recs.length + ')</span>' : '') + '</div><div>' + filt + older + '</div></div>' +
+    (c.error ? '<div class="k2-warn" style="margin-bottom:8px">⚠ Log se nepodařilo načíst celý (' + esc(c.error) + ').</div>' : '') +
+    (rows ? '<table class="lg-tbl"><tr><th>Datum a čas</th><th>Kdo</th><th>Typ</th><th>Komu</th><th>Předmět</th><th>Stav</th></tr>' + rows + '</table>'
+      : '<div style="font-size:12px;color:var(--text-muted)">U této cesty zatím nic neodešlo.</div>') + '</div>';
+}
+function k2LogOlder(tripId) {
+  const trip = db.trips.find(t => t.id === tripId); if (!trip) return;
+  _k2LogCache = { key: k2TripKey(trip), at: 0, recs: [], error: null, years: k2LogYearsAll() };
+  const el = document.getElementById('k2LogCard');
+  if (el) el.innerHTML = k2RenderLogCard(trip);
+}
+function k2OpenLogDetail(id) {
+  const rec = ((_k2LogCache || {}).recs || []).find(r => r.id === id);
+  if (!rec) return;
+  let ov = document.getElementById('k2DetOv');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'k2DetOv'; ov.className = 'modal-overlay';
+    ov.onclick = e => { if (e.target === ov) ov.classList.add('hidden'); };
+    document.body.appendChild(ov);
+  }
+  ov.classList.remove('hidden');
+  const res = (rec.recipients || []).map(x => {
+    const r = (rec.results || []).find(y => (y.email || '').toLowerCase() === (x.email || '').toLowerCase());
+    const st = !r ? (rec.status === 'queued' || rec.status === 'sending' ? '⏳ čeká' : '—')
+      : r.dry ? 'dry-run' : r.ok ? '✓ odesláno ' + esc(k2FmtDateTime(r.at)) + (r.sentCopy === false ? ' (kopie do Odeslaných se neuložila)' : '')
+      : '✗ ' + esc(r.error || 'chyba') + (r.uncertain ? ' <span class="k2-tag k2-tag-wait">nejistý stav</span>' : '');
+    return '<tr><td>' + esc(x.email) + (x.emailOverride ? ' <span class="k2-tag k2-tag-wait">ručně</span>' : '') + '</td><td style="font-size:11px">' + esc((x.names || []).join(', ')) + '</td><td>' + st + '</td></tr>';
+  }).join('');
+  ov.innerHTML = '<div class="modal k2-modal" onclick="event.stopPropagation()">' +
+    '<div style="display:flex;justify-content:space-between;align-items:flex-start"><h2 style="margin-bottom:4px">' + esc(K2_TYPE_LABEL[rec.type] || rec.type) + '</h2>' +
+    '<button class="btn btn-secondary btn-sm" onclick="document.getElementById(\'k2DetOv\').classList.add(\'hidden\')">Zavřít</button></div>' +
+    '<div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">' + esc(rec.by || '?') + ' · zařazeno ' + esc(k2FmtDateTime(rec.createdAt)) + ' · stav ' + esc(K2_STATUS_LABEL[rec.status] || rec.status) +
+    (rec.testRedirect ? ' · <strong>TEST → ' + esc(rec.testRedirect) + '</strong>' : '') + (rec.workerNote ? '<br>' + esc(rec.workerNote) : '') + '</div>' +
+    '<div style="font-size:12px;margin-bottom:6px"><strong>Předmět:</strong> ' + esc(rec.subject || '') + '</div>' +
+    '<table class="lg-tbl" style="margin-bottom:12px"><tr><th>Komu</th><th>Účastníci</th><th>Výsledek</th></tr>' + res + '</table>' +
+    '<div style="font-size:12px;font-weight:600;margin-bottom:4px">Odeslaný text (jen pro čtení)</div>' +
+    '<div class="k2-mailpreview" style="' + K2_WRAP_STYLE + '">' + k2SanitizeHtml(rec.bodyHtml || '') + '</div></div>';
 }
 
 // ═══════════════════════════════════════════════
