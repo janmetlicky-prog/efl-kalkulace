@@ -549,6 +549,27 @@
   .lg-dot { display:inline-flex; align-items:center; gap:4px; font-size:11px; margin-right:10px; }
   .lg-dot i { width:9px; height:9px; border-radius:50%; display:inline-block; }
   .lg-toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:#026d72; color:#fff; padding:12px 22px; border-radius:10px; font-size:13px; z-index:9999; box-shadow:0 8px 24px rgba(0,0,0,.25); max-width:90vw; }
+  /* APP-K2: předodletové info */
+  .k2-modal { max-width:860px; width:94%; max-height:92vh; overflow:auto; }
+  .k2-scroll { max-height:260px; overflow:auto; border:1px solid var(--border); border-radius:8px; }
+  .k2-scroll .lg-tbl th { position:sticky; top:0; background:#fff; }
+  .k2-row-grey td { color:var(--text-muted); background:#fafafa; }
+  .k2-tag { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .k2-tag-ok { background:#e8f5ee; color:#1f7a4d; }
+  .k2-tag-wait { background:#fff6d6; color:#8a6d00; }
+  .k2-tag-err { background:#fde8e8; color:#b03a2e; }
+  .k2-tag-grey { background:var(--sand); color:var(--text-muted); font-weight:500; margin-left:6px; }
+  .k2-toolbar { display:flex; gap:4px; margin-bottom:4px; }
+  .k2-toolbar button { padding:3px 9px; border:1px solid var(--border); background:#fff; border-radius:6px; cursor:pointer; font-size:13px; }
+  .k2-toolbar button:hover { background:var(--sand); }
+  .k2-editor { min-height:260px; max-height:48vh; overflow:auto; padding:14px 16px; border:1.5px solid var(--border); border-radius:10px; outline:none;
+    font-family: Arial, sans-serif; font-size:14px; color:#2c2c2c; line-height:1.6; background:#fff; }
+  .k2-editor:focus { border-color: var(--teal); }
+  .k2-editor p { margin:0 0 10px; }
+  .k2-marker { background:#fff3a3; color:#6b5300; padding:0 3px; border-radius:3px; }
+  .k2-warn { font-size:12px; color:#b03a2e; background:#fde8e8; border-radius:8px; padding:6px 10px; }
+  .k2-ok { font-size:12px; color:#1f7a4d; }
+  body.dark-mode .k2-editor, body.dark-mode .k2-scroll .lg-tbl th { background:#fff; color:#2c2c2c; }
   .lq-row { background:#fff; border:1px solid #c8e4e5; border-radius:10px; padding:12px 14px; margin-bottom:10px; }
   .lq-row.lq-hidden { display:none; }
   .lq-badge-hi { background:#CDAA3A; color:#fff; border-radius:8px; padding:1px 8px; font-size:10px; font-weight:700; }
@@ -800,6 +821,8 @@
         <button class="gear-menu-item admin-only" onclick="openSyncModal();closeGearMenu()" id="btnSync">☁️ Sync</button>
         <div class="gear-menu-sep"></div>
         <button class="gear-menu-item admin-only" onclick="openCleanupModal();closeGearMenu()">🧹 Vyčistit databázi</button>
+        <div class="gear-menu-sep"></div>
+        <button class="gear-menu-item admin-only" onclick="k2OpenTemplateEditor();closeGearMenu()">✉️ Kostra předodletového emailu</button>
       </div>
     </div>
   </div>
@@ -6708,6 +6731,7 @@ function renderTripDetail() {
           <div class="info-chip">🌙 ${trip.nights||'?'} nocí</div>
           <div class="info-chip">👥 <span class="ic-label">min.</span> ${trip.minPersons||0} / <span class="ic-label">skut.</span> ${(trip.participants != null ? (trip.participants||[]).filter(p=>!p.isCancelled).length : (trip.totalPersons||0))} os.</div>
         </div>
+        ${k2Btns(trip)}
       </div>
       <div style="display:flex;gap:8px;flex-shrink:0;align-items:center">
         <label class="admin-only" style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:${trip.status==='kalkulace'?'#fef9e7':'var(--sand)'};border:1.5px solid ${trip.status==='kalkulace'?'#b8860b':'var(--border)'};border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:${trip.status==='kalkulace'?'#b8860b':'var(--text-muted)'};transition:all .2s;margin-right:4px;">
@@ -7625,7 +7649,8 @@ function addParticipant(tripId) {
   const trip = db.trips.find(t => t.id === tripId);
   if (!trip) return;
   if (!trip.participants) trip.participants = [];
-  trip.participants.push({ id: uid(), name: '', birthDate: '', phone: '', email: '', contractSent: false, contractSigned: false, flightBought: false, firstPayment: false, fullPayment: false, insurance: false, insuranceSent: false, isSingle: false });
+  // APP-K2 (D3): datum přihlášení při ručním přidání; ostatní cesty vzniku doplňuje worker ze Sheetu
+  trip.participants.push({ id: uid(), name: '', birthDate: '', phone: '', email: '', contractSent: false, contractSigned: false, flightBought: false, firstPayment: false, fullPayment: false, insurance: false, insuranceSent: false, isSingle: false, registeredAt: k2NowIso() });
   save(db); renderTripDetail();
 }
 
@@ -9697,6 +9722,564 @@ function lqCreateTrip(fioId) {
     m.assignments.push({ fioId: String(fioId), tripId: trip.id, participantId: p.id, source: 'manual', ...lgStamp() });
   }, 'založení zájezdu ' + name, 'Zájezd založen: ' + name);
   } catch (e) { console.error('[ledger-manual]', e); lgToast('❌ ' + (e.message || e)); }
+}
+
+// ═══════════════════════════════════════════════
+// PŘEDODLETOVÉ INFO (APP-K2, BĚH 3) — výběr příjemců, editor, fronta pro worker
+// ═══════════════════════════════════════════════
+// Aplikace NEODESÍLÁ nic. Zapíše JEDEN SOUBOR na záznam do
+// data/outbox/<rok>/…json (status "queued") a participant.preDeparture.queued;
+// worker na VPS odešle z info@ každému příjemci zvlášť a zapíše výsledek.
+// Uložený text cesty: data/drafts/<tripKey>.json. Globální kostra:
+// data/email-templates.json (jen admin; chybí-li, platí vestavěná K2_DEFAULT_TEMPLATE).
+// Do db.json se zapisuje VÝHRADNĚ participant.preDeparture (gate k2DiffOutsidePreDeparture)
+// a participant.registeredAt při ručním přidání účastníka (addParticipant).
+
+const K2_OUTBOX_ROOT = 'data/outbox';
+const K2_DRAFTS_ROOT = 'data/drafts';
+const K2_TEMPLATES_PATH = 'data/email-templates.json';
+const K2_MAX_RECIPIENTS = 60;
+const K2_QUEUED_STALE_H = 24;      // starší queued záznam worker neodesílá (vypršel) → v UI ne „ve frontě"
+const K2_MARKER_RE = /\[(?:DOPLNIT|VOLITELNÁ SEKCE)[^\]]*\]|\{\{[^}]*\}\}/gi;
+// Obal těla — STEJNÝ jako worker (efl/outmail.py WRAP_OPEN): náhled = odeslané
+const K2_WRAP_STYLE = 'font-family: Arial, sans-serif; font-size: 14px; color: #2c2c2c; line-height: 1.6;';
+
+// ── vestavěná kostra (SABLONA_PREDODLET_KOSTRA.md, doslova) ──
+const K2_DEFAULT_TEMPLATE = {
+  subject: 'Předodletové informace — {{cesta}}',
+  bodyHtml:
+    '<p>Milí spolucestovatelé,</p>' +
+    '<p>posíláme Vám předodletové informace k pobytu — {{cesta}}. Cesta se pomalu blíží, tak se můžete začít těšit. A my s Vámi :-)</p>' +
+    '<p>[VOLITELNÁ SEKCE — smaž, pokud se netýká: letenky]</p>' +
+    '<p><strong>LETENKY:</strong><br>[DOPLNIT: letecká společnost, čísla letů, trasy tam i zpět, časy odletu/příletu, doba letu, případný časový posun]</p>' +
+    '<p>[VOLITELNÁ SEKCE — smaž, pokud se netýká: boarding pass, jen u cest s letenkou přes nás]</p>' +
+    '<p><strong>BOARDING PASS</strong> pro každého z Vás nachystáme cca 2 dny před odletem. Budeme potřebovat kopie cestovních dokladů, připomeneme se s předstihem.</p>' +
+    '<p>[VOLITELNÁ SEKCE — smaž, pokud se netýká: zavazadla]</p>' +
+    '<p>V ceně letenky je odbavené zavazadlo:<br>[DOPLNIT: pravidla zavazadel aerolinky — odbavené zavazadlo (váha a rozměry), příruční zavazadlo (váha a rozměry)]</p>' +
+    '<p>Prosíme o rozumnou velikost zavazadel [DOPLNIT: vztah k dopravě na místě, např. „aby se vše vešlo do aut"]. Do letadla doporučujeme batoh namísto příručního kufru, hodí se na výlety.</p>' +
+    '<p><strong>UBYTOVÁNÍ:</strong><br>Budeme ubytovaní v: {{hotel}}<br>[DOPLNIT: popis ubytování — typ, kapacita, pokoje, stravování, kde se bude cvičit, zázemí, domácí zvířata a upozornění na alergie, případné ubytování mimo hlavní objekt]</p>' +
+    '<p>Odkaz: {{hotelUrl}}</p>' +
+    '<p>[VOLITELNÁ SEKCE — smaž, pokud se netýká: doprava na místě]</p>' +
+    '<p>[DOPLNIT: jak se budeme pohybovat — auta / transfery / veřejná doprava; počet vozidel a kapacita; jak se řeší flexibilita programu]</p>' +
+    '<p><strong>CESTOVNÍ DOKLADY A FORMALITY:</strong><br>Doklad: [DOPLNIT: jaký doklad stačí — OP / pas, vízum / ETA, požadovaná platnost pasu]. Prosíme zkontrolujte platnost dokladu, s kterým pojedete.</p>' +
+    '<p>Zdravotní pojištění: [DOPLNIT: zda platí Evropský průkaz zdravotního pojištění, nebo je nutné cestovní pojištění]. Doporučujeme mít sjednané cestovní připojištění včetně pojištění STORNA, pro případ, že byste nemohli odcestovat. Rádi Vám pojištění pomůžeme sjednat u naší spolupracující pojišťovny Colonnade — stačí napsat.</p>' +
+    '<p>Zásuvky: [DOPLNIT: typ zásuvek / zda je potřeba redukce]</p>' +
+    '<p><strong>POČASÍ:</strong><br>[DOPLNIT: charakter počasí v termínu cesty]</p>' +
+    '<p>Naše doporučení, co zabalit:<br>[DOPLNIT: seznam — oblečení, obuv, batoh, lahev na vodu, pokrývka hlavy, sluneční brýle, powerbanka, případně trekové hole, repelent, plavky atd.]</p>' +
+    '<p><strong>PENÍZE:</strong><br>Místní měna: [DOPLNIT: měna]. Doporučený rozpočet s sebou: [DOPLNIT: částka a z čeho se skládá, např. jídlo na den + útrata]. Kolik peněz mít s sebou je vždy individuální, záleží, jak moc bohémsky chcete dovolenou trávit :-)</p>' +
+    '<p>Platební karta: [DOPLNIT: kde funguje a kde je potřeba hotovost]. Doporučujeme mít s sebou i hotovost na vstupy a výlety. [DOPLNIT: případné hromadné vybírání předem — kolik, na co, kdy (částky doplnit až po ověření)]</p>' +
+    '<p><strong>PROGRAM PRO PŘIPOMENUTÍ:</strong><br>Aktivit se budeme držet s ohledem na počasí, ale plán je následující:</p>' +
+    '<p>[DOPLNIT: program po dnech — DEN 0 (příjezd), DEN 1 …, poslední den (odjezd). U každého dne: ranní jóga, hlavní aktivita, jídlo, odpolední/večerní program. Upravit podle skutečné cesty]</p>' +
+    '<p>Těšíme se na super cestu s Vámi.</p>' +
+    '<p>Určitě se ještě uslyšíme ve WhatsApp skupince, kde si podle zájmu domluvíme termín předodletového setkání ONLINE přes Zoom. Tam na nás můžete směřovat další dotazy, často pomůže odpověď všem ostatním členům posádky.</p>' +
+    '<p>Máváme a zdravíme od Litoměřic.</p>' +
+    '<p>Za tým Essence for Life<br>Adéla &amp; Honza</p>'
+};
+
+// ── drobné helpery ──
+function k2NowIso() {
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds());
+}
+function k2Hash8(s) {   // FNV-1a 32bit → 8 hex; stabilní klíč z názvu cesty (duplicitní trip.id existují)
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return ('0000000' + h.toString(16)).slice(-8);
+}
+function k2TripKey(trip) {
+  return String(trip.id || '').replace(/[^A-Za-z0-9_-]/g, '-').slice(0, 40) + '_' + k2Hash8(trip.name || '');
+}
+function k2Uuid() {
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16);
+  });
+}
+function k2FmtDate(iso) {
+  if (!iso) return '';
+  const m = String(iso).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? parseInt(m[3], 10) + '. ' + parseInt(m[2], 10) + '.' : String(iso).slice(0, 10);
+}
+function k2Termin(trip) {
+  const d = (trip.date || '').trim();
+  if (!d) return '';
+  return (/\b\d{4}\b/.test(d) || !trip.year) ? d : d + ' ' + trip.year;
+}
+
+// ── sanitizer — STEJNÝ whitelist jako worker (efl/sanitize.py), bez DOMParseru (testovatelný v node) ──
+const K2_ALLOWED_TAGS = new Set(['p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'a', 'span', 'div', 'h3', 'h4']);
+function k2SanitizeHtml(raw) {
+  let s = String(raw || '');
+  s = s.replace(/<!--[\s\S]*?-->/g, '');
+  s = s.replace(/<(script|style|iframe|object|embed|template|noscript|head|title|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '');
+  s = s.replace(/<(script|style|iframe|object|embed|template|noscript|svg|math)\b[^>]*\/?>/gi, '');
+  s = s.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)\b([^>]*)>/g, (m, tag, attrs) => {
+    const t = tag.toLowerCase();
+    const closing = m[1] === '/';
+    if (!K2_ALLOWED_TAGS.has(t)) return '';
+    if (t === 'br') return '<br>';
+    if (closing) return '</' + t + '>';
+    if (t === 'a') {
+      const hm = attrs.match(/href\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i);
+      // atribut je už HTML-kódovaný → dekódovat a kódovat jednou (stejně jako worker)
+      const href = hm ? (hm[2] != null ? hm[2] : hm[3] != null ? hm[3] : hm[4]).trim()
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'") : '';
+      return /^(https?:\/\/|mailto:)/i.test(href) ? '<a href="' + esc(href) + '">' : '<a>';
+    }
+    return '<' + t + '>';
+  });
+  return s;
+}
+function k2HtmlToText(html) {
+  return String(html || '')
+    .replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|li|h3|h4)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"');
+}
+function k2CountMarkers(html) {
+  return (k2HtmlToText(html).match(K2_MARKER_RE) || []).length;
+}
+function k2Warnings(html) {
+  const t = k2HtmlToText(html), out = [];
+  if (/\?\?/.test(t)) out.push('v textu je „??" — nejasná hodnota');
+  if (/\bTODO\b/i.test(t)) out.push('v textu je „TODO"');
+  return out;
+}
+// zvýraznění markerů v editoru (jen vizuální; při uložení/odeslání sanitizer atributy stejně zahodí)
+function k2Highlight(html) {
+  return String(html || '').replace(/<span class="k2-marker">([\s\S]*?)<\/span>/g, '$1')
+    .replace(/(\[(?:DOPLNIT|VOLITELNÁ SEKCE)[^\]<]*\]|\{\{[^}<]*\}\})/gi, '<span class="k2-marker">$1</span>');
+}
+
+// ── placeholdery z dat cesty (jen při prvním sestavení z kostry) ──
+function k2FillPlaceholders(html, trip) {
+  const vals = {
+    cesta: trip.name || '', destinace: trip.destination || '', termin: k2Termin(trip),
+    hotel: trip.hotelName || '', hotelUrl: trip.hotelUrl || '', lektor: trip.instructor || ''
+  };
+  return String(html || '').replace(/\{\{\s*([a-zA-Z]+)\s*\}\}/g, (m, key) => {
+    if (!(key in vals)) return m;                       // neznámý placeholder zůstane → blokuje
+    const v = String(vals[key]).trim();
+    if (!v) return '[DOPLNIT: ' + key + ']';            // prázdná hodnota = marker, nikdy tiché vynechání
+    if (key === 'hotelUrl' && /^https?:\/\//i.test(v)) return '<a href="' + esc(v) + '">' + esc(v) + '</a>';
+    return esc(v);
+  });
+}
+
+// ── GitHub: výpis složky + načtení záznamů outboxu dané cesty ──
+async function k2GhList(dir) {
+  const token = ghToken();
+  if (!token) throw new Error('no_token');
+  const res = await fetch(`https://api.github.com/repos/${GH_REPO}/contents/${dir}?ref=${GH_BRANCH}&t=${Date.now()}`,
+    { headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github+json' } });
+  if (res.status === 404) return [];
+  if (!res.ok) throw new Error('list_' + res.status);
+  const j = await res.json();
+  return Array.isArray(j) ? j.filter(f => f.type === 'file').map(f => ({ name: f.name, path: f.path, sha: f.sha })) : [];
+}
+function k2OutboxYears() {
+  const now = new Date(), ys = [now.getFullYear()];
+  if (now.getMonth() === 0) ys.unshift(now.getFullYear() - 1);
+  return ys;
+}
+// Vrací { recs: [...], error } — recs seřazené od nejnovějšího; error = outbox nečitelný (UI varuje)
+async function k2LoadOutbox(trip, years) {
+  const key = k2TripKey(trip);
+  const recs = [];
+  try {
+    for (const y of (years || k2OutboxYears())) {
+      const files = (await k2GhList(K2_OUTBOX_ROOT + '/' + y)).filter(f => f.name.includes('_' + key + '_'));
+      for (const f of files) {
+        const r = await ghLoadFile(f.path, { id: 'string', type: 'string', status: 'string', recipients: 'array' });
+        if (r.status === 'OK' && r.data.tripId === trip.id && r.data.tripName === trip.name) recs.push(r.data);
+      }
+    }
+  } catch (e) { return { recs, error: e.message }; }
+  recs.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  return { recs, error: null };
+}
+
+// ── stav předodletového infa u účastníka (pravda = outbox; záloha = preDeparture) ──
+// Vrací { kind: 'sent'|'queued'|'error'|'none', at, error, outboxId }
+function k2ParticipantStates(trip, recs, nowIso) {
+  nowIso = nowIso || k2NowIso();
+  const stale = new Date(nowIso.replace('T', ' '));
+  stale.setHours(stale.getHours() - K2_QUEUED_STALE_H);
+  const staleIso = k2NowIsoOf(stale);
+  const out = {};
+  (trip.participants || []).forEach(p => {
+    if (p.isCancelled) return;
+    const pid = String(p.id), em = (p.email || '').toLowerCase().trim();
+    let st = { kind: 'none', at: null, error: null, outboxId: null };
+    const mine = (recs || []).filter(r => r.type === 'predodlet' &&
+      (r.recipients || []).some(x => (x.participantIds || []).map(String).includes(pid)));
+    for (const r of mine) {                                  // od nejnovějšího
+      const rc = (r.recipients || []).find(x => (x.participantIds || []).map(String).includes(pid));
+      const res = (r.results || []).find(x => (x.email || '').toLowerCase() === (rc.email || '').toLowerCase());
+      if (r.status === 'sent' || ((r.status === 'partial' || r.status === 'error') && res && res.ok)) {
+        st = { kind: 'sent', at: (res && res.at) || r.createdAt, error: null, outboxId: r.id }; break;
+      }
+      if (r.status === 'queued' || r.status === 'sending') {
+        if (String(r.createdAt || '') >= staleIso) { st = { kind: 'queued', at: r.createdAt, error: null, outboxId: r.id }; break; }
+        continue;                                            // vypršelý queued → worker ho označí error; UI neblokuje
+      }
+      if (r.status === 'partial' || r.status === 'error') {
+        st = { kind: 'error', at: r.createdAt, error: (res && res.error) || r.workerNote || 'chyba odeslání', outboxId: r.id }; break;
+      }
+      // 'dry' → nic neodešlo, hledat dál
+    }
+    if (st.kind === 'none' && p.preDeparture) {              // záloha z db.json (starší rok, outbox nedostupný)
+      if (p.preDeparture.sent) st = { kind: 'sent', at: p.preDeparture.sent.at, error: null, outboxId: p.preDeparture.sent.outboxId };
+      else if (p.preDeparture.queued && String(p.preDeparture.queued.at || '') >= staleIso) {
+        st = { kind: 'queued', at: p.preDeparture.queued.at, error: null, outboxId: p.preDeparture.queued.outboxId };
+      }
+    }
+    out[pid] = st;
+  });
+  return out;
+}
+function k2NowIsoOf(d) {
+  const z = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()) + 'T' + z(d.getHours()) + ':' + z(d.getMinutes()) + ':' + z(d.getSeconds());
+}
+
+// ── příjemci: jeden email na adresu, participantIds = všichni VYBRANÍ s touto adresou ──
+function k2BuildRecipients(trip, selectedIds) {
+  const groups = {};
+  (trip.participants || []).forEach(p => {
+    if (p.isCancelled || !selectedIds.includes(String(p.id))) return;
+    const em = (p.email || '').trim();
+    if (!em || em.indexOf('@') < 0) return;
+    const k = em.toLowerCase();
+    if (!groups[k]) groups[k] = { email: em, participantIds: [], names: [] };
+    groups[k].participantIds.push(String(p.id)); groups[k].names.push(p.name || '');
+  });
+  return Object.values(groups);
+}
+
+// ── atomický zápis do db.json: JEN participant.preDeparture, identita id + trip id+name ──
+function k2FindParticipant(data, m) {
+  for (const t of (data.trips || [])) {
+    if (t.id !== m.tripId || t.name !== m.tripName) continue;
+    for (const p of (t.participants || [])) if (String(p.id) === String(m.id)) return p;
+  }
+  return null;
+}
+function k2DiffOutsidePreDeparture(before, work) {
+  const strip = d => JSON.stringify(d, (k, v) => k === 'preDeparture' ? undefined : v);
+  return strip(before) !== strip(work);
+}
+async function k2DbWrite(mutations) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const before = JSON.parse(JSON.stringify(db));
+    const work = JSON.parse(JSON.stringify(db));
+    const missed = [];
+    mutations.forEach(m => { const p = k2FindParticipant(work, m); if (p) m.apply(p); else missed.push(m.id); });
+    if (missed.length === mutations.length) return { ok: false, error: 'účastníci nenalezeni' };
+    if (k2DiffOutsidePreDeparture(before, work)) {
+      console.error('[předodlet] gate: změna mimo preDeparture — zápis odmítnut');
+      return { ok: false, error: 'interní chyba: změna mimo preDeparture (zápis odmítnut)' };
+    }
+    const r = await saveAwait(work);
+    if (r.ok) { db = work; ghSetSha(r.sha); return { ok: true, missed }; }
+    if (r.stale && attempt === 1) {
+      const fresh = await ghLoad();
+      if (!fresh) return { ok: false, error: 'čerstvá data nejdou načíst' };
+      db = migrateData(fresh);
+      continue;                                              // Z19: reaplikace nad čerstvými daty, nikdy force
+    }
+    return { ok: false, error: r.stale ? 'konflikt i po reaplikaci' : (r.error || '?') };
+  }
+  return { ok: false, error: 'konflikt i po opakování' };
+}
+
+// ── kostra + draft ──
+async function k2LoadTemplate() {
+  const r = await ghLoadFile(K2_TEMPLATES_PATH, { predodlet: 'object' });
+  if (r.status === 'OK' && r.data.predodlet && typeof r.data.predodlet.bodyHtml === 'string') {
+    return { tpl: r.data.predodlet, source: 'soubor', absent: false, raw: r.data };
+  }
+  return { tpl: K2_DEFAULT_TEMPLATE, source: r.status === 'ABSENT' ? 'vestavěná' : 'vestavěná (soubor nečitelný: ' + (r.error || r.status) + ')', absent: r.status === 'ABSENT', raw: null };
+}
+async function k2LoadDraft(trip) {
+  const r = await ghLoadFile(K2_DRAFTS_ROOT + '/' + k2TripKey(trip) + '.json', { subject: 'string', bodyHtml: 'string' });
+  if (r.status === 'OK' && r.data.tripId === trip.id && r.data.tripName === trip.name) return { draft: r.data, absent: false };
+  return { draft: null, absent: r.status === 'ABSENT' || r.status === 'OK' };
+}
+async function k2SaveDraft(trip, subject, bodyHtml, absent) {
+  const data = { v: 1, tripId: trip.id, tripName: trip.name, subject, bodyHtml: k2SanitizeHtml(bodyHtml),
+                 updatedAt: k2NowIso(), updatedBy: getNick() };
+  return ghSaveFile(K2_DRAFTS_ROOT + '/' + k2TripKey(trip) + '.json', data,
+    { absentOk: !!absent, message: 'predodlet draft: ' + (trip.name || '').slice(0, 40) + ' (' + getNick() + ')' });
+}
+
+// ── modal ──
+let _k2 = null;   // { trip, recs, states, draftAbsent, tplSource, selected:Set, outboxError }
+
+function k2Btns(trip) {
+  return `<div id="k2Btns" style="display:flex;gap:8px;flex-wrap:wrap;margin:-8px 0 16px">
+    <button class="btn btn-secondary btn-sm" onclick="k2OpenPredodlet('${trip.id}')" style="background:#f0fafa;border-color:#03989E;color:#03989E">📧 Předodletové info</button>
+  </div>`;
+}
+
+function k2Editor(id, html) {
+  const cmd = (c, v) => `onmousedown="event.preventDefault()" onclick="document.execCommand('${c}'${v ? ",false,'" + v + "'" : ''});document.getElementById('${id}').focus()"`;
+  return `<div class="k2-toolbar">
+      <button type="button" ${cmd('bold')} title="Tučně"><b>B</b></button>
+      <button type="button" ${cmd('italic')} title="Kurzíva"><i>I</i></button>
+      <button type="button" ${cmd('insertUnorderedList')} title="Odrážky">• —</button>
+      <button type="button" ${cmd('formatBlock', '<p>')} title="Odstavec">¶</button>
+      <button type="button" onmousedown="event.preventDefault()" onclick="k2InsertLink('${id}')" title="Odkaz">🔗</button>
+    </div>
+    <div class="k2-editor" id="${id}" contenteditable="true" spellcheck="true" oninput="k2OnEdit()">${k2Highlight(html)}</div>`;
+}
+function k2InsertLink(id) {
+  const url = prompt('Adresa odkazu (https://…):', 'https://');
+  if (!url || !/^(https?:\/\/|mailto:)/i.test(url)) return;
+  document.getElementById(id).focus();
+  document.execCommand('createLink', false, url);
+}
+
+async function k2OpenPredodlet(tripId) {
+  const trip = db.trips.find(t => t.id === tripId);
+  if (!trip) return;
+  let ov = document.getElementById('k2Ov');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'k2Ov'; ov.className = 'modal-overlay';
+    ov.onclick = e => { if (e.target === ov) k2Close(); };
+    document.body.appendChild(ov);
+  }
+  ov.classList.remove('hidden');
+  ov.innerHTML = `<div class="modal k2-modal" onclick="event.stopPropagation()"><h2>📧 Předodletové info</h2><div style="color:var(--text-muted)">Načítám stav příjemců a text…</div></div>`;
+  const [ob, dr, tp] = await Promise.all([k2LoadOutbox(trip), k2LoadDraft(trip), k2LoadTemplate()]);
+  const states = k2ParticipantStates(trip, ob.recs);
+  let subject, body, textSource;
+  if (dr.draft) { subject = dr.draft.subject; body = dr.draft.bodyHtml; textSource = 'uložený text cesty (' + k2FmtDate(dr.draft.updatedAt) + ', ' + esc(dr.draft.updatedBy || '?') + ')'; }
+  else { subject = k2FillPlaceholders(tp.tpl.subject, trip); body = k2FillPlaceholders(tp.tpl.bodyHtml, trip); textSource = 'kostra: ' + esc(tp.source); }
+  const selected = new Set();
+  (trip.participants || []).forEach(p => {
+    if (p.isCancelled || !(p.email || '').includes('@')) return;
+    if (states[String(p.id)].kind === 'none' || states[String(p.id)].kind === 'error') selected.add(String(p.id));
+  });
+  _k2 = { trip, recs: ob.recs, states, draftAbsent: dr.absent, tplSource: tp.source, selected, outboxError: ob.error, subject, body, textSource };
+  k2RenderModal();
+}
+function k2Close() {
+  const ov = document.getElementById('k2Ov');
+  if (ov) ov.classList.add('hidden');
+  _k2 = null;
+}
+
+function k2RenderModal() {
+  const c = _k2; if (!c) return;
+  const trip = c.trip;
+  const parts = (trip.participants || []).filter(p => !p.isCancelled);
+  const emailCount = {};
+  parts.forEach(p => { const k = (p.email || '').toLowerCase().trim(); if (k) emailCount[k] = (emailCount[k] || 0) + 1; });
+  const rows = parts.map(p => {
+    const pid = String(p.id), st = c.states[pid] || { kind: 'none' };
+    const em = (p.email || '').trim(), hasEmail = em.includes('@');
+    const shared = hasEmail && emailCount[em.toLowerCase()] > 1 ? `<span class="k2-tag k2-tag-grey" title="Jeden email pro všechny s touto adresou">${emailCount[em.toLowerCase()]} osoby, 1 email</span>` : '';
+    let tag = '';
+    if (st.kind === 'sent') tag = `<span class="k2-tag k2-tag-ok">✓ odesláno ${k2FmtDate(st.at)}</span>`;
+    else if (st.kind === 'queued') tag = `<span class="k2-tag k2-tag-wait">⏳ ve frontě</span>`;
+    else if (st.kind === 'error') tag = `<span class="k2-tag k2-tag-err" title="${esc(st.error || '')}">✗ chyba</span>`;
+    const disabled = !hasEmail || st.kind === 'queued';
+    const checked = c.selected.has(pid) && !disabled;
+    return `<tr class="${!hasEmail ? 'k2-row-grey' : ''}">
+      <td><input type="checkbox" class="k2-check" data-pid="${esc(pid)}" ${checked ? 'checked' : ''} ${disabled ? 'disabled' : ''} onchange="k2Toggle('${esc(pid)}', this.checked)"></td>
+      <td style="font-weight:600">${esc(p.name || '—')}</td>
+      <td style="font-size:12px">${hasEmail ? esc(em) : '<span style="color:var(--text-muted)">chybí email</span>'} ${shared}</td>
+      <td>${tag}</td></tr>`;
+  }).join('');
+  const selN = [...c.selected].filter(pid => parts.some(p => String(p.id) === pid)).length;
+  const rcpN = k2BuildRecipients(trip, [...c.selected]).length;
+  const markers = k2CountMarkers(c.body);
+  const warnOb = c.outboxError ? `<div class="k2-warn">⚠ Stav odeslání se nepodařilo načíst z logu (${esc(c.outboxError)}) — štítky jsou jen z db.json a mohou být neúplné.</div>` : '';
+  document.getElementById('k2Ov').innerHTML = `<div class="modal k2-modal" onclick="event.stopPropagation()">
+    <h2 style="margin-bottom:4px">📧 Předodletové info</h2>
+    <div style="font-size:13px;color:var(--text-muted);margin-bottom:12px">${esc(trip.name)}${trip.date ? ' · ' + esc(k2Termin(trip)) : ''} — vybráno <strong id="k2SelN">${selN}</strong> z ${parts.length} přihlášených${rcpN !== selN ? ' (' + rcpN + ' emailů)' : ''}</div>
+    ${warnOb}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn btn-secondary btn-sm" onclick="k2SelectMode('new')">Vybrat všechny, kdo ještě nedostali</button>
+      <button class="btn btn-secondary btn-sm" onclick="k2SelectMode('all')">Vybrat vše</button>
+      <button class="btn btn-secondary btn-sm" onclick="k2SelectMode('none')">Zrušit výběr</button>
+    </div>
+    <div class="k2-scroll"><table class="lg-tbl"><tr><th></th><th>Jméno</th><th>Email</th><th>Stav</th></tr>${rows || '<tr><td colspan="4" style="color:var(--text-muted)">Cesta nemá žádné aktivní účastníky.</td></tr>'}</table></div>
+    <div style="margin-top:14px;font-size:12px;color:var(--text-muted)">Text: ${c.textSource}</div>
+    <label style="display:block;font-size:12px;font-weight:600;margin:8px 0 4px">Předmět</label>
+    <input type="text" id="k2Subject" value="${esc(c.subject)}" oninput="k2OnEdit()" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;box-sizing:border-box">
+    <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 4px">Tělo emailu <span style="font-weight:400;color:var(--text-muted)">(všichni příjemci dostanou stejný text — náhled je přesně to, co odejde)</span></label>
+    ${k2Editor('k2Body', c.body)}
+    <div id="k2MarkerInfo" class="${markers ? 'k2-warn' : 'k2-ok'}" style="margin-top:8px">${markers ? 'V textu zbývá ' + markers + ' nedoplněných míst (žlutě) — odeslání je zablokované.' : 'Text je bez nedoplněných míst.'}</div>
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-secondary btn-sm" onclick="k2SaveDraftClick()">💾 Uložit text pro tuto cestu</button>
+        <button class="btn btn-secondary btn-sm" onclick="k2ResetDraft()">↺ Obnovit z kostry</button>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="k2Close()">Zrušit</button>
+        <button class="btn btn-primary" id="k2SendBtn" onclick="k2SendPredodlet()" ${(!rcpN || markers) ? 'disabled' : ''}>📧 Odeslat vybraným (${rcpN})</button>
+      </div>
+    </div>
+  </div>`;
+}
+function k2Toggle(pid, on) {
+  const c = _k2; if (!c) return;
+  const p = (c.trip.participants || []).find(x => String(x.id) === pid);
+  if (!p) return;
+  if (on && c.states[pid] && c.states[pid].kind === 'sent') {
+    if (!confirm('Tomuto příjemci už info jednou odešlo (' + k2FmtDate(c.states[pid].at) + '). Poslat znovu?')) { k2RenderModal(); return; }
+  }
+  // sdílená adresa: jeden email → všichni s touto adresou se přepínají společně
+  const em = (p.email || '').toLowerCase().trim();
+  (c.trip.participants || []).forEach(x => {
+    if (x.isCancelled || (x.email || '').toLowerCase().trim() !== em) return;
+    const xs = c.states[String(x.id)] || { kind: 'none' };
+    if (xs.kind === 'queued') return;
+    if (on) c.selected.add(String(x.id)); else c.selected.delete(String(x.id));
+  });
+  k2SyncEditorState(); k2RenderModal();
+}
+function k2SelectMode(mode) {
+  const c = _k2; if (!c) return;
+  c.selected.clear();
+  if (mode !== 'none') (c.trip.participants || []).forEach(p => {
+    if (p.isCancelled || !(p.email || '').includes('@')) return;
+    const st = c.states[String(p.id)] || { kind: 'none' };
+    if (st.kind === 'queued') return;
+    if (mode === 'all' || st.kind === 'none' || st.kind === 'error') c.selected.add(String(p.id));
+  });
+  k2SyncEditorState(); k2RenderModal();
+}
+function k2SyncEditorState() {
+  const c = _k2; if (!c) return;
+  const s = document.getElementById('k2Subject'), b = document.getElementById('k2Body');
+  if (s) c.subject = s.value;
+  if (b) c.body = b.innerHTML;
+}
+function k2OnEdit() {
+  const c = _k2; if (!c) return;
+  k2SyncEditorState();
+  const markers = k2CountMarkers(c.body);
+  const info = document.getElementById('k2MarkerInfo');
+  if (info) { info.className = markers ? 'k2-warn' : 'k2-ok'; info.textContent = markers ? 'V textu zbývá ' + markers + ' nedoplněných míst (žlutě) — odeslání je zablokované.' : 'Text je bez nedoplněných míst.'; }
+  const btn = document.getElementById('k2SendBtn');
+  if (btn) btn.disabled = !k2BuildRecipients(c.trip, [...c.selected]).length || markers > 0;
+}
+async function k2SaveDraftClick() {
+  const c = _k2; if (!c) return;
+  k2SyncEditorState();
+  if (!c.subject.trim()) { lgToast('Předmět nesmí být prázdný.'); return; }
+  const r = await k2SaveDraft(c.trip, c.subject.trim(), c.body, c.draftAbsent);
+  if (r.ok) { c.draftAbsent = false; c.textSource = 'uložený text cesty (' + k2FmtDate(k2NowIso()) + ', ' + esc(getNick()) + ')'; lgToast('Text pro tuto cestu uložen.'); k2RenderModal(); }
+  else lgToast('⛔ Uložení textu selhalo: ' + (r.error || (r.conflict ? 'konflikt — otevři okno znovu' : '?')), 8000);
+}
+async function k2ResetDraft() {
+  const c = _k2; if (!c) return;
+  if (!confirm('Zahodit uložený text této cesty a sestavit ho znovu z kostry?\nUložený soubor zůstane, přepíše se až dalším uložením.')) return;
+  const tp = await k2LoadTemplate();
+  c.subject = k2FillPlaceholders(tp.tpl.subject, c.trip);
+  c.body = k2FillPlaceholders(tp.tpl.bodyHtml, c.trip);
+  c.textSource = 'kostra: ' + esc(tp.source) + ' (neuloženo)';
+  k2RenderModal();
+}
+
+async function k2SendPredodlet() {
+  const c = _k2; if (!c) return;
+  k2SyncEditorState();
+  const trip = c.trip;
+  const subject = c.subject.trim();
+  const bodyHtml = k2SanitizeHtml(c.body);
+  const recipients = k2BuildRecipients(trip, [...c.selected]);
+  if (!recipients.length) { lgToast('Nikdo není vybrán.'); return; }
+  if (recipients.length > K2_MAX_RECIPIENTS) { lgToast('Max. ' + K2_MAX_RECIPIENTS + ' příjemců na jedno odeslání.'); return; }
+  if (!subject || subject.length > 200 || /[\r\n]/.test(subject)) { lgToast('Neplatný předmět (1–200 znaků, bez nových řádků).'); return; }
+  const markers = k2CountMarkers(bodyHtml);
+  if (markers) { lgToast('V textu zbývá ' + markers + ' nedoplněných míst.'); return; }
+  if (k2HtmlToText(bodyHtml).trim().length < 20) { lgToast('Tělo emailu je prázdné.'); return; }
+  const persons = recipients.reduce((n, r) => n + r.participantIds.length, 0);
+  const warns = k2Warnings(bodyHtml);
+  const resend = recipients.filter(r => r.participantIds.some(id => (c.states[id] || {}).kind === 'sent')).length;
+  if (!confirm('Odeslat ' + persons + ' osobám (' + recipients.length + ' emailů)?\n\nPředmět: ' + subject +
+      '\nOdesílatel: info@essenceforlife.cz\nWorker odešle do 5 minut.' +
+      (resend ? '\n\n⚠ ' + resend + '× opakované odeslání (už jednou dostali).' : '') +
+      (warns.length ? '\n\n⚠ Varování: ' + warns.join('; ') : ''))) return;
+
+  const btn = document.getElementById('k2SendBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Zařazuji…'; }
+  try {
+    // 0) text se uloží k cestě (nekritické)
+    const dr = await k2SaveDraft(trip, subject, bodyHtml, c.draftAbsent);
+    if (dr.ok) c.draftAbsent = false; else lgToast('⚠ Text cesty se neuložil (' + (dr.error || 'konflikt') + '), odeslání pokračuje.', 6000);
+    // 1) záznam do outboxu — JEDEN NOVÝ SOUBOR, nikdy přepis
+    const id = k2Uuid(), now = k2NowIso();
+    const rec = { v: 1, id, type: 'predodlet', tripId: trip.id, tripName: trip.name, createdAt: now, by: getNick(),
+                  subject, bodyHtml, recipients, status: 'queued', results: [] };
+    const path = K2_OUTBOX_ROOT + '/' + now.slice(0, 4) + '/' + now.replace(/[-:]/g, '') + '_' + k2TripKey(trip) + '_predodlet_' + id.slice(0, 8) + '.json';
+    const w = await ghSaveFile(path, rec, { absentOk: true, message: 'outbox predodlet: ' + (trip.name || '').slice(0, 40) + ' (' + getNick() + ')' });
+    if (!w.ok) { lgToast('⛔ Zařazení do fronty selhalo: ' + (w.error || (w.conflict ? 'konflikt' : '?')) + ' — nic neodejde.', 9000); k2RenderModal(); return; }
+    // 2) příznak queued u účastníků (jen preDeparture; selhání neblokuje — worker pošle stejně)
+    const muts = [];
+    recipients.forEach(r => r.participantIds.forEach(pid => muts.push({ id: pid, tripId: trip.id, tripName: trip.name, apply: p => {
+      p.preDeparture = (p.preDeparture && typeof p.preDeparture === 'object') ? p.preDeparture : {};
+      p.preDeparture.queued = { at: now, by: getNick(), outboxId: id };
+    } })));
+    const dbr = await k2DbWrite(muts);
+    if (!dbr.ok) lgToast('⚠ Zařazeno do fronty, ale příznak u účastníků se nezapsal (' + dbr.error + ') — worker odešle, štítky doplní sám.', 9000);
+    else lgToast('Zařazeno do fronty (' + recipients.length + ' emailů, ' + persons + ' osob) — odejde do 5 minut.', 7000);
+    k2Close();
+    if (currentView === 'trip') renderTripDetail();
+  } catch (e) {
+    lgToast('⛔ Chyba: ' + e.message, 9000);
+    k2RenderModal();
+  }
+}
+
+// ── kostra (admin) — ozubené kolo → ✉️ Šablony emailů ──
+let _k2Tpl = null;
+async function k2OpenTemplateEditor() {
+  if (!isAdmin()) return;
+  const tp = await k2LoadTemplate();
+  _k2Tpl = { absent: tp.absent, raw: tp.raw };
+  let ov = document.getElementById('k2TplOv');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'k2TplOv'; ov.className = 'modal-overlay';
+    ov.onclick = e => { if (e.target === ov) ov.classList.add('hidden'); };
+    document.body.appendChild(ov);
+  }
+  ov.classList.remove('hidden');
+  ov.innerHTML = `<div class="modal k2-modal" onclick="event.stopPropagation()">
+    <h2 style="margin-bottom:4px">✉️ Kostra předodletového emailu</h2>
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Zdroj: ${esc(tp.source)}${tp.tpl.updatedAt ? ' · ' + k2FmtDate(tp.tpl.updatedAt) + ' ' + esc(tp.tpl.updatedBy || '') : ''}. Placeholdery: {{cesta}} {{hotel}} {{hotelUrl}} {{destinace}} {{termin}} {{lektor}}. Cestové části nech jako [DOPLNIT: …]. Změna se projeví u cest BEZ uloženého textu.</div>
+    <label style="display:block;font-size:12px;font-weight:600;margin:8px 0 4px">Předmět</label>
+    <input type="text" id="k2TplSubject" value="${esc(tp.tpl.subject)}" style="width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;box-sizing:border-box">
+    <label style="display:block;font-size:12px;font-weight:600;margin:10px 0 4px">Tělo</label>
+    ${k2Editor('k2TplBody', tp.tpl.bodyHtml)}
+    <div class="modal-footer" style="justify-content:space-between;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="k2TplDefault()">↺ Vestavěná výchozí</button>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary" onclick="document.getElementById('k2TplOv').classList.add('hidden')">Zrušit</button>
+        <button class="btn btn-primary" onclick="k2TplSave()">💾 Uložit kostru</button>
+      </div>
+    </div></div>`;
+}
+function k2TplDefault() {
+  if (!confirm('Nahradit editor vestavěnou výchozí kostrou? (Uloží se až tlačítkem.)')) return;
+  document.getElementById('k2TplSubject').value = K2_DEFAULT_TEMPLATE.subject;
+  document.getElementById('k2TplBody').innerHTML = k2Highlight(K2_DEFAULT_TEMPLATE.bodyHtml);
+}
+async function k2TplSave() {
+  if (!isAdmin() || !_k2Tpl) return;
+  const subject = document.getElementById('k2TplSubject').value.trim();
+  const bodyHtml = k2SanitizeHtml(document.getElementById('k2TplBody').innerHTML);
+  if (!subject || k2HtmlToText(bodyHtml).trim().length < 20) { lgToast('Předmět i tělo musí být vyplněné.'); return; }
+  const data = Object.assign({}, _k2Tpl.raw || { v: 1 }, { predodlet: { subject, bodyHtml, updatedAt: k2NowIso(), updatedBy: getNick() } });
+  const r = await ghSaveFile(K2_TEMPLATES_PATH, data, { absentOk: !!_k2Tpl.absent, message: 'email-templates: predodlet (' + getNick() + ')' });
+  if (r.ok) { lgToast('Kostra uložena.'); document.getElementById('k2TplOv').classList.add('hidden'); }
+  else lgToast('⛔ Uložení kostry selhalo: ' + (r.error || (r.conflict ? 'konflikt' : '?')), 8000);
 }
 
 // ═══════════════════════════════════════════════
