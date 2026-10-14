@@ -10009,12 +10009,14 @@ async function k2LoadTemplate() {
   if (r.status === 'OK' && r.data.predodlet && typeof r.data.predodlet.bodyHtml === 'string') {
     return { tpl: r.data.predodlet, source: 'soubor', absent: false, raw: r.data };
   }
-  return { tpl: K2_DEFAULT_TEMPLATE, source: r.status === 'ABSENT' ? 'vestavěná' : 'vestavěná (soubor nečitelný: ' + (r.error || r.status) + ')', absent: r.status === 'ABSENT', raw: null };
+  const absent = r.status === 'ABSENT' || (r.status === 'UNREADABLE' && /dir_list_404/.test(r.error || ''));
+  return { tpl: K2_DEFAULT_TEMPLATE, source: absent ? 'vestavěná' : 'vestavěná (soubor nečitelný: ' + (r.error || r.status) + ')', absent, raw: null };
 }
 async function k2LoadDraft(trip) {
   const r = await ghLoadFile(K2_DRAFTS_ROOT + '/' + k2TripKey(trip) + '.json', { subject: 'string', bodyHtml: 'string' });
   if (r.status === 'OK' && r.data.tripId === trip.id && r.data.tripName === trip.name) return { draft: r.data, absent: false };
-  return { draft: null, absent: r.status === 'ABSENT' || r.status === 'OK' };
+  // ABSENT = soubor chybí; dir_list_404 = chybí celá složka data/drafts (první draft vůbec) → taky nový soubor
+  return { draft: null, absent: r.status === 'ABSENT' || r.status === 'OK' || (r.status === 'UNREADABLE' && /dir_list_404/.test(r.error || '')) };
 }
 async function k2SaveDraft(trip, subject, bodyHtml, absent) {
   const data = { v: 1, tripId: trip.id, tripName: trip.name, subject, bodyHtml: k2SanitizeHtml(bodyHtml),

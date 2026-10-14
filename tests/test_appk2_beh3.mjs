@@ -224,6 +224,22 @@ await t('uuid formát, iso formát', () => {
   assert.match(k2NowIso(), /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/);
 });
 
+console.log('\n── 6b. draft: chybějící složka = nový soubor ──');
+(0, eval)(cut('k2LoadDraft').replace(/^async function/, 'G.k2LoadDraft = async function'));
+await t('k2LoadDraft: ABSENT i dir_list_404 → absent=true; jiná UNREADABLE → false', async () => {
+  const tr = { id: 't1', name: 'X' };
+  G.ghLoadFile = async () => ({ status: 'ABSENT' });
+  assert.equal((await k2LoadDraft(tr)).absent, true);
+  G.ghLoadFile = async () => ({ status: 'UNREADABLE', error: 'dir_list_404' });
+  assert.equal((await k2LoadDraft(tr)).absent, true);
+  G.ghLoadFile = async () => ({ status: 'UNREADABLE', error: 'http_500' });
+  assert.equal((await k2LoadDraft(tr)).absent, false);
+  G.ghLoadFile = async () => ({ status: 'OK', data: { tripId: 't1', tripName: 'X', subject: 's', bodyHtml: 'b' } });
+  const r = await k2LoadDraft(tr); assert.equal(r.absent, false); assert.equal(r.draft.subject, 's');
+  G.ghLoadFile = async () => ({ status: 'OK', data: { tripId: 't1', tripName: 'JINÁ', subject: 's', bodyHtml: 'b' } });
+  assert.equal((await k2LoadDraft(tr)).draft, null);
+});
+
 console.log('\n── 7. oprávnění ──');
 await t('tlačítko bez admin-only, bez omezení na status', () => {
   const b = k2Btns({ id: 't1', status: 'storno' });
