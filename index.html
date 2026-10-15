@@ -1761,8 +1761,14 @@ const GH_BRANCH  = 'main';
 const COLLEAGUE_GH_TOKEN = ['ghp_aUgP2Zrr2yJ8k','wV8Uzfl8ArpfSSm2C1vqP56'].join('');
 
 function ghToken()  { return localStorage.getItem('efl_gh_token') || ''; }
-function ghSetSha(sha) { localStorage.setItem('efl_gh_sha', sha); }
-function ghGetSha()    { return localStorage.getItem('efl_gh_sha') || ''; }
+// APP-K3: SHA souboru, nad kterým TENTO tab pracuje, se drží v paměti tabu — ne
+// v localStorage (to je sdílené mezi taby: druhý tab / polling by SHA obnovil,
+// a tento tab by pak uložil svá stará data s čerstvou SHA = tichý přepis cizích
+// změn; přesně tak 15. 10. zmizelo 24× registeredAt). localStorage zůstává jen
+// jako zrcadlo pro diagnostiku, nikdy se z něj SHA nečte.
+const _ghTabSha = {};
+function ghSetSha(sha) { ghSetShaFor(GH_FILE, sha); }
+function ghGetSha()    { return ghGetShaFor(GH_FILE); }
 
 // ═══ GH VRSTVA — obecné funkce pro více souborů (FINANCE BĚH 0) ═══
 // Rozhodnutí dle balíčku 1 kap. 5.2: stávající ghLoad()/ghSave() zůstávají NETKNUTÉ.
@@ -1772,8 +1778,8 @@ function ghShaKey(path) {
   if (path === GH_FILE) return 'efl_gh_sha';            // zpětná kompatibilita
   return 'efl_gh_sha__' + String(path).replace(/[^a-z0-9]/gi, '_');
 }
-function ghGetShaFor(path)      { return localStorage.getItem(ghShaKey(path)) || ''; }
-function ghSetShaFor(path, sha) { if (sha) localStorage.setItem(ghShaKey(path), sha); }
+function ghGetShaFor(path)      { return _ghTabSha[path] || ''; }
+function ghSetShaFor(path, sha) { if (sha) { _ghTabSha[path] = sha; try { localStorage.setItem(ghShaKey(path), sha); } catch (e) {} } }
 
 function _ghDecodeContentB64(b64raw) {
   // stejná dekódovací cesta jako ghLoad(): atob → Uint8Array → TextDecoder UTF-8
@@ -1922,13 +1928,13 @@ async function ghLoad() {
     );
     if (!res.ok) return null;
     const json = await res.json();
-    ghSetSha(json.sha);
     // UTF-8 fix — atob returns Latin-1, TextDecoder properly handles UTF-8
     const b64 = json.content.replace(/\n/g,'');
     const binary = atob(b64);
     const bytes = new Uint8Array(binary.length);
     for (let i=0;i<binary.length;i++) bytes[i] = binary.charCodeAt(i);
     const decoded = JSON.parse(new TextDecoder('utf-8').decode(bytes));
+    ghSetSha(json.sha);   // APP-K3: SHA až s daty — selže-li dekódování, tab nesmí mít čerstvou SHA ke starým datům
     return decoded;
   } catch(e) { console.warn('GitHub load failed:', e.message); return null; }
 }
@@ -2027,17 +2033,9 @@ async function ghSaveWithToken(data, token) {
     if (!res.ok) {
       const err = await res.json();
       if (res.status === 409 || (err.message && err.message.includes('sha'))) {
-        const fresh = await fetch(
-          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}?ref=${GH_BRANCH}&t=${Date.now()}`,
-          { headers: { Authorization: `token ${token}` } }
-        );
-        if (fresh.ok) { const fj = await fresh.json(); ghSetSha(fj.sha); body.sha = fj.sha; }
-        const retry = await fetch(
-          `https://api.github.com/repos/${GH_REPO}/contents/${GH_FILE}`,
-          { method: 'PUT', headers: { Authorization: `token ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body) }
-        );
-        if (retry.ok) { const rj = await retry.json(); ghSetSha(rj.content.sha); return true; }
+        // APP-K3: dřív se tu po 409 stáhla čerstvá SHA a PUT se zopakoval se STARÝMI
+        // daty = tichý přepis cizích změn (Z9). Nikdy force — volající musí znovu načíst.
+        showGhConflictWarning();
       }
       return false;
     }
