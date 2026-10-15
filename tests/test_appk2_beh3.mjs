@@ -129,6 +129,13 @@ await t('vestavěná kostra: oslovení, markery, placeholdery', () => {
   assert.ok(!/\{\{/.test(filled), 'všechny placeholdery kostry dosazeny');
   assert.ok(k2CountMarkers(filled) > 0, 'cestové sekce zůstávají k doplnění');
   assert.equal(k2FillPlaceholders(K2_DEFAULT_TEMPLATE.subject, trip()), 'Předodletové informace — Senegal 2026');
+  assert.ok(!K2_DEFAULT_TEMPLATE.bodyHtml.includes('Adéla') && !K2_DEFAULT_TEMPLATE.bodyHtml.includes('Za tým'), 'podpis doplňuje worker, v kostře být nesmí');
+  assert.ok(K2_DEFAULT_TEMPLATE.bodyHtml.endsWith('<p>Máváme a zdravíme od Litoměřic.</p>'));
+});
+await t('editor nese poznámku o automatickém podpisu', () => {
+  (0, eval)(cut('k2Editor').replace(/^function/, 'G.k2Editor = function'));
+  G.k2InsertLink = () => {};
+  assert.ok(k2Editor('x', '<p>a</p>').includes('Podpis EFL se doplní automaticky'));
 });
 await t('zvýraznění markerů je idempotentní', () => {
   const a = k2Highlight('<p>[DOPLNIT: x] text</p>');

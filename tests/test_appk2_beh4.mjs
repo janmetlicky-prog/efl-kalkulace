@@ -104,6 +104,7 @@ await t('v HTML nejsou žádné osobní údaje ani částky — hodnoty ani náz
     'email', 'phone', 'birthDate', 'passport', 'vs=', 'notes', 'city', 'nationality', 'amount', 'payment1', 'title='];
   for (const f of forbidden) assert.ok(!body.includes(f), 'uniklo: ' + f);
   assert.ok(body.includes('Jana Nová') && body.includes('Petr Druhý'));
+  assert.ok(!body.includes('Tým Essence for Life'), 'podpis doplní worker — v těle nesmí být podruhé');
 });
 await t('obsah tabulky: pořadí, datum, smlouva, stavy, souhrn', () => {
   const tbl = k2BuildLectorTable(tripPii, statusOf, TODAY);

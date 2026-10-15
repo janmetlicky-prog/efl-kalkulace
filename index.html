@@ -567,6 +567,7 @@
   .k2-editor:focus { border-color: var(--teal); }
   .k2-editor p { margin:0 0 10px; }
   .k2-marker { background:#fff3a3; color:#6b5300; padding:0 3px; border-radius:3px; }
+  .k2-sig-note { font-size:11px; color:var(--text-muted); margin:4px 0 0 2px; }
   .k2-warn { font-size:12px; color:#b03a2e; background:#fde8e8; border-radius:8px; padding:6px 10px; }
   .k2-ok { font-size:12px; color:#1f7a4d; }
   .k2-editor table, .k2-mailpreview table { border-collapse:collapse; font-size:13px; margin:8px 0; }
@@ -9780,9 +9781,8 @@ const K2_DEFAULT_TEMPLATE = {
     '<p>[DOPLNIT: program po dnech — DEN 0 (příjezd), DEN 1 …, poslední den (odjezd). U každého dne: ranní jóga, hlavní aktivita, jídlo, odpolední/večerní program. Upravit podle skutečné cesty]</p>' +
     '<p>Těšíme se na super cestu s Vámi.</p>' +
     '<p>Určitě se ještě uslyšíme ve WhatsApp skupince, kde si podle zájmu domluvíme termín předodletového setkání ONLINE přes Zoom. Tam na nás můžete směřovat další dotazy, často pomůže odpověď všem ostatním členům posádky.</p>' +
-    '<p>Máváme a zdravíme od Litoměřic.</p>' +
-    '<p>Za tým Essence for Life<br>Adéla &amp; Honza</p>'
-};
+    '<p>Máváme a zdravíme od Litoměřic.</p>'
+};   // podpis EFL (logo, kontakty) doplní worker automaticky za tělo — v kostře proto není
 
 // ── drobné helpery ──
 function k2NowIso() {
@@ -10044,7 +10044,8 @@ function k2Editor(id, html) {
       <button type="button" ${cmd('formatBlock', '<p>')} title="Odstavec">¶</button>
       <button type="button" onmousedown="event.preventDefault()" onclick="k2InsertLink('${id}')" title="Odkaz">🔗</button>
     </div>
-    <div class="k2-editor" id="${id}" contenteditable="true" spellcheck="true" oninput="k2OnEdit()">${k2Highlight(html)}</div>`;
+    <div class="k2-editor" id="${id}" contenteditable="true" spellcheck="true" oninput="k2OnEdit()">${k2Highlight(html)}</div>
+    <div class="k2-sig-note">✉️ Podpis EFL se doplní automaticky (logo, kontakty, FB skupina — stejně jako u potvrzení smluv).</div>`;
 }
 function k2InsertLink(id) {
   const url = prompt('Adresa odkazu (https://…):', 'https://');
@@ -10399,7 +10400,7 @@ function k2LectorBody(trip, tbl, todayLabel) {
     '<p>posíláme aktuální přehled přihlášených na cestu <strong>' + esc(trip.name || '') + '</strong>' + (trip.date ? ' (' + esc(k2Termin(trip)) + ')' : '') + ', stav k ' + esc(todayLabel) + '.</p>' +
     tbl.html + k2LectorSummaryHtml(tbl.summary) +
     '<p>Pokud něco nesedí nebo potřebujete doplnit, ozvěte se nám prosím na info@essenceforlife.cz.</p>' +
-    '<p>S pozdravem<br>Tým Essence for Life</p>';
+    '<p>S pozdravem</p>';
 }
 
 // ── lektor ↔ cesta: stejná fuzzy shoda jako jinde v aplikaci (ř. ~5332) a jako worker ──
@@ -10602,7 +10603,7 @@ function k2OpenLogDetail(id) {
     '<div style="font-size:12px;margin-bottom:6px"><strong>Předmět:</strong> ' + esc(rec.subject || '') + '</div>' +
     '<table class="lg-tbl" style="margin-bottom:12px"><tr><th>Komu</th><th>Účastníci</th><th>Výsledek</th></tr>' + res + '</table>' +
     '<div style="font-size:12px;font-weight:600;margin-bottom:4px">Odeslaný text (jen pro čtení)</div>' +
-    '<div class="k2-mailpreview" style="' + K2_WRAP_STYLE + '">' + k2SanitizeHtml(rec.bodyHtml || '') + '</div></div>';
+    '<div class="k2-mailpreview" style="' + K2_WRAP_STYLE + '">' + k2SanitizeHtml(rec.bodyHtml || '') + '<p style="color:#888;font-size:12px;margin-top:14px">(+ podpis EFL doplněný workerem)</p></div></div>';
 }
 
 // ═══════════════════════════════════════════════
